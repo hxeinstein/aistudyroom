@@ -561,8 +561,14 @@ export async function callStudent(uid, nick, animal) {
 
 /** 학생: 선생님이 건 대화 받기 */
 const pendingCalls = [];
-export function receiveCalls(calls) {
-  for (const c of calls) pendingCalls.push(c);
+export async function receiveCalls(calls) {
+  for (const c of calls) {
+    // 서버에서 '선생님이 건 대화'가 맞는지 먼저 확인 (친구가 장난으로 보낸 가짜는 무시)
+    let r = null;
+    try { r = await api({ action: 'office.sync', conv: c.conv, key: c.key, since: 0 }); } catch (e) { continue; }
+    if (!r || r.error || r.ended || r.called !== true) continue;
+    pendingCalls.push({ ...c, name: r.otherName || c.name });
+  }
   takeCall();
 }
 function takeCall() {
