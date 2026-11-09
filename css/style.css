@@ -249,3 +249,14 @@ textarea.field { resize: none; min-height: 84px; }
 .tab { flex: 1; border: 2px solid #EADBC2; background: #fff; border-radius: 12px; padding: 9px; font-weight: 800; color: var(--muted); }
 .tab.on { border-color: var(--green); color: var(--green-d); background: #F1FBEF; }
 body.studying .office-pill { bottom: calc(env(safe-area-inset-bottom) + 250px); }
+
+/* 확대·축소 */
+.zoom-ctl { position: fixed; right: 12px; top: calc(env(safe-area-inset-top) + 84px); z-index: 5; display: flex; flex-direction: column; gap: 6px;
+  background: rgba(255, 248, 233, 0.85); padding: 6px; border-radius: 999px; box-shadow: var(--shadow); }
+.zoom-ctl .icon-btn { width: 36px; height: 36px; font-size: 18px; font-weight: 800; color: var(--brown); }
+body.studying .zoom-ctl { display: none; }
+
+.animals.small { grid-template-columns: repeat(5, 1fr); }
+.animals.small .animal-btn { font-size: 22px; padding: 4px 0; }
+.glasses-tg { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; font-weight: 700; font-size: 14px; color: var(--brown); }
+.glasses-tg input { width: 18px; height: 18px; accent-color: var(--green); }

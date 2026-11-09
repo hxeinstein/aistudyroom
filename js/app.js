@@ -64,6 +64,9 @@ function boot() {
   $('btnPause').onclick = togglePause;
   $('btnStop').onclick = openStop;
   $('btnAsk').onclick = () => openChat(currentRoomSubject());
+  $('zIn').onclick = () => world.zoomBy(0.75);
+  $('zOut').onclick = () => world.zoomBy(1.33);
+  $('zReset').onclick = () => world.resetView();
   initChat();
   Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' } });
   Office.maybeEnterFromLink();

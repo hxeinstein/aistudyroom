@@ -42,7 +42,11 @@ export const LOOKS = {
 export function animalScale(type) { return (LOOKS[type] || LOOKS.bear).scale || 1; }
 export function animalSpeed(type) { return (LOOKS[type] || LOOKS.bear).speed || 1; }
 
-export function makeAnimal(type, clothes = '#7FB3E8') {
+/**
+ * extra: { glasses: true|false, teacher: true|false }
+ *   glasses — 동그란 안경, teacher — 교사증 목걸이 (선생님 캐릭터 표시)
+ */
+export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
   const L = LOOKS[type] || LOOKS.bear;
   const g = new THREE.Group();
   const fur = mat(L.fur);
@@ -218,6 +222,21 @@ export function makeAnimal(type, clothes = '#7FB3E8') {
     if (L.tail === 'tuft') tail.add(mesh(S(0.06, 8, 8), L.mane || tc, { y: -0.38 }));
   }
   if (tail) { g.add(tail); }
+
+  // 선생님 꾸미기
+  if (extra.glasses) {
+    const rim = mat('#2B2B2B');
+    for (const sx of [-1, 1]) head.add(mesh(new THREE.TorusGeometry(0.085, 0.013, 6, 20), rim, { x: sx * 0.12, y: 0.04, z: 0.33, cast: false }));
+    head.add(mesh(new THREE.BoxGeometry(0.06, 0.012, 0.012), rim, { y: 0.05, z: 0.34, cast: false }));
+  }
+  if (extra.teacher) {
+    // 교사증 목걸이: 끈 + 카드
+    const strap = mesh(new THREE.TorusGeometry(0.15 * bw, 0.012, 6, 20, Math.PI), '#3B6FD8', { y: 0.64, z: 0.04, cast: false });
+    strap.rotation.set(Math.PI / 2 + 0.5, 0, Math.PI);
+    g.add(strap);
+    g.add(mesh(new THREE.BoxGeometry(0.13, 0.17, 0.02), '#FFFFFF', { y: 0.47, z: 0.2 * Math.max(1, bw * 0.95) + 0.01 }));
+    g.add(mesh(new THREE.BoxGeometry(0.13, 0.04, 0.022), '#3B6FD8', { y: 0.54, z: 0.2 * Math.max(1, bw * 0.95) + 0.012, cast: false }));
+  }
 
   // 크기와 이름표 높이
   const box = new THREE.Box3().setFromObject(g);

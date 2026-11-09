@@ -1,7 +1,10 @@
 // 교무실 — 학생 ↔ 선생님, 선생님 ↔ 선생님 1:1 대화 (Apps Script Office.gs)
 // 대화는 서버의 임시 저장소에만 있고, 어느 한쪽이 '끝내기'를 누르면 바로 지워짐.
 import { CONFIG } from './config.js';
-import { animalById } from './store.js';
+import { animalById, ANIMALS } from './store.js';
+
+const TEACHER_COLORS = ['#B79CE8', '#7FB3E8', '#9ED28C', '#F59FB4', '#F7C96B', '#5E6B7D'];
+const lookOf = (me) => ({ animal: me.animal || 'bear', color: me.color || '#B79CE8', glasses: !!me.glasses, name: me.name });
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -74,7 +77,10 @@ export const unreadCount = () => inbox.reduce((a, x) => a + (x.unread || 0), 0);
 export function initOffice(c) {
   ctx = c;
   teacher = lsGet('aistudyroom.teacher');
-  if (teacher) ctx.world.setTeacher(teacher.me.id);
+  if (teacher) {
+    ctx.world.setTeacher(teacher.me.id);
+    ctx.world.setTeacherLook(lookOf(teacher.me)); // 로그인한 기기는 선생님 캐릭터로
+  }
   $('oClose').onclick = minimize;
   $('oEnd').onclick = endConv;
   $('oSend').onclick = send;
@@ -300,35 +306,56 @@ function notify(title, body) {
 }
 
 /* ---------- 선생님 ---------- */
+/** 선생님 캐릭터 고르기 (동물 · 옷 색 · 안경) */
+function lookPicker(look) {
+  return `
+    <div class="animals small">${ANIMALS.map((x) => `<button type="button" class="animal-btn ${x.id === look.animal ? 'on' : ''}" data-a="${x.id}">${x.emoji}<small>${x.name}</small></button>`).join('')}</div>
+    <label class="lbl">옷 색</label>
+    <div class="swatches">${TEACHER_COLORS.map((c) => `<button type="button" class="sw-btn ${c === look.color ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="옷 색"></button>`).join('')}
+      <label class="glasses-tg"><input type="checkbox" id="lkGlasses" ${look.glasses ? 'checked' : ''}/> 👓 안경</label></div>
+    <p class="hint">선생님 캐릭터는 <b>교사증 목걸이</b>를 걸고 있어서 학생과 구분돼요.</p>`;
+}
+function bindLookPicker(root, look) {
+  root.querySelectorAll('.animal-btn').forEach((b) => (b.onclick = () => {
+    look.animal = b.dataset.a;
+    root.querySelectorAll('.animal-btn').forEach((x) => x.classList.toggle('on', x === b));
+  }));
+  root.querySelectorAll('.sw-btn').forEach((b) => (b.onclick = () => {
+    look.color = b.dataset.c;
+    root.querySelectorAll('.sw-btn').forEach((x) => x.classList.toggle('on', x === b));
+  }));
+  root.querySelector('#lkGlasses').onchange = (e) => { look.glasses = e.target.checked; };
+}
+
 export function openTeacherLogin() {
   let tab = 'login';
-  const p = ctx.getProfile();
+  const look = { animal: 'deer', color: TEACHER_COLORS[0], glasses: true };
   const m = ctx.openModal(`
     <h2>👩‍🏫 선생님 로그인</h2>
-    <div class="tabs"><button type="button" class="tab on" data-t="login">로그인</button><button type="button" class="tab" data-t="reg">처음 등록 (초대코드)</button></div>
-    <div id="tReg" class="hidden">
-      <label class="lbl">초대코드</label>
-      <input class="field" id="tCode" maxlength="12" placeholder="예: T-7K2Q9A" autocapitalize="characters" />
-    </div>
-    <label class="lbl">이름 (학생에게 보여요)</label>
+    <div class="tabs"><button type="button" class="tab on" data-t="login">로그인</button><button type="button" class="tab" data-t="reg">처음 등록</button></div>
+    <label class="lbl">초대코드</label>
+    <input class="field" id="tCode" maxlength="12" placeholder="예: T-7K2Q9A" autocapitalize="characters" autocomplete="off" />
+    <label class="lbl">닉네임 (학생에게 보여요)</label>
     <input class="field" id="tName" maxlength="12" placeholder="예: 김민지" />
     <label class="lbl">비밀번호</label>
     <input class="field" id="tPw" type="password" maxlength="40" placeholder="4자 이상" />
-    <div id="tReg2" class="hidden">
+    <div id="tReg" class="hidden">
       <label class="lbl">알림 받을 이메일 <span style="font-weight:400">(선택)</span></label>
       <input class="field" id="tEmail" type="email" maxlength="80" placeholder="교무실에 없을 때 질문이 오면 메일로 알려 드려요" />
-      <p class="hint">캐릭터는 지금 고른 ${animalById(p.animal).emoji} ${animalById(p.animal).name}(으)로 앉아요. ⚙️ 설정에서 바꿀 수 있어요.</p>
+      <label class="lbl">선생님 캐릭터</label>
+      ${lookPicker(look)}
     </div>
+    <p class="hint" id="tKeep">한 번 로그인하면 이 기기에서는 로그아웃할 때까지 계속 로그인돼 있어요.</p>
     <p class="c-gate-msg" id="tMsg"></p>
     <div class="foot">
       <button class="btn ghost" id="tCancel" type="button">닫기</button>
       <button class="btn primary" id="tGo" type="button">로그인</button>
-    </div>`);
+    </div>`, { wide: true });
+  bindLookPicker(m, look);
   const setTab = (t) => {
     tab = t;
     m.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
     m.querySelector('#tReg').classList.toggle('hidden', t !== 'reg');
-    m.querySelector('#tReg2').classList.toggle('hidden', t !== 'reg');
     m.querySelector('#tGo').textContent = t === 'reg' ? '등록하기' : '로그인';
     m.querySelector('#tMsg').textContent = '';
   };
@@ -336,9 +363,10 @@ export function openTeacherLogin() {
   m.querySelector('#tCancel').onclick = ctx.closeModal;
   m.querySelector('#tGo').onclick = async () => {
     const msg = m.querySelector('#tMsg');
+    const base = { code: m.querySelector('#tCode').value, name: m.querySelector('#tName').value, password: m.querySelector('#tPw').value };
     const body = tab === 'reg'
-      ? { action: 'office.register', code: m.querySelector('#tCode').value, name: m.querySelector('#tName').value, password: m.querySelector('#tPw').value, email: m.querySelector('#tEmail').value, animal: p.animal }
-      : { action: 'office.login', name: m.querySelector('#tName').value, password: m.querySelector('#tPw').value };
+      ? { action: 'office.register', ...base, email: m.querySelector('#tEmail').value, look }
+      : { action: 'office.login', ...base };
     msg.textContent = '확인 중…';
     let r;
     try { r = await api(body); } catch (e) { msg.textContent = '연결하지 못했어요. 인터넷을 확인해 주세요.'; return; }
@@ -346,6 +374,7 @@ export function openTeacherLogin() {
     teacher = { token: r.token, me: r.me };
     lsSet('aistudyroom.teacher', teacher);
     ctx.world.setTeacher(r.me.id);
+    ctx.world.setTeacherLook(lookOf(r.me));
     ctx.closeModal();
     ctx.toast(`${r.me.name} 선생님, 로그인했어요. ${r.me.seat}번 자리예요`);
     if (ctx.world.area === 'office' && $('seatLabel')) $('seatLabel').textContent = `${r.me.name} 선생님`;
@@ -354,7 +383,37 @@ export function openTeacherLogin() {
     await refreshSeats();
     if (ctx.world.area === 'office') ctx.world.sitAtMyDesk();
   };
-  setTimeout(() => m.querySelector('#tName').focus(), 50);
+  setTimeout(() => m.querySelector('#tCode').focus(), 50);
+}
+
+/** 선생님 캐릭터·닉네임 바꾸기 */
+export function openTeacherProfile() {
+  if (!teacher) return;
+  const look = lookOf(teacher.me);
+  const m = ctx.openModal(`
+    <h2>🎨 선생님 캐릭터</h2>
+    <label class="lbl">닉네임</label>
+    <input class="field" id="tpName" maxlength="12" value="${esc(teacher.me.name)}" />
+    <label class="lbl">캐릭터</label>
+    ${lookPicker(look)}
+    <p class="c-gate-msg" id="tpMsg"></p>
+    <div class="foot">
+      <button class="btn ghost" id="tpCancel" type="button">닫기</button>
+      <button class="btn primary" id="tpSave" type="button">저장</button>
+    </div>`, { wide: true });
+  bindLookPicker(m, look);
+  m.querySelector('#tpCancel').onclick = ctx.closeModal;
+  m.querySelector('#tpSave').onclick = async () => {
+    let r;
+    try { r = await api({ action: 'office.profile', token: teacher.token, name: m.querySelector('#tpName').value, look }); } catch (e) { m.querySelector('#tpMsg').textContent = '연결하지 못했어요.'; return; }
+    if (r.error) { m.querySelector('#tpMsg').textContent = r.error; return; }
+    teacher.me = { ...teacher.me, ...r.me };
+    lsSet('aistudyroom.teacher', teacher);
+    ctx.world.setTeacherLook(lookOf(teacher.me));
+    ctx.closeModal();
+    ctx.toast('캐릭터를 바꿨어요');
+    refreshSeats();
+  };
 }
 
 export function logout(silent) {
@@ -363,6 +422,7 @@ export function logout(silent) {
   inbox = [];
   lsSet('aistudyroom.teacher', null);
   ctx.world.setTeacher(null);
+  ctx.world.setTeacherLook(null); // 이 기기의 원래(학생) 캐릭터로
   refreshSeats();
   updatePill();
 }
@@ -399,6 +459,7 @@ export function openInbox() {
     <p class="desc">${esc(teacher.me.name)} 선생님 · ${teacher.me.seat}번 자리 · 대화는 끝내면 바로 지워져요</p>
     <button class="btn soft block" id="ibDoor" type="button">${myDoorClosed() ? '🔓 문 열기 (질문 받기)' : '🔒 문 닫기 (시험 출제 중)'}</button>
     <p class="hint">문을 닫으면 학생에게 “시험 출제 중”으로 보이고 새 질문을 받지 않아요. 하던 대화는 그대로예요.</p>
+    <button class="btn soft block" id="ibLook" type="button">🎨 내 캐릭터·닉네임 바꾸기</button>
     <div class="todo-pick" id="inboxList"></div>
     <label class="lbl">다른 선생님께 메시지</label>
     <div class="chips" id="teacherList"></div>
@@ -408,6 +469,7 @@ export function openInbox() {
     </div>`);
   m.querySelector('#ibClose').onclick = ctx.closeModal;
   m.querySelector('#ibDoor').onclick = () => toggleDoor();
+  m.querySelector('#ibLook').onclick = () => openTeacherProfile();
   m.querySelector('#ibLogout').onclick = () => { logout(); ctx.closeModal(); ctx.toast('로그아웃했어요'); };
   renderInbox();
   refreshSeats().then(() => {

@@ -449,6 +449,9 @@ export function createWorld(container, opts = {}) {
 
   const player = addActor(opts.animal || 'bear', CLOTHES[0], { name: opts.name || '' }, true);
   player.animal = opts.animal || 'bear';
+  player.lookKey = 's:' + player.animal;
+  let teacherLook = null;
+  let baseAnimal = player.animal, baseName = opts.name || '', baseStatus = '';
   const playerSpeed = () => animalSpeed(player.animal);
   player.obj.position.set(0, DECK_Y, 6.2);
   player.obj.rotation.y = Math.PI;
@@ -611,10 +614,10 @@ export function createWorld(container, opts = {}) {
       drawPlate(desk, t);
       const isMe = t && myTeacherId && t.id === myTeacherId;
       // 접속 중인 선생님만 캐릭터가 앉아 있음 (내 자리는 내 캐릭터가 직접 앉음)
-      const want = t && t.online && !isMe ? t.animal || 'bear' : null;
+      const want = t && t.online && !isMe ? `${t.animal || 'bear'}:${t.color || ''}:${t.glasses ? 1 : 0}` : null;
       if (desk.avatar && desk.avatar.userData.animal !== want) { scene.remove(desk.avatar); desk.avatar = null; }
       if (want && !desk.avatar) {
-        const av = makeAnimal(want, '#B79CE8');
+        const av = makeAnimal(t.animal || 'bear', t.color || '#B79CE8', { glasses: !!t.glasses, teacher: true });
         const sc = av.userData.scale || 1;
         av.position.set(desk.chairPos.x, DECK_Y + 0.395 - 0.2 * sc + (av.userData.cushion ? 0.15 : 0), desk.chairPos.z + 0.05 - Math.max(0, sc - 1) * 0.3);
         av.userData.animal = want;
@@ -768,7 +771,7 @@ export function createWorld(container, opts = {}) {
     player.obj.position.copy(pos);
     player.obj.rotation.y = rotY;
     yaw = yawTarget = 0;
-    camPos.set(pos.x, pos.y + 7.2, pos.z + 9.5);
+    camPos.set(pos.x, pos.y + Math.sin(pitch) * zoom, pos.z + Math.cos(pitch) * zoom);
     camLook.set(pos.x, pos.y + 0.8, pos.z);
     opts.onArea && opts.onArea(name);
   }
@@ -809,19 +812,57 @@ export function createWorld(container, opts = {}) {
 
   // ---------------- 입력 ----------------
   let yaw = 0, yawTarget = 0;
+  // 카메라: 캐릭터를 중심으로 돌기(yaw), 내려다보는 각도(pitch), 거리(zoom)
+  let pitch = 0.65, pitchTarget = 0.65;
+  let zoom = 11.9, zoomTarget = 11.9;
+  const ZOOM_MIN = 2.6, ZOOM_MAX = 20;
+  const setZoom = (z) => { zoomTarget = clamp(z, ZOOM_MIN, ZOOM_MAX); };
+  const pointers = new Map();
+  let pinch = null;
   const keys = new Set();
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   let down = null;
   const el = renderer.domElement;
-  el.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, yaw: yawTarget, drag: false }; });
+  el.addEventListener('pointerdown', (e) => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      // 두 손가락: 확대·축소
+      const [a, b] = [...pointers.values()];
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: zoomTarget };
+      down = null;
+      return;
+    }
+    down = { x: e.clientX, y: e.clientY, yaw: yawTarget, pitch: pitchTarget, drag: false };
+  });
   window.addEventListener('pointermove', (e) => {
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pointers.size >= 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d > 10) setZoom(pinch.zoom * (pinch.d / d));
+      return;
+    }
     if (!down) return;
     const dx = e.clientX - down.x;
-    if (Math.abs(dx) > 8 || Math.abs(e.clientY - down.y) > 8) down.drag = true;
-    if (down.drag && !studying) yawTarget = down.yaw - dx * 0.006;
+    const dy = e.clientY - down.y;
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) down.drag = true;
+    if (down.drag && !studying) {
+      // 끌면 캐릭터를 중심으로 360° 돌아보기 (가로: 빙글, 세로: 높낮이)
+      yawTarget = down.yaw - dx * 0.008;
+      pitchTarget = clamp(down.pitch + dy * 0.005, 0.12, 1.35);
+    }
   });
+  const endPointer = (e) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+  };
+  window.addEventListener('pointercancel', endPointer);
+  el.addEventListener('wheel', (e) => { e.preventDefault(); setZoom(zoomTarget * (1 + Math.sign(e.deltaY) * 0.12)); }, { passive: false });
   window.addEventListener('pointerup', (e) => {
+    const wasPinch = !!pinch || pointers.size > 1;
+    endPointer(e);
+    if (wasPinch) { down = null; return; }
     if (!down) return;
     const wasDrag = down.drag;
     down = null;
@@ -982,11 +1023,17 @@ export function createWorld(container, opts = {}) {
 
     // 카메라
     yaw += (yawTarget - yaw) * Math.min(1, dt * 6);
+    pitch += (pitchTarget - pitch) * Math.min(1, dt * 6);
+    zoom += (zoomTarget - zoom) * Math.min(1, dt * 6);
     const close = studying && player.seat;
-    const dist = close ? 2.2 : 9.5;
-    const hgt = close ? 2.9 : 7.2;
-    const focus = close ? v.set(player.seat.chairPos.x, DECK_Y + 0.8, player.seat.chairPos.z - 0.5) : v.set(p.x, p.y + 0.8, p.z);
+    const sc = player.obj.userData.scale || 1;
+    // 가까이 볼수록 캐릭터 얼굴 높이를 바라봄 (작은 동물도 잘 보이게)
+    const zt = clamp((zoom - ZOOM_MIN) / (6 - ZOOM_MIN), 0, 1);
+    const lookY = (0.15 + 0.55 * sc) * (1 - zt) + 0.8 * zt;
+    const focus = close ? v.set(player.seat.chairPos.x, DECK_Y + 0.8, player.seat.chairPos.z - 0.5) : v.set(p.x, p.y + lookY, p.z);
     const cy = close ? 0 : yaw;
+    const dist = close ? 2.2 : Math.cos(pitch) * zoom;
+    const hgt = close ? 2.9 : Math.sin(pitch) * zoom;
     const desired = new THREE.Vector3(focus.x + Math.sin(cy) * dist, focus.y + hgt, focus.z + Math.cos(cy) * dist);
     camPos.lerp(desired, Math.min(1, dt * 3));
     camLook.lerp(focus, Math.min(1, dt * 4));
@@ -1048,10 +1095,24 @@ export function createWorld(container, opts = {}) {
       camPos.set(seat.chairPos.x, 3, seat.chairPos.z + 3);
       return true;
     },
-    setPlayer({ animal, name, status }) {
-      if (animal && animal !== player.animal) {
+    /** 선생님 로그인: { animal, color, glasses, name } / 로그아웃: null */
+    setTeacherLook(look) {
+      teacherLook = look || null;
+      this.setPlayer({ animal: baseAnimal, name: baseName, status: baseStatus, force: true });
+    },
+    zoomBy(f) { setZoom(zoomTarget * f); },
+    resetView() { yawTarget = 0; pitchTarget = 0.65; setZoom(11.9); },
+    setPlayer({ animal, name, status, force }) {
+      if (animal) baseAnimal = animal;
+      if (name !== undefined) { baseName = name; baseStatus = status; }
+      const look = teacherLook;
+      const want = look ? look.animal || 'bear' : baseAnimal;
+      const key = look ? `t:${want}:${look.color}:${look.glasses ? 1 : 0}` : `s:${want}`;
+      if (force || key !== player.lookKey) {
+        player.lookKey = key;
+        animal = want;
         const old = player.obj;
-        const fresh = makeAnimal(animal, CLOTHES[0]);
+        const fresh = look ? makeAnimal(want, look.color || '#B79CE8', { glasses: !!look.glasses, teacher: true }) : makeAnimal(want, CLOTHES[0]);
         fresh.position.copy(old.position);
         fresh.rotation.copy(old.rotation);
         scene.remove(old);
@@ -1065,8 +1126,9 @@ export function createWorld(container, opts = {}) {
           sitActor(player, seat);
           player.mode = mode;
         }
+        if (player.officeDesk) sitAtDesk(player.officeDesk);
       }
-      if (name !== undefined) setLabel(player, { name, status });
+      setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus });
     },
     walkToMascot() { pendingSeat = null; walkTo(MASCOT_FRONT); pendingMascot = true; },
     // 교무실
