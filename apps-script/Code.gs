@@ -9,7 +9,9 @@
  *   ACCESS_CODE    : 선택. 넣으면 학생이 처음에 이 수업 코드를 입력해야 사용 가능
  *
  * [교과 추가하기] — '과목' 탭 (처음 한 번 편집기에서 setupSubjects 실행하면 자동으로 만들어짐)
- *   한 줄 = 교과 하나.  A 사용(체크) | B 교과 이름 | C 독서실 과목 | D 교과서 탭 이름 | E 프롬프트 | F 첫 인사
+ *   한 줄 = 교과 하나.  A 사용(체크) | B 교과 이름 | C 연결 낱말 | D 교과서 탭 이름 | E 프롬프트 | F 첫 인사
+ *   - C칸 연결 낱말: 학생이 독서실에서 직접 만든 과목 이름에 이 낱말이 들어가면, 공부 중에 그 교과가 먼저 선택돼요.
+ *     쉼표로 여러 개 (예: 과학, 물리, 역학 → '물리학Ⅰ', '통합과학' 모두 연결)
  *   - 새 교과서 탭은 기존 '교과서' 탭과 같은 열(쪽, 대단원, 소단원, 내용)로 만들어 주세요.
  *   - '사용'에 체크하고, D칸에 적은 탭이 실제로 있어야만 독서실·웹앱에서 쓸 수 있어요.
  *   - E칸(프롬프트)이 비어 있으면 '프롬프트' 탭 A1을 씁니다. F칸이 비어 있으면 기본 첫 인사를 씁니다.
@@ -33,7 +35,6 @@ const DAILY_LIMIT = 1500;             // 하루 전체 질문 수 상한 (모든
 const STUDYROOM_SAVE_LOG = false;     // 독서실에서 온 질문은 '기록' 시트에 남기지 않음 (기존 웹앱은 SAVE_LOG 따름)
 const MASCOT_NAME = '뭉치 박사';        // 독서실 마스코트 이름 (바꾸면 아래 말투 안내에도 반영됨)
 const DEFAULT_GREETING = '어떤 문제를 풀어 볼까? 문제를 글로 쓰거나 사진으로 올려 줘!';
-const ROOM_SUBJECTS = ['국어', '수학', '영어', '과학', '사회', '한국사', '기타'];
 
 function studyroomPersona_() {
   return [
@@ -59,7 +60,7 @@ function loadSubjects_() {
     .filter(r => r[0] === true && String(r[1]).trim() && String(r[3]).trim())
     .map(r => ({
       name: String(r[1]).trim(),
-      room: String(r[2]).trim() || '기타',
+      room: String(r[2] || '').trim(),
       tab: String(r[3]).trim(),
       prompt: String(r[4] || '').trim(),
       greeting: String(r[5] || '').trim() || DEFAULT_GREETING
@@ -70,7 +71,7 @@ function loadSubjects_() {
 /** 교과 이름으로 찾기. 이름이 없으면(기존 웹앱) 첫 번째 교과 */
 function findSubject_(name) {
   const list = loadSubjects_();
-  if (list === null) return { name: '', room: '과학', tab: '교과서', prompt: '', greeting: DEFAULT_GREETING };
+  if (list === null) return { name: '', room: '과학, 물리, 역학', tab: '교과서', prompt: '', greeting: DEFAULT_GREETING };
   if (!name) return list[0] || null;
   return list.filter(x => x.name === name)[0] || null;
 }
@@ -80,12 +81,12 @@ function setupSubjects() {
   const ss = SpreadsheetApp.getActive();
   if (ss.getSheetByName('과목')) { console.log("'과목' 탭이 이미 있어요."); return; }
   const sh = ss.insertSheet('과목', 0);
-  sh.getRange(1, 1, 1, 6).setValues([['사용', '교과 이름', '독서실 과목', '교과서 탭 이름', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)']]);
-  sh.getRange(2, 1, 1, 6).setValues([[true, '역학과 에너지', '과학', '교과서', '', DEFAULT_GREETING]]);
+  sh.getRange(1, 1, 1, 6).setValues([['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)']]);
+  sh.getRange(2, 1, 1, 6).setValues([[true, '역학과 에너지', '과학, 물리, 역학', '교과서', '', DEFAULT_GREETING]]);
   sh.getRange('A3:A50').insertCheckboxes();
   sh.getRange('A2').insertCheckboxes().check();
-  sh.getRange('C2:C50').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(ROOM_SUBJECTS, true).build());
   sh.setFrozenRows(1);
+  sh.setColumnWidth(3, 220);
   sh.setColumnWidth(5, 420);
   console.log("'과목' 탭을 만들었어요. 새 교과는 아래 줄에 추가하세요.");
 }

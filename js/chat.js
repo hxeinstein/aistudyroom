@@ -19,7 +19,7 @@ function loadConfig() {
   if (!CONFIG.CHATBOT_URL) return Promise.resolve(null);
   configPromise ||= call({ action: 'config' }).then((cfg) => {
     needCode = !!cfg.needCode;
-    subjects = Array.isArray(cfg.subjects) ? cfg.subjects : [{ name: '', room: '과학', greeting: '' }];
+    subjects = Array.isArray(cfg.subjects) ? cfg.subjects : [{ name: '', room: '과학, 물리, 역학', greeting: '' }];
     return cfg;
   }).catch((e) => { configPromise = null; throw e; });
   return configPromise;
@@ -29,10 +29,22 @@ function loadConfig() {
 export async function hasSubjectFor(roomName) {
   try {
     await loadConfig();
-    return subjects.some((x) => x.room === roomName);
+    return subjects.some((x) => matches(x, roomName));
   } catch (e) {
     return false;
   }
+}
+
+/**
+ * 학생이 정한 과목 이름(예: '물리학Ⅰ')이 교과의 연결 낱말(예: '과학, 물리, 역학')과 맞는지.
+ * 낱말이 과목 이름 안에 들어 있거나, 과목 이름이 낱말 안에 들어 있으면 연결된 것으로 봄.
+ */
+function matches(subject, roomName) {
+  if (!roomName) return false;
+  const norm = (t) => String(t).toLowerCase().replace(/\s/g, '');
+  const name = norm(roomName);
+  return String(subject.room || '').split(/[,，、/]+/).map(norm).filter((k) => k.length >= 1)
+    .some((k) => name.includes(k) || (name.length >= 2 && k.includes(name)));
 }
 
 const greeting = () => (current && current.greeting) || DEFAULT_GREETING;
@@ -153,7 +165,7 @@ export async function openChat(roomName) {
   $('chatSheet').classList.remove('hidden');
   if (started) {
     // 공부 중인 과목과 맞는 교과가 있고 아직 대화를 안 했으면 그 교과로 바꿔 줌
-    const match = roomName && subjects.find((x) => x.room === roomName);
+    const match = roomName && subjects.find((x) => matches(x, roomName));
     if (match && !history.length && current && (!needCode || accessCode)) switchSubject(match, false);
     return;
   }
@@ -175,7 +187,7 @@ export async function openChat(roomName) {
     addBubble('model', '아직 선생님이 연결한 교과가 없어. 조금만 기다려 줘!');
     return;
   }
-  current = subjects.find((x) => x.room === roomName) || subjects[0];
+  current = subjects.find((x) => matches(x, roomName)) || subjects[0];
   renderSubjects();
   if (needCode) {
     const saved = load('aistudyroom.chatCode');

@@ -100,7 +100,7 @@ function refreshHud() {
   const s = S.activeSession();
   if (s) {
     $('studyTimer').textContent = S.fmtClock(S.activeElapsed());
-    world.setPlayer({ name: st.profile?.name || '', status: `${S.subjectById(s.subject).icon} ${S.subjectById(s.subject).name} · ${S.fmtHM(S.activeElapsed())}` });
+    world.setPlayer({ name: st.profile?.name || '', status: `📚 ${S.subjectById(s.subject).name} · ${S.fmtHM(S.activeElapsed())}` });
   }
 }
 
@@ -211,6 +211,7 @@ function openSettings() {
       <input class="field" id="sExam" maxlength="8" placeholder="수능 시험" value="${esc(st.exam?.name || '')}" />
       <input class="field" id="sDate" type="date" value="${esc(st.exam?.date || '')}" />
     </div>
+    <button class="btn soft block" id="sSubjects" type="button" style="margin-top:14px">📚 내 과목 관리</button>
     <div class="foot">
       <button class="btn ghost" id="sClose">닫기</button>
       <button class="btn primary" id="sSave">저장</button>
@@ -218,6 +219,7 @@ function openSettings() {
     <p class="hint">조작: 바닥을 눌러 이동 · 책상을 눌러 앉기 · 좌우로 끌어 시점 회전 · PC는 WASD/방향키</p>`);
   bindAnimalPicker(m, (a) => (animal = a));
   m.querySelector('#sClose').onclick = closeModal;
+  m.querySelector('#sSubjects').onclick = () => openSubjects();
   m.querySelector('#sSave').onclick = () => {
     const name = m.querySelector('#sName').value.trim() || p.name || '익명';
     S.setProfile({ name, animal });
@@ -229,12 +231,60 @@ function openSettings() {
   };
 }
 
+// ---------------- 내 과목 (이 기기에 저장) ----------------
+function openSubjects(onDone) {
+  let color = null;
+  const m = openModal(`
+    <h2>📚 내 과목</h2>
+    <p class="desc">우리 학교 시간표의 과목을 추가해 주세요.<br/>이 기기에 저장돼서 다음에도 그대로 써요.</p>
+    <div class="row">
+      <input class="field" id="sbName" maxlength="12" placeholder="예: 물리학Ⅰ, 고급수학, 영어독해" />
+      <button class="btn primary" id="sbAdd" type="button" style="flex:none">추가</button>
+    </div>
+    <div class="swatches" id="sbColors">${S.SUBJECT_COLORS.map((c) => `<button type="button" class="sw-btn" data-c="${c}" style="background:${c}" aria-label="색"></button>`).join('')}</div>
+    <label class="lbl">추가한 과목</label>
+    <div class="chips" id="sbList"></div>
+    <div class="foot"><button class="btn primary" id="sbDone">완료</button></div>`);
+  const input = m.querySelector('#sbName');
+  const list = () => {
+    const subs = S.getSubjects();
+    m.querySelector('#sbList').innerHTML = subs.length
+      ? subs.map((x) => `<span class="chip-btn on sub-chip" style="background:${x.color}">${esc(x.name)}<button type="button" class="sub-x" data-id="${x.id}" aria-label="${esc(x.name)} 빼기">✕</button></span>`).join('')
+      : '<span class="hint">아직 없어요. 위에서 과목 이름을 적고 추가를 눌러 주세요.</span>';
+    m.querySelectorAll('.sub-x').forEach((b) => (b.onclick = () => { S.hideSubject(b.dataset.id); list(); }));
+  };
+  const add = () => {
+    if (!S.addSubject(input.value, color)) return input.focus();
+    input.value = '';
+    color = null;
+    m.querySelectorAll('.sw-btn').forEach((x) => x.classList.remove('on'));
+    list();
+    input.focus();
+  };
+  m.querySelectorAll('.sw-btn').forEach((b) => (b.onclick = () => {
+    color = b.dataset.c;
+    m.querySelectorAll('.sw-btn').forEach((x) => x.classList.toggle('on', x === b));
+  }));
+  m.querySelector('#sbAdd').onclick = add;
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) add(); });
+  m.querySelector('#sbDone').onclick = () => {
+    if (input.value.trim()) add();
+    if (!S.getSubjects().length) return toast('과목을 하나 이상 추가해 주세요');
+    closeModal();
+    onDone && onDone();
+  };
+  list();
+  setTimeout(() => input.focus(), 50);
+}
+
 // ---------------- 공부 시작 ----------------
 function openStart() {
   if (world.seated < 0) return sitNearest();
+  const subs = S.getSubjects();
+  if (!subs.length) return openSubjects(openStart); // 처음 한 번: 과목부터 추가
   const open = S.openTodos();
   let pick = open.length ? open[open.length - 1].id : null;
-  let subject = 'math';
+  let subject = subs.some((x) => x.id === st.lastSubject) ? st.lastSubject : subs[0].id;
   const m = openModal(`
     <h2>✏️ 무엇을 공부할까요?</h2>
     <p class="desc">${seatName(world.seated)} 자리 · 시작을 누르면 시간이 자동으로 기록돼요</p>
@@ -245,7 +295,7 @@ function openStart() {
       }).join('')}</div>
       <div class="divider">또는 새로 추가</div>` : ''}
     <label class="lbl">과목</label>
-    <div class="chips">${S.SUBJECTS.map((s) => `<button class="chip-btn ${s.id === subject ? 'on' : ''}" data-s="${s.id}" style="background:${s.color}">${s.icon} ${s.name}</button>`).join('')}</div>
+    <div class="chips">${subs.map((s) => `<button type="button" class="chip-btn ${s.id === subject ? 'on' : ''}" data-s="${s.id}" style="background:${s.color}">${esc(s.name)}</button>`).join('')}<button type="button" class="chip-btn add-chip" id="stAddSub">＋ 과목</button></div>
     <label class="lbl">할 일</label>
     <input class="field" id="stTitle" maxlength="30" placeholder="예: 쎈 C단계 풀기" />
     <label class="lbl">세부 내용 <span style="font-weight:400">(선택)</span></label>
@@ -260,9 +310,10 @@ function openStart() {
     m.querySelectorAll('.todo-opt').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
   };
   m.querySelectorAll('.todo-opt').forEach((b) => (b.onclick = () => { setPick(b.dataset.id); title.value = ''; m.querySelector('#stMemo').value = ''; }));
-  m.querySelectorAll('.chip-btn').forEach((b) => (b.onclick = () => {
+  m.querySelector('#stAddSub').onclick = () => openSubjects(openStart);
+  m.querySelectorAll('.chip-btn[data-s]').forEach((b) => (b.onclick = () => {
     subject = b.dataset.s;
-    m.querySelectorAll('.chip-btn').forEach((x) => x.classList.toggle('on', x === b));
+    m.querySelectorAll('.chip-btn[data-s]').forEach((x) => x.classList.toggle('on', x === b));
     if (!title.value) setPick(null);
     title.focus();
   }));
@@ -274,6 +325,7 @@ function openStart() {
       id = S.addTodo({ subject, title: title.value, memo: m.querySelector('#stMemo').value }).id;
     }
     if (!id) { title.focus(); return toast('할 일을 적거나 골라주세요'); }
+    S.setLastSubject(S.getDay().todos.find((t) => t.id === id).subject);
     S.startSession(id, world.seated);
     closeModal();
     showStudy();
@@ -285,7 +337,7 @@ function showStudy() {
   const s = S.activeSession();
   if (!s) return;
   const sub = S.subjectById(s.subject);
-  $('studySubject').textContent = `${sub.icon} ${sub.name}`;
+  $('studySubject').textContent = sub.name;
   $('studySubject').style.background = sub.color;
   $('studyTitle').textContent = s.title;
   // 이 과목이 챗봇 교과로 연결돼 있을 때만 '질문' 버튼 표시

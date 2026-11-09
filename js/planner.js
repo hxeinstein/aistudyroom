@@ -1,7 +1,7 @@
 // 스터디플래너 이미지(캔버스) 렌더링 + 사진 저장
 import {
   getState, getDay, sessionsWithLive, totalMs, subjectTotals, subjectById, animalById,
-  dayStartTs, fmtHM, dDay, SUBJECTS,
+  dayStartTs, fmtHM, dDay, allSubjects,
 } from './store.js';
 
 export const W = 800;
@@ -80,7 +80,11 @@ export function drawPlanner(canvas, key, scale = 2) {
   let cy = 182;
   heading(ctx, 'SUBJECTS & HIGH-LIGHTS', 40, cy);
   cy += 28;
-  const used = SUBJECTS.filter((s) => totals[s.id] || day.todos.some((t) => t.subject === s.id));
+  // 오늘 쓴 과목 (예전 기록의 과목 id도 포함)
+  const ids = [...new Set([...day.todos.map((t) => t.subject), ...Object.keys(totals)])];
+  const order = allSubjects().map((x) => x.id);
+  ids.sort((a, b) => (order.indexOf(a) + 1 || 999) - (order.indexOf(b) + 1 || 999));
+  const used = ids.map((id) => subjectById(id));
   if (used.length === 0) {
     ctx.fillStyle = '#94A3B8';
     ctx.font = f(400, 14);

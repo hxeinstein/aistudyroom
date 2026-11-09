@@ -4,16 +4,45 @@
 const KEY = 'aistudyroom.v1';
 export const DAY_START_HOUR = 6;
 
-export const SUBJECTS = [
-  { id: 'kor', name: '국어', color: '#D9B8FF', icon: '📖' },
-  { id: 'math', name: '수학', color: '#B4F5D0', icon: '📐' },
-  { id: 'eng', name: '영어', color: '#FFE98A', icon: '🔤' },
-  { id: 'sci', name: '과학', color: '#BBDDFF', icon: '🧪' },
-  { id: 'soc', name: '사회', color: '#FFCBA8', icon: '🌏' },
-  { id: 'hist', name: '한국사', color: '#F9BCD0', icon: '🏯' },
-  { id: 'etc', name: '기타', color: '#D7DEE7', icon: '✏️' },
+// 과목은 학생이 직접 만들고 이 기기에 저장됨 (학교마다 과목이 다르니까)
+export const SUBJECT_COLORS = ['#B4F5D0', '#FFE98A', '#D9B8FF', '#BBDDFF', '#FFCBA8', '#F9BCD0', '#C8F0F0', '#E3D5C4', '#D5F5A8', '#FFD6E7', '#CFD8FF', '#D7DEE7'];
+
+// 예전 버전의 고정 과목 (이미 남아 있는 기록을 읽기 위해서만 사용)
+const LEGACY_SUBJECTS = [
+  { id: 'kor', name: '국어', color: '#D9B8FF' },
+  { id: 'math', name: '수학', color: '#B4F5D0' },
+  { id: 'eng', name: '영어', color: '#FFE98A' },
+  { id: 'sci', name: '과학', color: '#BBDDFF' },
+  { id: 'soc', name: '사회', color: '#FFCBA8' },
+  { id: 'hist', name: '한국사', color: '#F9BCD0' },
+  { id: 'etc', name: '기타', color: '#D7DEE7' },
 ];
-export const subjectById = (id) => SUBJECTS.find((s) => s.id === id) || SUBJECTS[SUBJECTS.length - 1];
+const UNKNOWN_SUBJECT = { id: '?', name: '기타', color: '#D7DEE7' };
+
+/** 지금 쓰는 과목 (숨긴 과목 제외) */
+export const getSubjects = () => state.subjects.filter((x) => !x.hidden);
+/** 숨긴 과목 포함 전체 (지난 기록 표시용) */
+export const allSubjects = () => state.subjects;
+export const subjectById = (id) => state.subjects.find((x) => x.id === id) || LEGACY_SUBJECTS.find((x) => x.id === id) || UNKNOWN_SUBJECT;
+
+export function addSubject(name, color) {
+  name = String(name || '').trim().slice(0, 12);
+  if (!name) return null;
+  const same = state.subjects.find((x) => x.name === name);
+  if (same) { same.hidden = false; if (color) same.color = color; save(); return same; }
+  const used = new Set(getSubjects().map((x) => x.color));
+  const sub = { id: 's_' + uid(), name, color: color || SUBJECT_COLORS.find((c) => !used.has(c)) || SUBJECT_COLORS[state.subjects.length % SUBJECT_COLORS.length] };
+  state.subjects.push(sub);
+  save();
+  return sub;
+}
+/** 과목 빼기: 지난 기록에 이름·색이 남도록 지우지 않고 숨김 */
+export function hideSubject(id) {
+  const x = state.subjects.find((s) => s.id === id);
+  if (x) x.hidden = true;
+  save();
+}
+export function setLastSubject(id) { state.lastSubject = id; save(); }
 
 export const ANIMALS = [
   { id: 'bear', name: '곰', emoji: '🐻', trait: '든든하고 포근한 기본 체형' },
@@ -54,7 +83,7 @@ export function dayStartTs(key) {
 }
 
 function blank() {
-  return { v: 1, profile: null, exam: { name: '시험', date: '' }, sound: 'off', days: {}, active: null };
+  return { v: 1, profile: null, exam: { name: '시험', date: '' }, sound: 'off', subjects: [], lastSubject: null, days: {}, active: null };
 }
 
 let state = load();
@@ -63,7 +92,18 @@ function load() {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return blank();
-    return { ...blank(), ...JSON.parse(raw) };
+    const saved = JSON.parse(raw);
+    const st = { ...blank(), ...saved };
+    if (!saved.subjects) {
+      // 예전 버전(고정 과목)에서 쓰던 과목은 내 과목으로 옮겨 둠
+      const used = new Set();
+      for (const d of Object.values(st.days || {})) {
+        (d.todos || []).forEach((t) => used.add(t.subject));
+        (d.sessions || []).forEach((x) => used.add(x.subject));
+      }
+      st.subjects = LEGACY_SUBJECTS.filter((x) => used.has(x.id)).map((x) => ({ ...x }));
+    }
+    return st;
   } catch (e) {
     return blank();
   }

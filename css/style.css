@@ -225,3 +225,10 @@ textarea.field { resize: none; min-height: 84px; }
 .c-subjects { display: flex; gap: 6px; overflow-x: auto; padding: 10px 14px 0; flex: none; }
 .c-chip { border: 2px solid #EADBC2; background: #fff; color: var(--brown); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: 13px; white-space: nowrap; }
 .c-chip.on { background: var(--green); border-color: var(--green); color: #fff; }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.sw-btn { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 1px #EADBC2; }
+.sw-btn.on { box-shadow: 0 0 0 2px var(--brown); }
+.sub-chip { display: inline-flex; align-items: center; gap: 6px; cursor: default; transform: none; border-color: transparent; }
+.sub-x { border: 0; background: rgba(255,255,255,.7); border-radius: 50%; width: 20px; height: 20px; font-size: 11px; line-height: 1; color: var(--brown); padding: 0; }
+.add-chip { background: #fff; border: 2px dashed #D8C3A0; opacity: 1; }
