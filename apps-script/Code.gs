@@ -302,6 +302,8 @@ function toContents_(history) {
   return out;
 }
 
+const DAY_LIMIT_MSG = '오늘은 뭉치 박사가 질문을 너무 많이 받아서 쉬는 중이야 🐾 내일 다시 물어봐 줘! (급하면 교무실 선생님께 질문해 봐)';
+
 function callGemini_(key, system, contents) {
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent';
   const options = {
@@ -316,6 +318,10 @@ function callGemini_(key, system, contents) {
     })
   };
 
+  // 무료 하루 한도를 다 쓴 걸 이미 알고 있으면 제미나이를 부르지 않고 바로 안내
+  const cache = CacheService.getScriptCache();
+  if (cache.get('GEMINI_DAY_LIMIT')) return { error: DAY_LIMIT_MSG };
+
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = UrlFetchApp.fetch(url, options);
     const code = res.getResponseCode();
@@ -328,7 +334,13 @@ function callGemini_(key, system, contents) {
       if (!text) return { error: '답을 만들지 못했어요. 질문을 조금 바꿔서 다시 보내 줄래?' };
       return { text: text };
     }
-    if (code === 429 || code >= 500) {        // 사용량 초과·서버 혼잡이면 잠시 기다렸다 다시
+    if (code === 429 && /PerDay/i.test(res.getContentText())) {
+      // 무료 등급의 하루 요청 수를 다 씀 → 기다려도 안 풀리니 1시간 동안 바로 안내
+      // (결제 정보가 없으면 요금은 나가지 않고 이렇게 막히기만 함)
+      cache.put('GEMINI_DAY_LIMIT', '1', 60 * 60);
+      return { error: DAY_LIMIT_MSG };
+    }
+    if (code === 429 || code >= 500) {        // 분당 한도·서버 혼잡이면 잠시 기다렸다 다시
       Utilities.sleep(2000 * (attempt + 1));
       continue;
     }
