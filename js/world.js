@@ -385,11 +385,11 @@ export function createWorld(container, opts = {}) {
   const cushionMat = [m('#F7C6D0'), m('#FFE9A8')];
   // 같이 공부하는 분위기를 위한 NPC (1단계: 혼자 쓰는 버전)
   const npcDefs = [
-    { animal: 'elephant', name: '든든한 코끼리', status: '📐 수학', seat: 1 },
-    { animal: 'mouse', name: '꼼꼼 생쥐', status: '🔤 영어', seat: 6 },
-    { animal: 'giraffe', name: '높이 기린', status: '🧪 과학', seat: 11 },
-    { animal: 'sloth', name: '느긋 나무늘보', status: '📖 국어', seat: 8 },
-    { animal: 'penguin', name: '뒤뚱 펭귄', status: '🌏 사회', seat: 3 },
+    { animal: 'elephant', name: '든든한 코끼리', status: '📚 열공 중', seat: 1 },
+    { animal: 'mouse', name: '꼼꼼 생쥐', status: '📚 열공 중', seat: 6 },
+    { animal: 'giraffe', name: '높이 기린', status: '📚 열공 중', seat: 11 },
+    { animal: 'sloth', name: '느긋 나무늘보', status: '📚 열공 중', seat: 8 },
+    { animal: 'penguin', name: '뒤뚱 펭귄', status: '📚 열공 중', seat: 3 },
   ];
   npcDefs.forEach((d, i) => {
     const a = addActor(d.animal, CLOTHES[(i + 2) % CLOTHES.length], d);

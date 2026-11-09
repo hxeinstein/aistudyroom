@@ -1,4 +1,4 @@
-// 과학 질문 챗봇 창 — 선생님의 Apps Script(역학과 에너지 힌트 코치)를 불러서 사용
+// 뭉치 박사 질문 챗봇 창 — 선생님의 Apps Script(힌트 코치)를 불러서 사용
 // 대화는 이 화면(메모리)에만 있고, 새로고침하거나 '새 문제'를 누르면 사라짐.
 import { CONFIG } from './config.js';
 
@@ -9,17 +9,16 @@ let history = [];
 let pendingImage = null;
 let busy = false;
 let started = false;
-let accessCode = '';
-let needCode = null;
-let subjects = [];      // 선생님이 '과목' 탭에서 사용 체크한 교과들 [{ name, room, greeting }]
+let subjects = [];      // 선생님이 '과목' 탭에서 사용 체크한 교과들 [{ name, room, greeting, needCode }]
 let current = null;     // 지금 고른 교과
 let configPromise = null;
 
 function loadConfig() {
   if (!CONFIG.CHATBOT_URL) return Promise.resolve(null);
   configPromise ||= call({ action: 'config' }).then((cfg) => {
-    needCode = !!cfg.needCode;
     subjects = Array.isArray(cfg.subjects) ? cfg.subjects : [{ name: '', room: '과학, 물리, 역학', greeting: '' }];
+    // 예전 서버(교과별 코드 없음)는 전체 수업 코드 하나만 씀
+    subjects.forEach((x) => { if (x.needCode === undefined) x.needCode = !!cfg.needCode; });
     return cfg;
   }).catch((e) => { configPromise = null; throw e; });
   return configPromise;
@@ -67,16 +66,40 @@ function renderSubjects() {
 function switchSubject(x, ask = true) {
   if (x === current || busy) return;
   if (ask && history.length && !confirm(`'${x.name}'(으)로 바꾸면 지금 대화가 지워져. 바꿀까?`)) return;
+  enterSubject(x);
+}
+
+/** 교과로 들어가기: 수업 코드가 필요한 교과면 코드부터 */
+function enterSubject(x) {
   current = x;
   history = [];
   $('cLog').innerHTML = '';
   clearImage();
   renderSubjects();
+  if (x.needCode && !codes()[x.name]) return showGate();
+  $('cGate').classList.add('hidden');
+  setComposer(true);
   addBubble('model', greeting());
+}
+
+function showGate(msg) {
+  setComposer(false);
+  $('cGateText').innerHTML = `<b>${escapeHtml(current.name || '이 교과')}</b>는 우리 학교 학생용이야. 선생님이 알려준 <b>수업 코드</b>를 넣어 줘.`;
+  $('cGateMsg').textContent = msg || '';
+  $('cCodeInput').value = '';
+  $('cGate').classList.remove('hidden');
+  $('cCodeInput').focus();
 }
 
 function store(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
 function load(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+// 교과별로 통과한 수업 코드 (이 기기에 기억)
+function codes() { try { return JSON.parse(load('aistudyroom.chatCodes') || '{}'); } catch (e) { return {}; } }
+function setCode(name, code) {
+  const c = codes();
+  if (code) c[name] = code; else delete c[name];
+  store('aistudyroom.chatCodes', JSON.stringify(c));
+}
 
 function deviceId() {
   let id = load('aistudyroom.device');
@@ -166,7 +189,7 @@ export async function openChat(roomName) {
   if (started) {
     // 공부 중인 과목과 맞는 교과가 있고 아직 대화를 안 했으면 그 교과로 바꿔 줌
     const match = roomName && subjects.find((x) => matches(x, roomName));
-    if (match && !history.length && current && (!needCode || accessCode)) switchSubject(match, false);
+    if (match && match !== current && !history.length) enterSubject(match);
     return;
   }
   started = true;
@@ -187,39 +210,19 @@ export async function openChat(roomName) {
     addBubble('model', '아직 선생님이 연결한 교과가 없어. 조금만 기다려 줘!');
     return;
   }
-  current = subjects.find((x) => matches(x, roomName)) || subjects[0];
-  renderSubjects();
-  if (needCode) {
-    const saved = load('aistudyroom.chatCode');
-    if (saved && (await call({ action: 'checkCode', code: saved }).then((r) => r.ok).catch(() => false))) {
-      accessCode = saved;
-      return startChat();
-    }
-    store('aistudyroom.chatCode', null);
-    $('cGate').classList.remove('hidden');
-    $('cCodeInput').focus();
-    return;
-  }
-  startChat();
+  enterSubject(subjects.find((x) => matches(x, roomName)) || subjects[0]);
 }
 
 function closeChat() { $('chatSheet').classList.add('hidden'); }
-
-function startChat() {
-  $('cGate').classList.add('hidden');
-  setComposer(true);
-  addBubble('model', greeting());
-}
 
 async function tryCode() {
   const code = $('cCodeInput').value.trim();
   if (!code) return;
   $('cGateMsg').textContent = '';
-  const ok = await call({ action: 'checkCode', code }).then((r) => r.ok).catch(() => false);
+  const ok = await call({ action: 'checkCode', subject: current.name, code }).then((r) => r.ok).catch(() => false);
   if (ok) {
-    accessCode = code;
-    store('aistudyroom.chatCode', code);
-    startChat();
+    setCode(current.name, code);
+    enterSubject(current);
   } else {
     $('cGateMsg').textContent = '코드가 맞지 않아요. 다시 확인해 줘.';
   }
@@ -232,7 +235,7 @@ function setComposer(on) {
 }
 
 function reset() {
-  if (busy || !current || (needCode && !accessCode)) return;
+  if (busy || !current || !$('cGate').classList.contains('hidden')) return;
   if (history.length && !confirm('지금 대화를 지우고 새 문제를 시작할까?')) return;
   history = [];
   $('cLog').innerHTML = '';
@@ -288,11 +291,17 @@ async function send() {
   thinking.classList.add('thinking');
   thinking.innerHTML = '<span></span><span></span><span></span>';
   try {
-    const res = await call({ action: 'chat', subject: current.name, code: accessCode, device: deviceId(), history });
+    const res = await call({ action: 'chat', subject: current.name, code: codes()[current.name] || '', device: deviceId(), history });
     thinking.parentElement.remove();
     if (res && res.text) {
       history.push({ role: 'model', text: res.text });
       addBubble('model', res.text);
+    } else if (res && res.codeError) {
+      // 선생님이 수업 코드를 바꿈 → 다시 입력받기
+      history.pop();
+      setCode(current.name, null);
+      setBusy(false);
+      return showGate('수업 코드가 바뀌었어. 새 코드를 넣어 줘.');
     } else {
       fail(res && res.error, msg);
     }

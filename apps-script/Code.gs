@@ -14,6 +14,9 @@
  *     쉼표로 여러 개 (예: 과학, 물리, 역학 → '물리학Ⅰ', '통합과학' 모두 연결)
  *   - 새 교과서 탭은 기존 '교과서' 탭과 같은 열(쪽, 대단원, 소단원, 내용)로 만들어 주세요.
  *   - '사용'에 체크하고, D칸에 적은 탭이 실제로 있어야만 독서실·웹앱에서 쓸 수 있어요.
+ *   - D칸을 비우면 '교과서 없는 교과': 쪽수 안내 없이 개념으로만 힌트 (출판사가 달라도 괜찮음)
+ *   - G칸(수업 코드)을 적으면 그 코드를 아는 학생만 사용. 비우면 누구나. 시험 기간마다 바꿔도 돼요.
+ *     (G칸이 생기면서 스크립트 속성 ACCESS_CODE는 '과목' 탭이 없을 때만 쓰여요)
  *   - E칸(프롬프트)이 비어 있으면 '프롬프트' 탭 A1을 씁니다. F칸이 비어 있으면 기본 첫 인사를 씁니다.
  *   - 고친 내용은 다시 배포하지 않아도 바로 반영돼요.
  *
@@ -51,38 +54,59 @@ function studyroomPersona_() {
 
 /* ---------- 교과('과목' 탭) ---------- */
 
-/** 사용 체크 + 교과서 탭이 실제로 있는 교과만 돌려줌. '과목' 탭이 없으면 null(예전 방식) */
+/**
+ * 사용 체크된 교과만 돌려줌. '과목' 탭이 없으면 null(예전 방식)
+ * - D칸(교과서 탭)이 비어 있으면 '교과서 없는 교과' (쪽수 안내 없이 개념으로 힌트)
+ * - D칸에 적은 탭이 없으면 그 교과는 쓸 수 없음
+ * - G칸(수업 코드)이 있으면 그 코드를 넣은 학생만 사용
+ */
 function loadSubjects_() {
   const ss = SpreadsheetApp.getActive();
   const sh = ss.getSheetByName('과목');
   if (!sh) return null;
   return sh.getDataRange().getValues().slice(1)
-    .filter(r => r[0] === true && String(r[1]).trim() && String(r[3]).trim())
+    .filter(r => r[0] === true && String(r[1]).trim())
     .map(r => ({
       name: String(r[1]).trim(),
       room: String(r[2] || '').trim(),
-      tab: String(r[3]).trim(),
+      tab: String(r[3] || '').trim(),
       prompt: String(r[4] || '').trim(),
-      greeting: String(r[5] || '').trim() || DEFAULT_GREETING
+      greeting: String(r[5] || '').trim() || DEFAULT_GREETING,
+      code: String(r[6] || '').trim()
     }))
-    .filter(x => !!ss.getSheetByName(x.tab));
+    .filter(x => !x.tab || !!ss.getSheetByName(x.tab));
 }
+
+const NO_BOOK_NOTE = [
+  '',
+  '[교과서 없음]',
+  '- 이 교과는 교과서 자료가 연결되어 있지 않아. 학생마다 쓰는 교과서(출판사)가 다를 수 있어.',
+  '- 교과서 쪽수는 절대 말하지 마. 위 지시문에 쪽수 안내 규칙이 있어도 이 교과에서는 따르지 마.',
+  '- 대신 개념·법칙의 이름과 교육과정 수준의 설명으로 힌트를 주고, "네 교과서에서 ○○ 부분을 찾아봐"처럼 안내해.'
+].join('\n');
 
 /** 교과 이름으로 찾기. 이름이 없으면(기존 웹앱) 첫 번째 교과 */
 function findSubject_(name) {
   const list = loadSubjects_();
-  if (list === null) return { name: '', room: '과학, 물리, 역학', tab: '교과서', prompt: '', greeting: DEFAULT_GREETING };
+  if (list === null) return { name: '', room: '과학, 물리, 역학', tab: '교과서', prompt: '', greeting: DEFAULT_GREETING, code: getProp_('ACCESS_CODE') };
   if (!name) return list[0] || null;
   return list.filter(x => x.name === name)[0] || null;
 }
 
-/** 처음 한 번 편집기에서 실행: '과목' 탭을 만들고 지금의 역학과 에너지를 첫 줄로 등록 */
+const SUBJECT_HEADER = ['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름 (비우면 교과서 없이)', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)', '수업 코드 (비우면 누구나)'];
+
+/** 처음 한 번 편집기에서 실행: '과목' 탭을 만들고 지금의 역학과 에너지를 첫 줄로 등록 (이미 있으면 머리글만 최신으로) */
 function setupSubjects() {
   const ss = SpreadsheetApp.getActive();
-  if (ss.getSheetByName('과목')) { console.log("'과목' 탭이 이미 있어요."); return; }
+  const old = ss.getSheetByName('과목');
+  if (old) {
+    old.getRange(1, 1, 1, SUBJECT_HEADER.length).setValues([SUBJECT_HEADER]);
+    console.log("'과목' 탭이 이미 있어서 머리글만 최신으로 바꿨어요. (G칸: 수업 코드)");
+    return;
+  }
   const sh = ss.insertSheet('과목', 0);
-  sh.getRange(1, 1, 1, 6).setValues([['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)']]);
-  sh.getRange(2, 1, 1, 6).setValues([[true, '역학과 에너지', '과학, 물리, 역학', '교과서', '', DEFAULT_GREETING]]);
+  sh.getRange(1, 1, 1, SUBJECT_HEADER.length).setValues([SUBJECT_HEADER]);
+  sh.getRange(2, 1, 1, 7).setValues([[true, '역학과 에너지', '과학, 물리, 역학', '교과서', '', DEFAULT_GREETING, '']]);
   sh.getRange('A3:A50').insertCheckboxes();
   sh.getRange('A2').insertCheckboxes().check();
   sh.setFrozenRows(1);
@@ -100,11 +124,14 @@ function doGet() {
 /* ---------- 화면에서 호출하는 함수 ---------- */
 
 function getConfig() {
-  return { needCode: !!getProp_('ACCESS_CODE') };
+  const sub = findSubject_('');
+  return { needCode: !!(sub && sub.code) };
 }
 
-function checkCode(code) {
-  const saved = getProp_('ACCESS_CODE');
+/** 교과의 수업 코드 확인 (교과 이름이 없으면 기존 웹앱: 첫 번째 교과) */
+function checkCode(code, subjectName) {
+  const sub = findSubject_(subjectName || '');
+  const saved = sub ? sub.code : '';
   return !saved || String(code || '').trim() === saved;
 }
 
@@ -114,8 +141,8 @@ function checkCode(code) {
 function chat(payload, extraSystem, saveLog) {
   const subject = findSubject_(payload && payload.subject);
   if (!subject) return { error: '이 교과는 아직 연결되지 않았어요. 선생님께 알려 주세요.' };
-  if (!checkCode(payload && payload.code)) {
-    return { error: '수업 코드가 맞지 않아요. 선생님께 코드를 다시 확인해 주세요.' };
+  if (subject.code && String((payload && payload.code) || '').trim() !== subject.code) {
+    return { error: '수업 코드가 맞지 않아요. 선생님께 코드를 다시 확인해 주세요.', codeError: true };
   }
   const key = getProp_('GEMINI_API_KEY');
   if (!key) return { error: '선생님이 아직 API 키를 설정하지 않았어요.' };
@@ -125,12 +152,12 @@ function chat(payload, extraSystem, saveLog) {
   if (!history.length) return { error: '보낼 메시지가 없어요.' };
 
   // 교과서에서 관련 쪽 찾기: 학생의 최근 질문 2개 + 챗봇의 직전 답변을 기준으로
-  const pages = loadPages_(subject.tab);
+  const pages = subject.tab ? loadPages_(subject.tab) : [];
   const query = buildQuery_(history);
   const hits = rankPages_(pages, query).slice(0, EXCERPT_PAGES)
     .sort((a, b) => a.page - b.page);
 
-  const system = [
+  const system = !subject.tab ? (subject.prompt || getPrompt_()) + (extraSystem || '') + '\n' + NO_BOOK_NOTE : [
     (subject.prompt || getPrompt_()) + (extraSystem || ''),
     '',
     '[목차] (쪽 범위)',
@@ -151,7 +178,7 @@ function chat(payload, extraSystem, saveLog) {
       const last = history[history.length - 1];
       SpreadsheetApp.getActive().getSheetByName('기록').appendRow([
         new Date(),
-        getProp_('ACCESS_CODE') ? 'O' : '',
+        subject.code ? 'O' : '',
         (last.text || '') + (last.image ? ' [사진]' : ''),
         result.text.slice(0, 5000),
         hits.map(p => p.page).join(', ')
@@ -175,12 +202,11 @@ function doPost(e) {
   if (body.action === 'config') {
     const list = loadSubjects_() || [findSubject_('')];
     out = {
-      needCode: !!getProp_('ACCESS_CODE'),
       name: MASCOT_NAME,
-      subjects: list.map(x => ({ name: x.name, room: x.room, greeting: x.greeting }))
+      subjects: list.map(x => ({ name: x.name, room: x.room, greeting: x.greeting, needCode: !!x.code, book: !!x.tab }))
     };
   } else if (body.action === 'checkCode') {
-    out = { ok: checkCode(body.code) };
+    out = { ok: checkCode(body.code, body.subject) };
   } else if (body.action === 'chat') {
     const limited = checkLimit_(String(body.device || '').slice(0, 64));
     out = limited || chat({ subject: body.subject, code: body.code, history: body.history }, studyroomPersona_(), STUDYROOM_SAVE_LOG);

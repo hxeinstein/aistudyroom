@@ -68,7 +68,7 @@ export function drawPlanner(canvas, key, scale = 2) {
 
   const exam = st.exam || {};
   const dd = dDay(exam.date, key);
-  box(ctx, 480, 40, 122, 80, '#1D4ED8', (exam.name || '시험').slice(0, 8), dd || 'D-?');
+  box(ctx, 480, 40, 122, 80, '#1D4ED8', (exam.name || '시험').slice(0, 8), dd || '—');
   box(ctx, 612, 40, 140, 80, '#10B981', 'TOTAL TIME', fmtHM(totalMs(key)));
 
   // 가운데 구분선

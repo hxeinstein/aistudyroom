@@ -100,7 +100,7 @@ function refreshHud() {
   const s = S.activeSession();
   if (s) {
     $('studyTimer').textContent = S.fmtClock(S.activeElapsed());
-    world.setPlayer({ name: st.profile?.name || '', status: `📚 ${S.subjectById(s.subject).name} · ${S.fmtHM(S.activeElapsed())}` });
+    world.setPlayer({ name: st.profile?.name || '', status: S.isPaused() ? `☕ 쉬는 중` : `📚 ${S.subjectById(s.subject).name} 열공 중 · ${S.fmtHM(S.activeElapsed())}` });
   }
 }
 
@@ -435,6 +435,7 @@ async function openPlanner(key, autoSave = false) {
       <button class="btn ghost" id="pClose">닫기</button>
       <button class="btn blue" id="pSave">📸 사진으로 저장</button>
     </div>
+    ${st.exam && st.exam.date ? '' : '<p class="hint center">⚙️ 설정에서 시험 이름과 날짜를 넣으면 D-day가 나와요.</p>'}
     <p class="hint center" id="pHint">휴대폰에서는 공유 창의 '이미지 저장'을 누르거나, 플래너 이미지를 길게 눌러 사진첩에 저장할 수 있어요.</p>`, { wide: true });
   const shift = (d) => {
     const [y, mo, da] = key.split('-').map(Number);
