@@ -138,11 +138,52 @@ async function call(body) {
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+// 수식: 챗봇이 쓴 LaTeX($Q_H$, $\frac{1}{2}mv^2$ 등)를 수학책처럼 보이게 (KaTeX, 수식이 있을 때만 불러옴)
+const MATH_RE = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$([^\$\n]+?)\$/g;
+let katexP = null;
+function loadKatex() {
+  if (!katexP) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'vendor/katex/katex.min.css';
+    document.head.appendChild(link);
+    katexP = import('../vendor/katex/katex.mjs').then((m) => m.default || m);
+  }
+  return katexP;
+}
+async function typesetMath(root) {
+  const els = root.querySelectorAll('.math[data-tex]');
+  if (!els.length) return;
+  try {
+    const katex = await loadKatex();
+    els.forEach((el) => {
+      try {
+        el.innerHTML = katex.renderToString(el.dataset.tex, { throwOnError: false, displayMode: el.dataset.display === '1', strict: false });
+        el.removeAttribute('data-tex');
+      } catch (e) { /* 그대로 둠 */ }
+    });
+    scrollDown();
+  } catch (e) { /* 불러오기 실패 시 글자 그대로 */ }
+}
 function render(text) {
-  let h = escapeHtml(text);
-  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  h = h.replace(/교과서\s*(\d+)(\s*[~\-–]\s*\d+)?\s*쪽/g, (m) => '<span class="page">' + m + '</span>');
-  return h.replace(/\n/g, '<br>');
+  // 수식 부분은 먼저 떼어 두고, 나머지만 강조·쪽수 표시
+  const parts = [];
+  let last = 0;
+  text.replace(MATH_RE, (m, d1, d2, i1, i2, off) => {
+    parts.push({ t: text.slice(last, off) });
+    const tex = (d1 || d2 || i1 || i2 || '').trim();
+    parts.push({ math: tex, display: !!(d1 || d2) });
+    last = off + m.length;
+    return m;
+  });
+  parts.push({ t: text.slice(last) });
+  return parts.map((p) => {
+    if (p.math !== undefined) return `<span class="math${p.display ? ' display' : ''}" data-tex="${escapeHtml(p.math)}" data-display="${p.display ? 1 : 0}">${escapeHtml(p.math)}</span>`;
+    let h = escapeHtml(p.t);
+    h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    h = h.replace(/교과서\s*(\d+)(\s*[~\-–]\s*\d+)?\s*쪽/g, (m) => '<span class="page">' + m + '</span>');
+    return h.replace(/\n/g, '<br>');
+  }).join('');
 }
 function addBubble(role, text, imgUrl) {
   const row = document.createElement('div');
@@ -160,6 +201,7 @@ function addBubble(role, text, imgUrl) {
     const s = document.createElement('div');
     s.innerHTML = role === 'user' ? escapeHtml(text).replace(/\n/g, '<br>') : render(text);
     div.appendChild(s);
+    if (role !== 'user') typesetMath(s);
   }
   row.appendChild(div);
   $('cLog').appendChild(row);

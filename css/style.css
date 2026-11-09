@@ -271,3 +271,8 @@ body.studying .zoom-ctl { display: none; }
 .name-tag { overflow: visible; }
 .fx-pop { position: absolute; left: 50%; top: -6px; transform: translateX(-50%); font-size: 30px; pointer-events: none; animation: fxUp 2.6s ease-out forwards; }
 @keyframes fxUp { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -14px) scale(1.15); } 80% { opacity: 1; transform: translate(-50%, -46px) scale(1); } 100% { opacity: 0; transform: translate(-50%, -60px); } }
+
+/* 챗봇 수식 */
+.c-msg .math { font-family: 'Times New Roman', serif; }
+.c-msg .math.display { display: block; text-align: center; margin: 6px 0; overflow-x: auto; }
+.c-msg .katex { font-size: 1.08em; }
