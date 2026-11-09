@@ -183,7 +183,7 @@ export function initChat(o = {}) {
     // 챗봇으로 해결이 안 될 때만 선생님께 (이때 선생님께 알림이 감)
     const last = [...history].reverse().find((m) => m.role === 'user' && m.text);
     closeChat();
-    onAskTeacher && onAskTeacher({ text: last ? last.text : '', subject: current && current.name, bot: bot && bot.name });
+    onAskTeacher && onAskTeacher({ text: last ? last.text : '', subject: current && current.name, bot: bot && bot.name, teacherName: current && current.teacher });
   };
   $('cClose').onclick = closeChat;
   $('cReset').onclick = reset;

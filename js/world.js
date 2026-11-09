@@ -178,13 +178,6 @@ export function makeDodeokhu() {
 }
 
 const BOT_MODELS = { mungchi: makeMascot, dodeokhu: makeDodeokhu };
-// 교무실 앞쪽 '질문 코너' 자리 (챗봇이 늘어나면 차례로 앉음)
-const BOT_SPOTS = [
-  { x: OX - 1.7, z: 2.9, ry: 0.35 },
-  { x: OX + 1.7, z: 2.9, ry: -0.35 },
-  { x: OX - 3.5, z: 3.1, ry: 0.45 },
-  { x: OX + 3.5, z: 3.1, ry: -0.45 },
-];
 
 // ---------------- 텍스처 ----------------
 function canvasTex(w, h, draw) {
@@ -493,6 +486,7 @@ export function createWorld(container, opts = {}) {
   npcDefs.forEach((d, i) => {
     const a = addActor(d.animal, CLOTHES[(i + 2) % CLOTHES.length], d);
     a.npc = true;
+    a.homeSeat = d.seat;
     sitActor(a, seats[d.seat]);
     a.mode = 'study';
     seats[d.seat].bulb.material.emissiveIntensity = 1.4;
@@ -611,7 +605,7 @@ export function createWorld(container, opts = {}) {
     arrow.visible = officeOpen;
     arrowClosed.visible = !officeOpen;
   }
-  setOfficeOpen(false);
+  setOfficeOpen(true); // 교무실은 챗봇 선생님이 있어서 언제나 열려 있음
 
   // 안: x=60 근처의 방
   const officeRoom = new THREE.Group();
@@ -644,104 +638,50 @@ export function createWorld(container, opts = {}) {
   exitSign.position.set(OX, DECK_Y + 0.95, 5.12);
   exitSign.userData.officeExit = true;
   officeRoom.add(exitSign);
-  // 선생님 책상 10개
-  const officeDesks = OFFICE_DESKS.map((d, i) => {
+  // 챗봇 선생님 책상 (CONFIG.BOTS 순서대로, 한 줄에 5개까지)
+  const botList = (opts.bots || []).slice(0, 10);
+  const perRow = Math.min(5, Math.max(1, botList.length));
+  const rows = Math.ceil(botList.length / 5) || 1;
+  botList.forEach((b, i) => {
+    const r = Math.floor(i / 5);
+    const inRow = r < rows - 1 ? 5 : botList.length - r * 5;
+    const c = i % 5;
+    const x = OX + (c - (inRow - 1) / 2) * 2.6;
+    const z = rows === 1 ? -0.8 : (r === 0 ? -1.9 : 0.8);
     const g = new THREE.Group();
-    g.position.set(d.x, DECK_Y, d.z);
+    g.position.set(x, DECK_Y, z);
     g.add(mesh(new THREE.BoxGeometry(1.7, 0.08, 0.85), '#D9AE78', { y: 0.62, receive: true }));
     g.add(mesh(new THREE.BoxGeometry(1.7, 0.55, 0.06), '#C99A66', { y: 0.33, z: 0.4 }));
-    g.add(mesh(new THREE.BoxGeometry(0.6, 0.38, 0.05), '#3B4252', { x: -0.3, y: 0.9, z: -0.25 }));   // 모니터
-    g.add(mesh(new THREE.BoxGeometry(0.06, 0.2, 0.06), '#3B4252', { x: -0.3, y: 0.7, z: -0.27 }));
-    g.add(mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.12, 10), '#F7C6D0', { x: 0.55, y: 0.72, z: 0.05 })); // 컵
-    const chair = new THREE.Group();
-    chair.position.set(0, 0, -0.82);
-    chair.add(mesh(new THREE.BoxGeometry(0.6, 0.07, 0.55), '#7DB6D8', { y: 0.36 }));
-    chair.add(mesh(new THREE.BoxGeometry(0.6, 0.5, 0.07), '#7DB6D8', { y: 0.64, z: -0.27 }));
-    g.add(chair);
-    const tag = document.createElement('canvas');
-    tag.width = 256; tag.height = 64;
-    const tex = new THREE.CanvasTexture(tag);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.225), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
-    plate.position.set(0, 0.45, 0.44);
+    g.add(mesh(new THREE.BoxGeometry(0.5, 0.06, 0.36), '#FFFFFF', { x: -0.35, y: 0.68, z: 0.05, cast: false })); // 펼친 책
+    g.add(mesh(new THREE.BoxGeometry(0.36, 0.14, 0.26), ['#E57373', '#64B5F6', '#81C784', '#FFD54F', '#BA68C8'][i % 5], { x: 0.5, y: 0.73, z: -0.15 }));
+    g.add(mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.12, 10), '#F7C6D0', { x: 0.2, y: 0.72, z: 0.15 })); // 컵
+    const tag = canvasTex(320, 80, (cg, w, h) => {
+      cg.fillStyle = '#FFF8E3'; cg.beginPath(); cg.roundRect(2, 2, w - 4, h - 4, 16); cg.fill();
+      cg.fillStyle = '#6B4A2E'; cg.font = `800 32px ${FONT}`; cg.textAlign = 'center'; cg.textBaseline = 'middle';
+      cg.fillText(`${b.name}${b.desc ? ' · ' + b.desc.replace(/ 질문$/, '') : ''}`, w / 2, h / 2 + 2);
+    });
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.275), new THREE.MeshBasicMaterial({ map: tag, transparent: true }));
+    plate.position.set(0, 0.42, 0.44);
     g.add(plate);
-    g.traverse((o) => { o.userData.officeSeat = i + 1; });
     officeRoom.add(g);
-    areas.office.obs.push({ x0: d.x - 0.9, x1: d.x + 0.9, z0: d.z - 0.45, z1: d.z + 0.45 });
-    areas.office.obs.push({ x0: d.x - 0.32, x1: d.x + 0.32, z0: d.z - 1.12, z1: d.z - 0.55 });
-    const deskLabel = { obj: new THREE.Object3D(), el: document.createElement('div'), mode: 'idle', fixed: true, area: 'office' };
-    deskLabel.obj.position.set(d.x, DECK_Y + 0.25, d.z - 0.82);
-    deskLabel.obj.userData = { height: 1.3, scale: 1 };
-    deskLabel.el.className = 'name-tag teacher-tag hidden';
-    labelsEl.appendChild(deskLabel.el);
-    actors.push(deskLabel);
-    const desk = { n: i + 1, g, tag, tex, label: deskLabel, teacher: null, avatar: null, visit: new THREE.Vector3(d.x, DECK_Y, d.z + 0.95), chairPos: new THREE.Vector3(d.x, DECK_Y, d.z - 0.82) };
-    drawPlate(desk, null);
-    return desk;
-  });
-  scene.add(officeRoom);
-
-  // 질문 코너: 챗봇들 (CONFIG.BOTS 순서대로 앉음)
-  (opts.bots || []).forEach((b, i) => {
-    const spot = BOT_SPOTS[i];
-    if (!spot) return;
+    // 책상 뒤에 서 있는 챗봇 선생님
     const make = BOT_MODELS[b.model || b.id] || makeMascot;
     const obj = make();
-    obj.position.set(spot.x, DECK_Y, spot.z);
-    obj.rotation.y = spot.ry;
-    obj.traverse((o) => { o.userData.botId = b.id; });
+    obj.position.set(x, DECK_Y, z - 0.75);
     scene.add(obj);
-    const mat2 = mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.03, 24), '#FFE3C8', { x: spot.x, y: DECK_Y + 0.015, z: spot.z, cast: false, receive: true });
-    mat2.userData.botId = b.id;
-    scene.add(mat2);
+    g.traverse((o) => { o.userData.botId = b.id; });
+    obj.traverse((o) => { o.userData.botId = b.id; });
     const el = document.createElement('div');
     el.className = 'name-tag mascot-tag';
     el.innerHTML = `<span>🐾 ${esc(b.name)}</span><small>${esc(b.desc || '질문 도우미')}</small>`;
     labelsEl.appendChild(el);
     actors.push({ obj, el, mode: 'idle', me: false, area: 'office' });
-    areas.office.obs.push({ x0: spot.x - 0.35, x1: spot.x + 0.35, z0: spot.z - 0.35, z1: spot.z + 0.35 });
-    const front = new THREE.Vector3(spot.x + Math.sin(spot.ry) * 0.95, DECK_Y, Math.min(OFFICE_BOUNDS.z1, spot.z + Math.cos(spot.ry) * 0.95));
-    bots.push({ id: b.id, name: b.name, obj, front });
+    areas.office.obs.push({ x0: x - 0.9, x1: x + 0.9, z0: z - 1.1, z1: z + 0.45 });
+    bots.push({ id: b.id, name: b.name, obj, front: new THREE.Vector3(x, DECK_Y, z + 0.95) });
   });
-
-  function drawPlate(desk, t) {
-    const g = desk.tag.getContext('2d');
-    g.clearRect(0, 0, 256, 64);
-    g.fillStyle = t ? '#FFF8E3' : '#E9E2D6';
-    g.beginPath(); g.roundRect(2, 2, 252, 60, 14); g.fill();
-    g.fillStyle = t ? '#6B4A2E' : '#A89F92';
-    g.font = `800 30px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(t ? t.name : `${desk.n}번 자리`, 128, 33);
-    desk.tex.needsUpdate = true;
-  }
-
-  /** 서버에서 받은 선생님 자리 현황 반영: [{ id, name, seat, animal, online }] */
-  function setOfficeSeats(list) {
-    for (const desk of officeDesks) {
-      const t = list.find((x) => x.seat === desk.n) || null;
-      const changed = JSON.stringify(t) !== JSON.stringify(desk.teacher);
-      desk.teacher = t;
-      if (!changed) continue;
-      drawPlate(desk, t);
-      const isMe = t && myTeacherId && t.id === myTeacherId;
-      // 접속 중인 선생님만 캐릭터가 앉아 있음 (내 자리는 내 캐릭터가 직접 앉음)
-      const want = t && t.online && !isMe ? `${t.animal || 'bear'}:${t.color || ''}:${t.glasses ? 1 : 0}` : null;
-      if (desk.avatar && desk.avatar.userData.animal !== want) { scene.remove(desk.avatar); desk.avatar = null; }
-      if (want && !desk.avatar) {
-        const av = makeAnimal(t.animal || 'bear', t.color || '#B79CE8', { glasses: !!t.glasses, teacher: true });
-        const sc = av.userData.scale || 1;
-        av.position.set(desk.chairPos.x, DECK_Y + 0.395 - 0.2 * sc + (av.userData.cushion ? 0.15 : 0), desk.chairPos.z + 0.05 - Math.max(0, sc - 1) * 0.3);
-        av.userData.animal = want;
-        scene.add(av);
-        desk.avatar = av;
-        officeSitters.set(desk.n, av);
-      }
-      if (!want) officeSitters.delete(desk.n);
-      const el = desk.label.el;
-      el.classList.toggle('hidden', !t);
-      if (t) el.innerHTML = `<span>${esc(t.name)} 선생님</span><small>${t.closed ? '📝 시험 출제 중' : t.online ? '🟢 상담 가능' : '⚪ 부재중'}</small>`;
-    }
-  }
+  scene.add(officeRoom);
+  const officeDesks = [];          // (예전 선생님 책상 — 이제 선생님은 캐릭터 없이 대화창으로만)
+  function setOfficeSeats() {}     // 선생님 자리 표시는 하지 않음
   const officeSitters = new Map();
   let myTeacherId = null;
 
@@ -821,11 +761,103 @@ export function createWorld(container, opts = {}) {
     if (player.seat || player.officeDesk) standUp();
     path = findPath(player.obj.position, target);
   }
+  // ---------------- 다른 학생들 (자리 공유) ----------------
+  const remotes = new Map();   // 자리 번호 → { sid, animal, a, info, at }
+  let observer = false;        // 선생님: 캐릭터 없이 구경하는 시점
+  const hashN = (str) => { let h = 0; for (const ch of String(str)) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); };
+  function removeActor(a) {
+    scene.remove(a.obj);
+    a.el.remove();
+    const i = actors.indexOf(a);
+    if (i >= 0) actors.splice(i, 1);
+  }
+  function freeSeat(seat) {
+    seat.occupant = null;
+    clearCushions(seat);
+    seat.bulb.material.emissiveIntensity = 0;
+  }
+  function hideNpc(n) {
+    if (n.hidden) return;
+    n.hidden = true;
+    n.obj.visible = false;
+    n.el.classList.add('hidden');
+    if (n.seat && n.seat.occupant === n) freeSeat(n.seat);
+    n.seat = null;
+  }
+  function showNpc(n) {
+    const seat = seats[n.homeSeat];
+    if (!n.hidden || seat.occupant) return;
+    n.hidden = false;
+    n.obj.visible = true;
+    n.el.classList.remove('hidden');
+    sitActor(n, seat);
+    n.mode = 'study';
+    seat.bulb.material.emissiveIntensity = 1.4;
+  }
+  function removeRemote(k) {
+    const r = remotes.get(k);
+    if (!r) return;
+    if (r.a.seat && r.a.seat.occupant === r.a) freeSeat(r.a.seat);
+    removeActor(r.a);
+    remotes.delete(k);
+  }
+  const fmtMin = (ms) => { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`; };
+  function remoteLabel(r) {
+    const x = r.info;
+    const live = x.studying && !x.paused;
+    const ms = x.elapsed + (live ? Date.now() - r.at : 0);
+    const status = live ? `📚 ${x.subj || '공부'} 열공 중 · ${fmtMin(ms)}` : x.studying ? '☕ 쉬는 중' : '🪑 자리에 앉음';
+    setLabel(r.a, { name: x.nick, status });
+  }
+  setInterval(() => remotes.forEach(remoteLabel), 5000);
+  /** 서버에서 받은 다른 학생들 자리: [{ seat, sid, nick, animal, subj, studying, paused, elapsed }] */
+  function setRemoteSeats(list) {
+    const now = Date.now();
+    const seen = new Set();
+    for (const x of list || []) {
+      const seat = seats[x.seat];
+      if (!seat || seat.occupant === player) continue;
+      seen.add(x.seat);
+      let r = remotes.get(x.seat);
+      if (r && (r.sid !== x.sid || r.animal !== x.animal)) { removeRemote(x.seat); r = null; }
+      if (!r) {
+        if (seat.occupant && seat.occupant.npc) hideNpc(seat.occupant);
+        const a = addActor(x.animal || 'bear', CLOTHES[hashN(x.sid) % CLOTHES.length], { name: x.nick });
+        a.remote = true;
+        a.obj.traverse((o) => { o.userData.remoteSid = x.sid; o.userData.remoteNick = x.nick; });
+        sitActor(a, seat);
+        r = { sid: x.sid, animal: x.animal, a };
+        remotes.set(x.seat, r);
+      }
+      r.info = x;
+      r.at = now;
+      const live = x.studying && !x.paused;
+      r.a.mode = live ? 'study' : 'sit';
+      seat.bulb.material.emissiveIntensity = live ? 1.4 : 0;
+      remoteLabel(r);
+    }
+    for (const k of [...remotes.keys()]) if (!seen.has(k)) removeRemote(k);
+    // 분위기용 친구들: 진짜 친구가 3명 이상이면 쉬고, 진짜 친구가 그 자리에 앉으면 비켜 줌
+    const many = remotes.size >= 3;
+    for (const n of actors.filter((a) => a.npc)) {
+      if (many || remotes.has(n.homeSeat)) hideNpc(n);
+      else showNpc(n);
+    }
+  }
+  /** 선생님: 캐릭터 없이 구경 (화면은 보이지 않는 시점을 따라 움직임) */
+  function setObserver(on) {
+    observer = !!on;
+    if (observer && (player.seat || player.officeDesk)) standUp();
+    player.obj.visible = !observer;
+    player.el.classList.toggle('hidden', observer);
+  }
+
   function walkToSeat(idx) {
     pendingBot = null;
     const seat = seats[idx];
     if (!seat || (seat.occupant && seat.occupant !== player)) return false;
     if (player.seat === seat) return true;
+    if (observer) { walkTo(seat.approach); return true; } // 구경 중에는 앉지 않고 가까이 가서 보기
     walkTo(seat.approach);
     pendingSeat = seat;
     return true;
@@ -988,9 +1020,20 @@ export function createWorld(container, opts = {}) {
       if (ud.officeExit) { goOutOfOffice(); return; }
       if (ud.officeSeat) { tapDesk(ud.officeSeat); return; }
       if (ud.botId) { tapBot(ud.botId); return; }  // 챗봇: 가까우면 바로, 멀면 걸어가서 말 걸기
+      if (ud.remoteSid) {
+        // 진짜 친구: 선생님은 말 걸기, 학생은 조용히
+        if (observer) { opts.onRemoteStudent && opts.onRemoteStudent(ud.remoteSid, ud.remoteNick); return; }
+        opts.onToast && opts.onToast(`${ud.remoteNick} 친구가 공부 중이에요 🤫`);
+        return;
+      }
       const s = h.object.userData.seat;
       if (s != null) {
-        if (seats[s].occupant && seats[s].occupant !== player) { opts.onToast && opts.onToast('다른 친구가 공부 중인 자리예요 🤫'); return; }
+        const occ = seats[s].occupant;
+        if (occ && occ !== player) {
+          if (observer && occ.remote) { const r = [...remotes.values()].find((x) => x.a === occ); if (r) { opts.onRemoteStudent && opts.onRemoteStudent(r.sid, r.info.nick); return; } }
+          opts.onToast && opts.onToast('다른 친구가 공부 중인 자리예요 🤫');
+          return;
+        }
         walkToSeat(s);
         return;
       }
@@ -1235,6 +1278,7 @@ export function createWorld(container, opts = {}) {
           player.mode = mode;
         }
         if (player.officeDesk) sitAtDesk(player.officeDesk);
+        player.obj.visible = !observer;
       }
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus });
     },
@@ -1245,6 +1289,9 @@ export function createWorld(container, opts = {}) {
     enterOffice,
     setOfficeSeats,
     setOfficeOpen,
+    setRemoteSeats,
+    setObserver,
+    get observer() { return observer; },
     setTeacher(id) { myTeacherId = id || null; officeDesks.forEach((d) => { d.teacher = { ...(d.teacher || {}), _force: Math.random() }; }); },
     sitAtMyDesk() {
       const desk = officeDesks.find((d) => d.teacher && d.teacher.id === myTeacherId);

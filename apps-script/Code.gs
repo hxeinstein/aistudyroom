@@ -13,6 +13,7 @@
  *   - C칸 연결 낱말: 학생이 독서실에서 직접 만든 과목 이름에 이 낱말이 들어가면, 공부 중에 그 교과가 먼저 선택돼요.
  *     쉼표로 여러 개 (예: 과학, 물리, 역학 → '물리학Ⅰ', '통합과학' 모두 연결)
  *   - H칸 챗봇: 이 교과를 맡을 교무실 챗봇 이름 (예: 뭉치 박사, 도덕후). 비우면 뭉치 박사
+ *   - I칸 담당 선생님: 챗봇 대화창의 [선생님 부르기]를 누르면 바로 연결될 선생님 닉네임. 비우면 목록에서 고르기
  *   - 새 교과서 탭은 기존 '교과서' 탭과 같은 열(쪽, 대단원, 소단원, 내용)로 만들어 주세요.
  *   - '사용'에 체크하고, D칸에 적은 탭이 실제로 있어야만 독서실·웹앱에서 쓸 수 있어요.
  *   - D칸을 비우면 '교과서 없는 교과': 쪽수 안내 없이 개념으로만 힌트 (출판사가 달라도 괜찮음)
@@ -98,7 +99,8 @@ function loadSubjects_() {
       prompt: String(r[4] || '').trim(),
       greeting: String(r[5] || '').trim() || DEFAULT_GREETING,
       code: String(r[6] || '').trim(),
-      bot: String(r[7] || '').trim()
+      bot: String(r[7] || '').trim(),
+      teacher: String(r[8] || '').trim()
     }))
     .filter(x => !x.tab || !!ss.getSheetByName(x.tab));
 }
@@ -119,7 +121,7 @@ function findSubject_(name) {
   return list.filter(x => x.name === name)[0] || null;
 }
 
-const SUBJECT_HEADER = ['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름 (비우면 교과서 없이)', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)', '수업 코드 (비우면 누구나)', '챗봇 (비우면 뭉치 박사)'];
+const SUBJECT_HEADER = ['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름 (비우면 교과서 없이)', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)', '수업 코드 (비우면 누구나)', '챗봇 (비우면 뭉치 박사)', '담당 선생님 (닉네임, 비우면 목록에서 고르기)'];
 
 /** 처음 한 번 편집기에서 실행: '과목' 탭을 만들고 지금의 역학과 에너지를 첫 줄로 등록 (이미 있으면 머리글만 최신으로) */
 function setupSubjects() {
@@ -226,13 +228,17 @@ function doPost(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) {}
   let out;
-  if (String(body.action || '').indexOf('office.') === 0) {
+  if (body.action === 'room.sync') {
+    out = roomSync_(body);       // 공부방 자리 공유 (Office.gs)
+  } else if (body.action === 'room.peek') {
+    out = roomPeek_();
+  } else if (String(body.action || '').indexOf('office.') === 0) {
     out = officeHandle_(body);   // 교무실 (Office.gs)
   } else if (body.action === 'config') {
     const list = loadSubjects_() || [findSubject_('')];
     out = {
       name: MASCOT_NAME,
-      subjects: list.map(x => ({ name: x.name, room: x.room, greeting: x.greeting, needCode: !!x.code, book: !!x.tab, bot: x.bot || MASCOT_NAME }))
+      subjects: list.map(x => ({ name: x.name, room: x.room, greeting: x.greeting, needCode: !!x.code, book: !!x.tab, bot: x.bot || MASCOT_NAME, teacher: x.teacher }))
     };
   } else if (body.action === 'checkCode') {
     out = { ok: checkCode(body.code, body.subject) };

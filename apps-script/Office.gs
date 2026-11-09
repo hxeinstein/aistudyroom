@@ -97,6 +97,7 @@ function officeHandle_(body) {
       case 'close': return officeClose_(body);
       case 'block': return officeBlock_(body);
       case 'door': return officeDoor_(body);
+      case 'call': return officeCall_(body);
       default: return { error: '알 수 없는 요청이에요.' };
     }
   } catch (e) {
@@ -451,4 +452,95 @@ function officeProfile_(b) {
     Object.assign(teacher, parseLook_(look));
   }
   return { me: me_(teacher) };
+}
+
+/* ---------- 공부방 자리 공유 ----------
+ * 학생이 자리에 앉기·일어나기·공부 시작/끝, 그리고 30초마다 알려 주면
+ * 다른 사람 화면에 '누가 어느 자리에서 무엇을 공부 중인지'가 보여요. (걸어다니는 모습은 나누지 않음)
+ * 시트에는 아무것도 남기지 않고 임시 저장소(캐시)에만 둬요. 2분 넘게 신호가 없으면 자리에서 사라져요.
+ */
+const ROOM_SEATS = 12;
+const ROOM_GONE_MS = 2 * 60 * 1000;
+
+function roomState_() {
+  const raw = CacheService.getScriptCache().get('room_1');
+  const st = raw ? JSON.parse(raw) : {};
+  const now = Date.now();
+  Object.keys(st).forEach((k) => { if (now - st[k].t > ROOM_GONE_MS) delete st[k]; });
+  return st;
+}
+function saveRoom_(st) { CacheService.getScriptCache().put('room_1', JSON.stringify(st), OFFICE_TTL); }
+const sid_ = (device) => sha_('sid:' + device).slice(0, 12);
+
+/** 공개해도 되는 정보만 (기기 번호는 숨기고 학생 번호(sid)만) */
+function roomPublic_(st) {
+  return Object.keys(st).map((k) => {
+    const x = st[k];
+    return { seat: Number(k), sid: x.sid, nick: x.nick, animal: x.animal, subj: x.subj, studying: x.studying, paused: x.paused, elapsed: x.elapsed, t: x.t };
+  });
+}
+
+/**
+ * body = { device, seat(-1이면 안 앉음), nick, animal, subj, studying, paused, elapsed }
+ * → { seats: [...다른 사람들], taken: true(그 자리에 이미 누가 있음), calls: [선생님이 건 대화] }
+ */
+function roomSync_(b) {
+  const device = String(b.device || '').slice(0, 64);
+  if (!device) return { error: '기기 정보를 확인할 수 없어요.' };
+  const sid = sid_(device);
+  const cache = CacheService.getScriptCache();
+  cache.put('sid_' + sid, device, OFFICE_TTL);   // 선생님이 말 걸 때 쓰려고 (학생 번호 → 기기)
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  let st, taken = false;
+  try {
+    st = roomState_();
+    Object.keys(st).forEach((k) => { if (st[k].d === device) delete st[k]; });
+    const seat = Number(b.seat);
+    if (seat >= 0 && seat < ROOM_SEATS) {
+      if (st[seat]) taken = true;
+      else st[seat] = {
+        d: device, sid: sid, t: Date.now(),
+        nick: String(b.nick || '학생').slice(0, 12), animal: String(b.animal || 'bear').slice(0, 12),
+        subj: String(b.subj || '').slice(0, 12), studying: !!b.studying, paused: !!b.paused,
+        elapsed: Math.max(0, Math.min(Number(b.elapsed) || 0, 24 * 3600 * 1000)),
+      };
+    }
+    saveRoom_(st);
+  } finally { lock.releaseLock(); }
+  // 선생님이 건 대화가 있으면 전달 (한 번 전달하면 지움)
+  const callsRaw = cache.get('calls_' + device);
+  if (callsRaw) cache.remove('calls_' + device);
+  return { seats: roomPublic_(st).filter((x) => x.sid !== sid), taken: taken, calls: callsRaw ? JSON.parse(callsRaw) : [] };
+}
+
+/** 선생님: 공부방 자리 현황 보기 (구경용) */
+function roomPeek_() { return { seats: roomPublic_(roomState_()) }; }
+
+/** 선생님 → 학생에게 말 걸기 */
+function officeCall_(b) {
+  const teacher = teacherByToken_(b.token);
+  if (!teacher) return { error: '다시 로그인해 주세요.', relogin: true };
+  const cache = CacheService.getScriptCache();
+  const device = cache.get('sid_' + String(b.sid || ''));
+  if (!device) return { error: '그 학생은 지금 독서실에 없어요.' };
+  const seatInfo = roomPublic_(roomState_()).filter((x) => x.sid === b.sid)[0];
+  const me = tid_(teacher.code);
+  const key = Utilities.getUuid();
+  const id = Utilities.getUuid().replace(/-/g, '').slice(0, 16);
+  const c = {
+    a: { type: 'student', device: device, nick: seatInfo ? seatInfo.nick : '학생', animal: seatInfo ? seatInfo.animal : 'bear', key: key },
+    b: { type: 'teacher', id: me, name: teacher.name, animal: teacher.animal },
+    msgs: [], seen: { a: 0, b: 0 }, n: 0, t: Date.now(),
+  };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    putConv_(id, c);
+    const box = inbox_(me); box.push(id); setInbox_(me, box);
+    const calls = JSON.parse(cache.get('calls_' + device) || '[]');
+    calls.push({ conv: id, key: key, name: teacher.name, id: me });
+    cache.put('calls_' + device, JSON.stringify(calls.slice(-5)), OFFICE_TTL);
+  } finally { lock.releaseLock(); }
+  return { conv: id, with: { name: c.a.nick + ' 학생', animal: c.a.animal, student: true } };
 }

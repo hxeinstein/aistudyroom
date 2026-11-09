@@ -5,6 +5,7 @@ import { setSound, SOUNDS } from './sound.js';
 import { initChat, openChat, hasSubjectFor } from './chat.js';
 import { CONFIG } from './config.js';
 import * as Office from './office.js';
+import * as Room from './room.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -19,8 +20,9 @@ function boot() {
   world = createWorld($('world'), {
     animal: profile.animal,
     name: profile.name,
-    onSit: (idx) => { $('seatLabel').textContent = `${seatName(idx)} 자리에 앉음`; renderBar(); if (!S.activeSession()) openStart(); },
-    onStand: () => { $('seatLabel').textContent = '자리를 골라 앉아보세요'; renderBar(); },
+    onSit: (idx) => { $('seatLabel').textContent = `${seatName(idx)} 자리에 앉음`; renderBar(); Room.syncNow(); if (!S.activeSession()) openStart(); },
+    onStand: () => { $('seatLabel').textContent = '자리를 골라 앉아보세요'; renderBar(); Room.syncNow(); },
+    onRemoteStudent: (sid, nick) => Office.callStudent(sid, nick),
     onToast: toast,
     bots: CONFIG.BOTS,
     onBot: (id) => openChat(currentRoomSubject(), id),
@@ -68,9 +70,24 @@ function boot() {
   $('zOut').onclick = () => world.zoomBy(1.33);
   $('zReset').onclick = () => world.resetView();
   initChat({ onAskTeacher: (q) => Office.askTeacher(q) });
-  Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' } });
+  Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' }, onTeacherChange: () => { renderBar(); Room.syncNow(); } });
+  Room.initRoom({
+    world, toast,
+    isTeacher: () => Office.isTeacher(),
+    onCalls: (calls) => Office.receiveCalls(calls),
+    onTaken: () => { if (!S.activeSession()) world.standUp(); },
+    // 다른 사람에게 보이는 내 정보: 자리, 닉네임, 동물, 공부 중인 과목과 시간
+    getMe: () => {
+      const s = S.activeSession();
+      return {
+        seat: world.area === 'main' ? world.seated : -1,
+        nick: st.profile?.name || '학생', animal: st.profile?.animal || 'bear',
+        subj: s ? S.subjectById(s.subject).name : '', studying: !!s, paused: S.isPaused(), elapsed: s ? S.activeElapsed() : 0,
+      };
+    },
+  });
   Office.maybeEnterFromLink();
-  if (new URLSearchParams(location.search).has('debug')) window.__room = { world, Office }; // 시험용
+  if (new URLSearchParams(location.search).has('debug')) window.__room = { world, Office, Room }; // 시험용
   // 다른 앱/화면을 보다 돌아와도 타이머는 계속 흐름 (태블릿으로 PDF·인강 보는 경우 등).
   // 막거나 감지하지 않고, 돌아왔을 때 안내만 한 번 보여줌.
   let hiddenAt = 0;
@@ -122,19 +139,31 @@ function refreshHud() {
 
 function renderBar() {
   const bar = $('actionbar');
+  if (Office.isTeacher() && world.area === 'main') $('seatLabel').textContent = '👀 구경 중 · 공부 중인 학생을 누르면 말 걸기';
+  else if (!Office.isTeacher() && world.area === 'main' && world.seated < 0) $('seatLabel').textContent = '자리를 골라 앉아보세요';
   const seated = world.seated >= 0;
   const studying = !!S.activeSession();
   bar.classList.toggle('hidden', studying);
   const inOffice = world.area === 'office';
   const unread = Office.isTeacher() ? Office.unreadCount() : 0;
   const nearBot = inOffice && world.nearBot ? CONFIG.BOTS.find((b) => b.id === world.nearBot) : null;
-  const btns = inOffice
+  const teacherBar = [
+    { e: '📥', t: unread ? `받은 대화 ${unread}` : '받은 대화', main: true, fn: () => Office.openInbox() },
+    Office.myDoorClosed()
+      ? { e: '🔓', t: '문 열기', fn: () => Office.toggleDoor() }
+      : { e: '🔒', t: '문 닫기', fn: () => Office.toggleDoor() },
+    inOffice
+      ? { e: '🚪', t: '나가기', fn: () => world.goOutOfOffice() }
+      : { e: '🏫', t: '교무실 가기', fn: () => world.goToOffice() },
+  ];
+  const btns = Office.isTeacher() && !nearBot
+    ? teacherBar
+    : inOffice
     ? [
         ...(nearBot ? [{ e: '🐾', t: `${nearBot.name}에게 질문`, main: true, fn: () => openChat(currentRoomSubject(), nearBot.id) }] : []),
         ...(Office.isTeacher()
           ? [
               { e: '📥', t: unread ? `받은 대화 ${unread}` : '받은 대화', main: true, fn: () => Office.openInbox() },
-              { e: '🪑', t: '내 자리', fn: () => world.sitAtMyDesk() },
               Office.myDoorClosed()
                 ? { e: '🔓', t: '문 열기', fn: () => Office.toggleDoor() }
                 : { e: '🔒', t: '문 닫기', fn: () => Office.toggleDoor() },
@@ -364,6 +393,7 @@ function openStart() {
     S.startSession(id, world.seated);
     closeModal();
     showStudy();
+    Room.syncNow();
     toast('공부 시작! 스탠드를 켰어요 💡');
   };
 }
@@ -397,6 +427,7 @@ function updatePauseUI() {
 function togglePause() {
   if (S.isPaused()) S.resumeSession(); else S.pauseSession();
   updatePauseUI();
+  Room.syncNow();
 }
 
 function openStop() {
@@ -425,6 +456,7 @@ function openStop() {
 }
 
 function endStudyUI() {
+  setTimeout(() => Room.syncNow(), 0);
   $('studyPanel').classList.add('hidden');
   document.body.classList.remove('studying');
   world.setStudying(false);

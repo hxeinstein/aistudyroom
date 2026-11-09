@@ -54,13 +54,21 @@ export function confirmClosed() {
  * 챗봇 대화창의 [선생님께 물어보기] → 선생님 고르기 → 교무실 대화 (이때 선생님께 알림)
  * prefill: 방금 챗봇에게 한 질문 (입력칸에 미리 넣어 둠)
  */
-export async function askTeacher({ text, subject } = {}) {
+export async function askTeacher({ text, subject, teacherName } = {}) {
   if (!CONFIG.CHATBOT_URL) return ctx.toast('아직 교무실이 연결되지 않았어요');
   await refreshSeats();
+  const pre = text ? (subject ? `[${subject}] ` : '') + text : '';
+  // 과목 담당 선생님이 정해져 있으면 바로 연결 (시험 출제 중이면 다른 선생님 목록)
+  let note = '';
+  if (teacherName) {
+    const t = seats.find((x) => x.name === teacherName);
+    if (t && !t.closed && !(teacher && t.id === teacher.me.id)) return tapSeat(t.seat, null, { prefill: pre, viaBot: true });
+    note = t ? `담당 ${esc(teacherName)} 선생님은 지금 시험 출제 중이에요. 다른 선생님께 물어볼까요?` : '';
+  }
   const list = seats.filter((x) => !(teacher && x.id === teacher.me.id));
   const m = ctx.openModal(`
     <h2>👩‍🏫 어느 선생님께 물어볼까요?</h2>
-    <p class="desc">고른 선생님께 알림이 가요. 방금 챗봇에게 한 질문을 그대로 보낼 수 있어요.</p>
+    <p class="desc">${note || '고른 선생님께 알림이 가요. 방금 챗봇에게 한 질문을 그대로 보낼 수 있어요.'}</p>
     <div class="todo-pick" id="askList">${list.length ? list.map((x) => `
       <button type="button" class="todo-opt" data-seat="${x.seat}" ${x.closed ? 'disabled' : ''}>
         <span class="o-ava big">${animalById(x.animal).emoji}</span>
@@ -70,7 +78,6 @@ export async function askTeacher({ text, subject } = {}) {
   m.querySelector('#askCancel').onclick = ctx.closeModal;
   m.querySelectorAll('[data-seat]').forEach((b) => (b.onclick = async () => {
     ctx.closeModal();
-    const pre = text ? (subject ? `[${subject}] ` : '') + text : '';
     await tapSeat(Number(b.dataset.seat), null, { prefill: pre, viaBot: true });
   }));
 }
@@ -101,7 +108,7 @@ export function initOffice(c) {
   teacher = lsGet('aistudyroom.teacher');
   if (teacher) {
     ctx.world.setTeacher(teacher.me.id);
-    ctx.world.setTeacherLook(lookOf(teacher.me)); // 로그인한 기기는 선생님 캐릭터로
+    ctx.world.setObserver(true); // 선생님은 캐릭터 없이 구경
   }
   $('oClose').onclick = minimize;
   $('oEnd').onclick = endConv;
@@ -130,9 +137,8 @@ export function onArea(name) {
   if (name === 'office') {
     refreshSeats();
     seatTimer = setInterval(refreshSeats, 8000);
-    if (teacher) refreshSeats().then(() => ctx.world.sitAtMyDesk());
     if (!CONFIG.CHATBOT_URL) ctx.toast('아직 교무실이 연결되지 않았어요');
-    else ctx.toast(teacher ? `${teacher.me.name} 선생님, 어서 오세요! 내 자리를 눌러 앉아요` : '선생님 자리를 누르면 질문할 수 있어요 🙋');
+    else ctx.toast(teacher ? '챗봇 선생님들이 있는 교무실이에요. 눌러서 직접 시험해 볼 수 있어요' : '과목에 맞는 챗봇 선생님 책상을 눌러 질문해요 🙋');
   }
 }
 
@@ -141,8 +147,6 @@ async function refreshSeats() {
     const r = await api({ action: 'office.list' });
     if (r && r.seats) {
       seats = r.seats;
-      ctx.world.setOfficeSeats(seats);
-      ctx.world.setOfficeOpen(seats.some((x) => x.online && !x.closed));
       allClosed = seats.length > 0 && seats.every((x) => x.closed);
       ctx.renderBar && ctx.renderBar();
     }
@@ -182,7 +186,7 @@ export async function tapSeat(n, t, opt = {}) {
 /* ---------- 대화창 ---------- */
 function renderHead() {
   const w = conv ? conv.with : null;
-  $('oAva').textContent = w ? animalById(w.animal).emoji : '🏫';
+  $('oAva').textContent = w ? (conv.student ? animalById(w.animal).emoji : '👩‍🏫') : '🏫';
   $('oName').textContent = w ? w.name + (w.student ? '' : (w.name.endsWith('학생') ? '' : ' 선생님')) : '교무실';
   $('oStatus').textContent = conv && conv.ended ? '대화가 끝났어요' : w && w.online === false ? '⚪ 부재중 · 메시지를 남겨 두세요' : '🟢 대화 중';
   $('oBlock').classList.toggle('hidden', !(teacher && conv && conv.student));
@@ -209,7 +213,7 @@ function minimize() {
 function bubble(m) {
   const row = document.createElement('div');
   row.className = 'c-row ' + (m.mine ? 'me' : 'bot');
-  if (!m.mine) row.innerHTML = `<span class="o-ava">${animalById(conv.with.animal).emoji}</span>`;
+  if (!m.mine) row.innerHTML = `<span class="o-ava">${conv.student ? animalById(conv.with.animal).emoji : '👩‍🏫'}</span>`;
   const div = document.createElement('div');
   div.className = 'c-msg';
   div.innerHTML = esc(m.text).replace(/\n/g, '<br>');
@@ -260,6 +264,7 @@ async function endConv(silent) {
   if (!c.ended) try { await api({ action: 'office.close', conv: c.conv, key: c.key, token: teacher && teacher.token }); } catch (e) {}
   if (silent !== true) ctx.toast('대화를 끝냈어요. 내용은 지워졌어요 🧹');
   if (teacher) syncTeacher();
+  setTimeout(takeCall, 500);
 }
 
 async function blockStudent() {
@@ -368,16 +373,13 @@ export function openTeacherLogin() {
     <div id="tReg" class="hidden">
       <label class="lbl">알림 받을 이메일 <span style="font-weight:400">(선택)</span></label>
       <input class="field" id="tEmail" type="email" maxlength="80" placeholder="교무실에 없을 때 질문이 오면 메일로 알려 드려요" />
-      <label class="lbl">선생님 캐릭터</label>
-      ${lookPicker(look)}
     </div>
-    <p class="hint" id="tKeep">한 번 로그인하면 이 기기에서는 로그아웃할 때까지 계속 로그인돼 있어요.</p>
+    <p class="hint" id="tKeep">선생님은 캐릭터 없이 독서실을 구경하다가 공부 중인 학생을 눌러 말을 걸 수 있어요. 한 번 로그인하면 이 기기에서는 로그아웃할 때까지 계속 로그인돼 있어요.</p>
     <p class="c-gate-msg" id="tMsg"></p>
     <div class="foot">
       <button class="btn ghost" id="tCancel" type="button">닫기</button>
       <button class="btn primary" id="tGo" type="button">로그인</button>
     </div>`, { wide: true });
-  bindLookPicker(m, look);
   const setTab = (t) => {
     tab = t;
     m.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
@@ -400,14 +402,14 @@ export function openTeacherLogin() {
     teacher = { token: r.token, me: r.me };
     lsSet('aistudyroom.teacher', teacher);
     ctx.world.setTeacher(r.me.id);
-    ctx.world.setTeacherLook(lookOf(r.me));
+    ctx.world.setObserver(true);
     ctx.closeModal();
-    ctx.toast(`${r.me.name} 선생님, 로그인했어요. ${r.me.seat}번 자리예요`);
+    ctx.toast(`${r.me.name} 선생님, 로그인했어요. 공부 중인 학생을 누르면 말을 걸 수 있어요`);
+    ctx.onTeacherChange && ctx.onTeacherChange();
     if (ctx.world.area === 'office' && $('seatLabel')) $('seatLabel').textContent = `${r.me.name} 선생님`;
     try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
     startTeacherSync();
     await refreshSeats();
-    if (ctx.world.area === 'office') ctx.world.sitAtMyDesk();
   };
   setTimeout(() => m.querySelector('#tCode').focus(), 50);
 }
@@ -417,27 +419,23 @@ export function openTeacherProfile() {
   if (!teacher) return;
   const look = lookOf(teacher.me);
   const m = ctx.openModal(`
-    <h2>🎨 선생님 캐릭터</h2>
-    <label class="lbl">닉네임</label>
+    <h2>✏️ 닉네임 바꾸기</h2>
+    <label class="lbl">닉네임 (학생에게 보여요)</label>
     <input class="field" id="tpName" maxlength="12" value="${esc(teacher.me.name)}" />
-    <label class="lbl">캐릭터</label>
-    ${lookPicker(look)}
     <p class="c-gate-msg" id="tpMsg"></p>
     <div class="foot">
       <button class="btn ghost" id="tpCancel" type="button">닫기</button>
       <button class="btn primary" id="tpSave" type="button">저장</button>
     </div>`, { wide: true });
-  bindLookPicker(m, look);
   m.querySelector('#tpCancel').onclick = ctx.closeModal;
   m.querySelector('#tpSave').onclick = async () => {
     let r;
-    try { r = await api({ action: 'office.profile', token: teacher.token, name: m.querySelector('#tpName').value, look }); } catch (e) { m.querySelector('#tpMsg').textContent = '연결하지 못했어요.'; return; }
+    try { r = await api({ action: 'office.profile', token: teacher.token, name: m.querySelector('#tpName').value }); } catch (e) { m.querySelector('#tpMsg').textContent = '연결하지 못했어요.'; return; }
     if (r.error) { m.querySelector('#tpMsg').textContent = r.error; return; }
     teacher.me = { ...teacher.me, ...r.me };
     lsSet('aistudyroom.teacher', teacher);
-    ctx.world.setTeacherLook(lookOf(teacher.me));
     ctx.closeModal();
-    ctx.toast('캐릭터를 바꿨어요');
+    ctx.toast('닉네임을 바꿨어요');
     refreshSeats();
   };
 }
@@ -448,7 +446,8 @@ export function logout(silent) {
   inbox = [];
   lsSet('aistudyroom.teacher', null);
   ctx.world.setTeacher(null);
-  ctx.world.setTeacherLook(null); // 이 기기의 원래(학생) 캐릭터로
+  ctx.world.setObserver(false); // 이 기기의 원래(학생) 캐릭터로
+  ctx.onTeacherChange && ctx.onTeacherChange();
   refreshSeats();
   updatePill();
 }
@@ -482,10 +481,10 @@ export function openInbox() {
   if (!teacher) return openTeacherLogin();
   const m = ctx.openModal(`
     <h2>📥 받은 대화</h2>
-    <p class="desc">${esc(teacher.me.name)} 선생님 · ${teacher.me.seat}번 자리 · 대화는 끝내면 바로 지워져요</p>
+    <p class="desc">${esc(teacher.me.name)} 선생님 · 대화는 끝내면 바로 지워져요</p>
     <button class="btn soft block" id="ibDoor" type="button">${myDoorClosed() ? '🔓 문 열기 (질문 받기)' : '🔒 문 닫기 (시험 출제 중)'}</button>
     <p class="hint">문을 닫으면 학생에게 “시험 출제 중”으로 보이고 새 질문을 받지 않아요. 하던 대화는 그대로예요.</p>
-    <button class="btn soft block" id="ibLook" type="button">🎨 내 캐릭터·닉네임 바꾸기</button>
+    <button class="btn soft block" id="ibLook" type="button">✏️ 닉네임 바꾸기</button>
     <div class="todo-pick" id="inboxList"></div>
     <label class="lbl">다른 선생님께 메시지</label>
     <div class="chips" id="teacherList"></div>
@@ -534,4 +533,40 @@ export function maybeEnterFromLink() {
   if (location.hash === '#office') {
     setTimeout(() => ctx.world.enterOffice(), 300);
   }
+}
+
+/* ---------- 선생님 → 학생 말 걸기 ---------- */
+export async function callStudent(sid, nick) {
+  if (!teacher) return;
+  if (!confirm(`${nick} 학생에게 말을 걸까요?\n학생 화면에 "선생님이 말을 걸었어요" 알림이 떠요.`)) return;
+  let r;
+  try { r = await api({ action: 'office.call', token: teacher.token, sid }); } catch (e) { return ctx.toast('연결하지 못했어요'); }
+  if (r.error) return ctx.toast(r.error);
+  if (conv && !conv.ended) await endConv(true);
+  conv = { conv: r.conv, key: null, with: { ...r.with }, toId: null, since: 0, ended: false, student: true };
+  $('oLog').innerHTML = '';
+  note(`${nick} 학생에게 말을 걸었어요. 학생이 다음에 독서실과 연결될 때(최대 30초) 알림이 떠요.`);
+  openSheet();
+  startPoll();
+}
+
+/** 학생: 선생님이 건 대화 받기 */
+const pendingCalls = [];
+export function receiveCalls(calls) {
+  for (const c of calls) pendingCalls.push(c);
+  takeCall();
+}
+function takeCall() {
+  if (conv && !conv.ended) return; // 지금 대화가 끝나면 이어서
+  const c = pendingCalls.shift();
+  if (!c) return;
+  conv = { conv: c.conv, key: c.key, with: { name: c.name, animal: 'bear', online: true }, toId: c.id, since: 0, ended: false, student: false };
+  $('oLog').innerHTML = '';
+  note(`${c.name} 선생님이 말을 걸었어요 🙋`);
+  ctx.toast(`💬 ${c.name} 선생님이 말을 걸었어요`);
+  notify(`${c.name} 선생님`, '숲속 독서실에서 선생님이 말을 걸었어요');
+  conv.unread = 1;
+  sheetOpen = false;
+  updatePill();
+  startPoll();
 }
