@@ -260,3 +260,6 @@ body.studying .zoom-ctl { display: none; }
 .animals.small .animal-btn { font-size: 22px; padding: 4px 0; }
 .glasses-tg { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; font-weight: 700; font-size: 14px; color: var(--brown); }
 .glasses-tg input { width: 18px; height: 18px; accent-color: var(--green); }
+
+.ask-teacher { display: block; width: 100%; margin-bottom: 8px; border: 2px dashed #9DBBF2; background: #EEF4FF; color: #2F5DB8;
+  border-radius: 14px; padding: 8px 10px; font-size: 13px; }

@@ -22,13 +22,13 @@ function boot() {
     onSit: (idx) => { $('seatLabel').textContent = `${seatName(idx)} 자리에 앉음`; renderBar(); if (!S.activeSession()) openStart(); },
     onStand: () => { $('seatLabel').textContent = '자리를 골라 앉아보세요'; renderBar(); },
     onToast: toast,
-    mascotName: CONFIG.MASCOT_NAME,
-    onMascot: () => openChat(currentRoomSubject()),
-    onNearMascot: () => renderBar(),
+    bots: CONFIG.BOTS,
+    onBot: (id) => openChat(currentRoomSubject(), id),
+    onNearBot: () => renderBar(),
     onNearDoor: () => renderBar(),
     onArea: (name) => {
       $('roomName').textContent = name === 'office' ? '교무실' : '숲속 독서실';
-      $('seatLabel').textContent = name === 'office' ? (Office.isTeacher() ? `${Office.teacherName()} 선생님` : '선생님 자리를 눌러 질문해요') : '자리를 골라 앉아보세요';
+      $('seatLabel').textContent = name === 'office' ? (Office.isTeacher() ? `${Office.teacherName()} 선생님` : '질문 코너의 챗봇에게 먼저 물어봐요') : '자리를 골라 앉아보세요';
       Office.onArea(name);
       renderBar();
     },
@@ -67,7 +67,7 @@ function boot() {
   $('zIn').onclick = () => world.zoomBy(0.75);
   $('zOut').onclick = () => world.zoomBy(1.33);
   $('zReset').onclick = () => world.resetView();
-  initChat();
+  initChat({ onAskTeacher: (q) => Office.askTeacher(q) });
   Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' } });
   Office.maybeEnterFromLink();
   if (new URLSearchParams(location.search).has('debug')) window.__room = { world, Office }; // 시험용
@@ -127,8 +127,10 @@ function renderBar() {
   bar.classList.toggle('hidden', studying);
   const inOffice = world.area === 'office';
   const unread = Office.isTeacher() ? Office.unreadCount() : 0;
+  const nearBot = inOffice && world.nearBot ? CONFIG.BOTS.find((b) => b.id === world.nearBot) : null;
   const btns = inOffice
     ? [
+        ...(nearBot ? [{ e: '🐾', t: `${nearBot.name}에게 질문`, main: true, fn: () => openChat(currentRoomSubject(), nearBot.id) }] : []),
         ...(Office.isTeacher()
           ? [
               { e: '📥', t: unread ? `받은 대화 ${unread}` : '받은 대화', main: true, fn: () => Office.openInbox() },
@@ -148,9 +150,8 @@ function renderBar() {
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ]
     : [
-        ...(world.nearMascot ? [{ e: '🐾', t: '뭉치에게 질문', main: true, fn: () => openChat(currentRoomSubject()) }] : []),
         ...(world.nearDoor === 'enter' ? [{ e: '🏫', t: '교무실 들어가기', main: true, fn: () => world.goToOffice() }] : []),
-        { e: '🪑', t: '빈자리 앉기', main: !world.nearMascot && world.nearDoor !== 'enter', fn: sitNearest },
+        { e: '🪑', t: '빈자리 앉기', main: world.nearDoor !== 'enter', fn: sitNearest },
         { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ];

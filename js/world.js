@@ -93,9 +93,98 @@ export function makeMascot() {
   tail.scale.set(0.8, 1.2, 0.8);
   g.add(legL, legR, body, belly, scarf, knot, armL, armR, tablet, head, tail);
   g.userData = { legL, legR, armL, armR, head, body, tail, tablet, phase: 0, mascot: true };
-  g.traverse((o) => { o.userData.mascotPart = true; });
   return g;
 }
+
+// 도덕 챗봇 '도덕후': 크림색 사자 + 길게 물결치는 주황 갈기 + 유니콘 뿔 + 동그란 귀 + 갈기 꼬리
+export function makeDodeokhu() {
+  const g = new THREE.Group();
+  const fur = mat('#F8E7B4');
+  const mane = mat('#F1A35C');
+  const maneD = mat('#E58A45');
+  const legGeo = new THREE.CapsuleGeometry(0.09, 0.14, 4, 8);
+  const legL = mesh(legGeo, fur, { x: -0.11, y: 0.14 });
+  const legR = mesh(legGeo, fur, { x: 0.11, y: 0.14 });
+  const body = mesh(new THREE.CapsuleGeometry(0.23, 0.2, 6, 14), fur, { y: 0.47 });
+  // 가슴 털
+  for (const [x, y] of [[-0.07, 0.6], [0, 0.57], [0.07, 0.6]]) {
+    const f = mesh(new THREE.ConeGeometry(0.05, 0.1, 6), '#FFF6DA', { x, y, z: 0.2 });
+    f.rotation.x = Math.PI;
+    g.add(f);
+  }
+  const armGeo = new THREE.CapsuleGeometry(0.07, 0.15, 4, 8);
+  const armL = new THREE.Group();
+  armL.position.set(-0.25, 0.58, 0);
+  armL.add(mesh(armGeo, fur, { y: -0.1 }));
+  const armR = armL.clone();
+  armR.position.x = 0.25;
+  // 머리
+  const head = new THREE.Group();
+  head.position.y = 0.99;
+  const skull = mesh(new THREE.SphereGeometry(0.34, 20, 16), fur);
+  skull.scale.set(1.05, 0.96, 1);
+  head.add(skull);
+  // 물결치는 긴 갈기: 머리 위·옆 + 어깨 아래까지 흘러내림
+  for (let i = 0; i < 11; i++) {
+    const a = -Math.PI * 0.95 + (i / 10) * Math.PI * 0.9 - Math.PI * 0.03;
+    head.add(mesh(new THREE.SphereGeometry(0.15, 10, 8), i % 2 ? mane : maneD, { x: Math.cos(a) * 0.33, y: Math.sin(-a) * 0.27 + 0.02, z: -0.05 }));
+  }
+  for (const sx of [-1, 1]) {
+    for (let k = 0; k < 4; k++) {
+      const m = mesh(new THREE.SphereGeometry(0.13 - k * 0.012, 10, 8), k % 2 ? mane : maneD, { x: sx * (0.34 + Math.sin(k * 1.3) * 0.04), y: -0.12 - k * 0.17, z: -0.08 });
+      m.scale.set(0.9, 1.15, 0.9);
+      head.add(m);
+    }
+  }
+  const back = mesh(new THREE.SphereGeometry(0.3, 12, 10), mane, { y: -0.18, z: -0.22 });
+  back.scale.set(1.15, 1.35, 0.6);
+  head.add(back);
+  head.add(mesh(new THREE.SphereGeometry(0.12, 10, 8), maneD, { y: 0.3, z: 0.12 })); // 앞머리
+  // 유니콘 뿔
+  const horn = mesh(new THREE.ConeGeometry(0.075, 0.32, 12), '#F6E7A8', { y: 0.5, z: 0.12 });
+  horn.rotation.x = 0.25;
+  head.add(horn);
+  for (let k = 0; k < 3; k++) head.add(mesh(new THREE.TorusGeometry(0.058 - k * 0.015, 0.008, 4, 12), '#D9C27A', { y: 0.41 + k * 0.065, z: 0.1 + k * 0.016, cast: false }).rotateX(Math.PI / 2 + 0.25));
+  // 귀
+  for (const sx of [-1, 1]) {
+    const ear = mesh(new THREE.SphereGeometry(0.1, 12, 10), fur, { x: sx * 0.25, y: 0.27, z: 0.02 });
+    ear.scale.z = 0.6;
+    head.add(ear);
+    const inner = mesh(new THREE.SphereGeometry(0.06, 10, 8), '#F4A9B4', { x: sx * 0.25, y: 0.27, z: 0.07 });
+    inner.scale.z = 0.4;
+    head.add(inner);
+    head.add(mesh(new THREE.SphereGeometry(0.045, 10, 10), '#3A2A22', { x: sx * 0.12, y: 0.04, z: 0.3 }));           // 눈
+    head.add(mesh(new THREE.SphereGeometry(0.014, 6, 6), '#FFFFFF', { x: sx * 0.12 + 0.015, y: 0.06, z: 0.34, cast: false }));
+    const dot = mesh(new THREE.SphereGeometry(0.04, 8, 8), '#F2A25E', { x: sx * 0.1, y: 0.16, z: 0.29, cast: false }); // 이마 점
+    dot.scale.set(1.3, 0.6, 0.3);
+    head.add(dot);
+  }
+  const muzzle = mesh(new THREE.SphereGeometry(0.13, 14, 10), '#FFF4D6', { y: -0.09, z: 0.26 });
+  muzzle.scale.set(1.25, 0.8, 0.7);
+  head.add(muzzle);
+  head.add(mesh(new THREE.SphereGeometry(0.04, 8, 8), '#1E1E1E', { y: -0.05, z: 0.36 }));
+  const smile = mesh(new THREE.TorusGeometry(0.05, 0.008, 4, 12, Math.PI), '#3A2A22', { y: -0.11, z: 0.35, cast: false });
+  smile.rotation.z = Math.PI;
+  head.add(smile);
+  // 꼬리 + 주황 술
+  const tail = new THREE.Group();
+  tail.position.set(0.15, 0.32, -0.22);
+  tail.rotation.set(-1.0, 0, -0.6);
+  tail.add(mesh(new THREE.CapsuleGeometry(0.03, 0.32, 4, 8), fur, { y: -0.2 }));
+  tail.add(mesh(new THREE.SphereGeometry(0.09, 10, 8), maneD, { y: -0.42 }));
+  g.add(legL, legR, body, armL, armR, head, tail);
+  g.userData = { legL, legR, armL, armR, head, body, tail, tablet: null, phase: 0, mascot: true };
+  return g;
+}
+
+const BOT_MODELS = { mungchi: makeMascot, dodeokhu: makeDodeokhu };
+// 교무실 앞쪽 '질문 코너' 자리 (챗봇이 늘어나면 차례로 앉음)
+const BOT_SPOTS = [
+  { x: OX - 1.7, z: 2.9, ry: 0.35 },
+  { x: OX + 1.7, z: 2.9, ry: -0.35 },
+  { x: OX - 3.5, z: 3.1, ry: 0.45 },
+  { x: OX + 3.5, z: 3.1, ry: -0.45 },
+];
 
 // ---------------- 텍스처 ----------------
 function canvasTex(w, h, draw) {
@@ -409,16 +498,8 @@ export function createWorld(container, opts = {}) {
     seats[d.seat].bulb.material.emissiveIntensity = 1.4;
   });
 
-  // 과학 질문 도우미
-  const mascot = { obj: makeMascot(), el: document.createElement('div'), mode: 'idle', me: false };
-  mascot.obj.position.set(-2.4, DECK_Y, 6.3);
-  mascot.obj.rotation.y = 0.45;
-  scene.add(mascot.obj);
-  mascot.el.className = 'name-tag mascot-tag';
-  labelsEl.appendChild(mascot.el);
-  mascot.el.innerHTML = `<span>🐾 ${esc(opts.mascotName || '과학 도우미')}</span><small>질문 도우미</small>`;
-  actors.push(mascot);
-  addObs(-2.4, 6.3, 0.7, 0.7);
+  // 질문 챗봇들은 교무실 앞쪽 '질문 코너'에 (아래 교무실 만들 때 배치)
+  const bots = [];
 
   function sitActor(a, seat) {
     seat.occupant = a;
@@ -457,11 +538,18 @@ export function createWorld(container, opts = {}) {
   player.obj.rotation.y = Math.PI;
   let path = [];
   let pendingSeat = null;
-  let pendingMascot = false;
-  let nearMascot = false;
+  let pendingBot = null;   // 걸어간 뒤 말 걸 챗봇 id
+  let nearBot = null;      // 가까이 있는 챗봇 id
   let pendingOffice = null;   // { type: 'enter' | 'exit' | 'desk' | 'sit', desk }
   let nearDoor = null;        // 'enter' (교무실 문 앞) | 'exit' (교무실 나가는 문 앞) | null
-  const MASCOT_FRONT = new THREE.Vector3(-2.05, DECK_Y, 7.05);
+  function tapBot(id) {
+    const bot = bots.find((x) => x.id === id);
+    if (!bot) return;
+    if (nearBot === id && !player.seat && !player.officeDesk) { opts.onBot && opts.onBot(id); return; }
+    pendingSeat = null; pendingOffice = null;
+    walkTo(bot.front);
+    pendingBot = id;
+  }
   let studying = false;
 
 
@@ -536,8 +624,8 @@ export function createWorld(container, opts = {}) {
   for (const sx of [-1, 1]) officeRoom.add(mesh(new THREE.BoxGeometry(5.2, 0.7, 0.2), wallMat, { x: OX + sx * 3.7, y: DECK_Y + 0.35, z: 5.0 })); // 앞쪽 낮은 벽
   // 칠판, 시계, 화분
   officeRoom.add(mesh(new THREE.BoxGeometry(4.2, 1.3, 0.08), '#3F6B4F', { x: OX, y: DECK_Y + 1.5, z: -3.96 }));
-  const boardText = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), new THREE.MeshBasicMaterial({ map: canvasTex(512, 128, (g, w, h) => {
-    g.fillStyle = '#FFFFFF'; g.font = `700 44px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const boardText = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), new THREE.MeshBasicMaterial({ map: canvasTex(640, 160, (g, w, h) => {
+    g.fillStyle = '#FFFFFF'; g.font = `700 40px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText('궁금한 건 언제든 물어보세요', w / 2, h / 2);
   }), transparent: true }));
   boardText.position.set(OX, DECK_Y + 1.5, -3.91);
@@ -592,6 +680,29 @@ export function createWorld(container, opts = {}) {
     return desk;
   });
   scene.add(officeRoom);
+
+  // 질문 코너: 챗봇들 (CONFIG.BOTS 순서대로 앉음)
+  (opts.bots || []).forEach((b, i) => {
+    const spot = BOT_SPOTS[i];
+    if (!spot) return;
+    const make = BOT_MODELS[b.model || b.id] || makeMascot;
+    const obj = make();
+    obj.position.set(spot.x, DECK_Y, spot.z);
+    obj.rotation.y = spot.ry;
+    obj.traverse((o) => { o.userData.botId = b.id; });
+    scene.add(obj);
+    const mat2 = mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.03, 24), '#FFE3C8', { x: spot.x, y: DECK_Y + 0.015, z: spot.z, cast: false, receive: true });
+    mat2.userData.botId = b.id;
+    scene.add(mat2);
+    const el = document.createElement('div');
+    el.className = 'name-tag mascot-tag';
+    el.innerHTML = `<span>🐾 ${esc(b.name)}</span><small>${esc(b.desc || '질문 도우미')}</small>`;
+    labelsEl.appendChild(el);
+    actors.push({ obj, el, mode: 'idle', me: false, area: 'office' });
+    areas.office.obs.push({ x0: spot.x - 0.35, x1: spot.x + 0.35, z0: spot.z - 0.35, z1: spot.z + 0.35 });
+    const front = new THREE.Vector3(spot.x + Math.sin(spot.ry) * 0.95, DECK_Y, Math.min(OFFICE_BOUNDS.z1, spot.z + Math.cos(spot.ry) * 0.95));
+    bots.push({ id: b.id, name: b.name, obj, front });
+  });
 
   function drawPlate(desk, t) {
     const g = desk.tag.getContext('2d');
@@ -711,7 +822,7 @@ export function createWorld(container, opts = {}) {
     path = findPath(player.obj.position, target);
   }
   function walkToSeat(idx) {
-    pendingMascot = false;
+    pendingBot = null;
     const seat = seats[idx];
     if (!seat || (seat.occupant && seat.occupant !== player)) return false;
     if (player.seat === seat) return true;
@@ -767,7 +878,7 @@ export function createWorld(container, opts = {}) {
     if (player.seat || player.officeDesk) standUp();
     area = areas[name];
     path = [];
-    pendingSeat = null; pendingMascot = false; pendingOffice = null;
+    pendingSeat = null; pendingBot = null; pendingOffice = null;
     player.obj.position.copy(pos);
     player.obj.rotation.y = rotY;
     yaw = yawTarget = 0;
@@ -800,7 +911,7 @@ export function createWorld(container, opts = {}) {
     const desk = officeDesks[n - 1];
     if (!desk) return;
     const mine = desk.teacher && myTeacherId && desk.teacher.id === myTeacherId;
-    pendingSeat = null; pendingMascot = false;
+    pendingSeat = null; pendingBot = null;
     if (mine) {
       walkTo(new THREE.Vector3(desk.chairPos.x + 1.15, DECK_Y, desk.chairPos.z));
       pendingOffice = { type: 'sit', desk };
@@ -876,14 +987,7 @@ export function createWorld(container, opts = {}) {
       if (ud.officeDoor) { goToOffice(); return; }
       if (ud.officeExit) { goOutOfOffice(); return; }
       if (ud.officeSeat) { tapDesk(ud.officeSeat); return; }
-      if (h.object.userData.mascotPart) {
-        // 가까이 있으면 바로, 멀면 뭉치 앞까지 걸어간 뒤 열기
-        if (nearMascot && !player.seat) { opts.onMascot && opts.onMascot(); return; }
-        pendingSeat = null;
-        walkTo(MASCOT_FRONT);
-        pendingMascot = true;
-        return;
-      }
+      if (ud.botId) { tapBot(ud.botId); return; }  // 챗봇: 가까우면 바로, 멀면 걸어가서 말 걸기
       const s = h.object.userData.seat;
       if (s != null) {
         if (seats[s].occupant && seats[s].occupant !== player) { opts.onToast && opts.onToast('다른 친구가 공부 중인 자리예요 🤫'); return; }
@@ -895,7 +999,7 @@ export function createWorld(container, opts = {}) {
         const B = area.bounds;
         const t = new THREE.Vector3(clamp(p.x, B.x0, B.x1), DECK_Y, clamp(p.z, B.z0, B.z1));
         pendingSeat = null;
-        pendingMascot = false;
+        pendingBot = null;
         pendingOffice = null;
         walkTo(t);
         return;
@@ -961,7 +1065,7 @@ export function createWorld(container, opts = {}) {
       if (player.seat || player.officeDesk) standUp();
       path = [];
       pendingSeat = null;
-      pendingMascot = false;
+      pendingBot = null;
       pendingOffice = null;
       const c = Math.cos(yaw), s = Math.sin(yaw);
       const dx = kx * c + kz * s, dz = -kx * s + kz * c;
@@ -975,10 +1079,13 @@ export function createWorld(container, opts = {}) {
       const d = v.length();
       if (d < 0.08) {
         path.shift();
-        if (!path.length && pendingMascot) {
-          pendingMascot = false;
-          faceDir(mascot.obj.position.x - p.x, mascot.obj.position.z - p.z, 1);
-          opts.onMascot && opts.onMascot();
+        if (!path.length && pendingBot) {
+          const bot = bots.find((x) => x.id === pendingBot);
+          pendingBot = null;
+          if (bot) {
+            faceDir(bot.obj.position.x - p.x, bot.obj.position.z - p.z, 1);
+            opts.onBot && opts.onBot(bot.id);
+          }
         }
         if (!path.length && pendingOffice) {
           const po = pendingOffice;
@@ -1009,8 +1116,9 @@ export function createWorld(container, opts = {}) {
       p.y = DECK_Y;
     }
     // 뭉치 박사 근처인지 (하단 '질문' 버튼 표시용)
-    const near = area.name === 'main' && !player.seat && Math.hypot(p.x - mascot.obj.position.x, p.z - mascot.obj.position.z) < 1.9;
-    if (near !== nearMascot) { nearMascot = near; opts.onNearMascot && opts.onNearMascot(near); }
+    let nb = null;
+    if (area.name === 'office' && !player.officeDesk) for (const bt of bots) if (Math.hypot(p.x - bt.obj.position.x, p.z - bt.obj.position.z) < 1.7) nb = bt.id;
+    if (nb !== nearBot) { nearBot = nb; opts.onNearBot && opts.onNearBot(nb); }
     // 교무실 문 근처인지
     const door = area.name === 'main'
       ? (!player.seat && Math.hypot(p.x - PORTAL.x, p.z - PORTAL.z) < 1.4 ? 'enter' : null)
@@ -1130,7 +1238,7 @@ export function createWorld(container, opts = {}) {
       }
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus });
     },
-    walkToMascot() { pendingSeat = null; walkTo(MASCOT_FRONT); pendingMascot = true; },
+    walkToBot: tapBot,
     // 교무실
     goToOffice,
     goOutOfOffice,
@@ -1144,7 +1252,7 @@ export function createWorld(container, opts = {}) {
     },
     get area() { return area.name; },
     get nearDoor() { return nearDoor; },
-    get nearMascot() { return nearMascot; },
+    get nearBot() { return nearBot; },
     get seated() { return player.seat ? player.seat.idx : -1; },
   };
 }

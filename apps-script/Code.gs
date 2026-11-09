@@ -12,6 +12,7 @@
  *   한 줄 = 교과 하나.  A 사용(체크) | B 교과 이름 | C 연결 낱말 | D 교과서 탭 이름 | E 프롬프트 | F 첫 인사
  *   - C칸 연결 낱말: 학생이 독서실에서 직접 만든 과목 이름에 이 낱말이 들어가면, 공부 중에 그 교과가 먼저 선택돼요.
  *     쉼표로 여러 개 (예: 과학, 물리, 역학 → '물리학Ⅰ', '통합과학' 모두 연결)
+ *   - H칸 챗봇: 이 교과를 맡을 교무실 챗봇 이름 (예: 뭉치 박사, 도덕후). 비우면 뭉치 박사
  *   - 새 교과서 탭은 기존 '교과서' 탭과 같은 열(쪽, 대단원, 소단원, 내용)로 만들어 주세요.
  *   - '사용'에 체크하고, D칸에 적은 탭이 실제로 있어야만 독서실·웹앱에서 쓸 수 있어요.
  *   - D칸을 비우면 '교과서 없는 교과': 쪽수 안내 없이 개념으로만 힌트 (출판사가 달라도 괜찮음)
@@ -39,17 +40,41 @@ const STUDYROOM_SAVE_LOG = false;     // 독서실에서 온 질문은 '기록' 
 const MASCOT_NAME = '뭉치 박사';        // 독서실 마스코트 이름 (바꾸면 아래 말투 안내에도 반영됨)
 const DEFAULT_GREETING = '어떤 문제를 풀어 볼까? 문제를 글로 쓰거나 사진으로 올려 줘!';
 
-function studyroomPersona_() {
+/**
+ * 챗봇 캐릭터 (교무실 '질문 코너'). '과목' 탭 H칸에 이 이름을 적으면 그 챗봇이 교과를 맡아요.
+ * 새 챗봇은 여기와 독서실 js/config.js의 BOTS에 함께 추가해요.
+ */
+const BOT_PERSONAS = {
+  '뭉치 박사': {
+    who: '동그란 안경을 쓰고 태블릿을 든 하얀 강아지 캐릭터이고, 과학을 아주 좋아해',
+    style: [
+      '- 과학 말장난을 섞어서 말해. 학생을 칭찬할 때는 "저항~!", 웃을 때는 "과하하학"이라고 해.',
+      '  예: "저항~! 힘의 방향을 정확하게 잡았어!", "과하하학, 단위만 붙이면 완벽하겠다!"',
+    ],
+  },
+  '도덕후': {
+    who: '물결치는 주황 갈기와 유니콘 뿔이 있는 크림색 사자 캐릭터이고, 도덕과 윤리 이야기를 아주 좋아해',
+    style: [
+      '- 따뜻하고 차분하게 말해. 학생을 칭찬할 때는 "덕스럽다~!", 웃을 때는 "후후후"라고 해.',
+      '  예: "덕스럽다~! 두 입장을 모두 생각해 봤구나!", "후후후, 근거를 하나만 더 들어 볼까?"',
+      '- 도덕·윤리 질문은 한 가지 답을 강요하지 말고, 여러 관점과 근거를 비교해 보며 학생이 스스로 판단하게 도와줘.',
+    ],
+  },
+};
+
+function studyroomPersona_(botName) {
+  const name = BOT_PERSONAS[botName] ? botName : MASCOT_NAME;
+  const p = BOT_PERSONAS[name] || BOT_PERSONAS[MASCOT_NAME];
   return [
     '',
     '[독서실 캐릭터]',
-    '- 너는 "숲속 독서실"의 공부 도우미 "' + MASCOT_NAME + '"야. 동그란 안경을 쓰고 태블릿을 든 하얀 강아지 캐릭터이고, 과학을 아주 좋아해.',
+    '- 너는 "숲속 독서실" 교무실 질문 코너의 공부 도우미 "' + name + '"야. ' + p.who + '.',
     '- 말투는 다정한 반말로 짧게 해.',
-    '- 과학 말장난을 섞어서 말해. 학생을 칭찬할 때는 "저항~!", 웃을 때는 "과하하학"이라고 해.',
-    '  예: "저항~! 힘의 방향을 정확하게 잡았어!", "과하하학, 단위만 붙이면 완벽하겠다!"',
+  ].concat(p.style, [
     '- 말장난은 한 답변에 한 번 정도만 쓰고, 위의 규칙(정답 대신 힌트, 교과서 쪽수 안내)이 언제나 먼저야.',
-    '- 학생이 혼자 해결하기 어려워 보이거나 수업·평가 관련 질문이면 "교무실 선생님께 물어보는 것도 좋아"라고 안내해도 돼.'
-  ].join('\n');
+    '- 힌트를 여러 번 줘도 학생이 해결하기 어려워 보이거나, 수업·수행평가·시험 범위처럼 선생님만 답할 수 있는 질문이면',
+    '  "아래 [선생님께 물어보기]를 누르면 선생님께 여쭤볼 수 있어"라고 안내해.'
+  ]).join('\n');
 }
 
 /* ---------- 교과('과목' 탭) ---------- */
@@ -72,7 +97,8 @@ function loadSubjects_() {
       tab: String(r[3] || '').trim(),
       prompt: String(r[4] || '').trim(),
       greeting: String(r[5] || '').trim() || DEFAULT_GREETING,
-      code: String(r[6] || '').trim()
+      code: String(r[6] || '').trim(),
+      bot: String(r[7] || '').trim()
     }))
     .filter(x => !x.tab || !!ss.getSheetByName(x.tab));
 }
@@ -93,7 +119,7 @@ function findSubject_(name) {
   return list.filter(x => x.name === name)[0] || null;
 }
 
-const SUBJECT_HEADER = ['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름 (비우면 교과서 없이)', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)', '수업 코드 (비우면 누구나)'];
+const SUBJECT_HEADER = ['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름 (비우면 교과서 없이)', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)', '수업 코드 (비우면 누구나)', '챗봇 (비우면 뭉치 박사)'];
 
 /** 처음 한 번 편집기에서 실행: '과목' 탭을 만들고 지금의 역학과 에너지를 첫 줄로 등록 (이미 있으면 머리글만 최신으로) */
 function setupSubjects() {
@@ -106,7 +132,7 @@ function setupSubjects() {
   }
   const sh = ss.insertSheet('과목', 0);
   sh.getRange(1, 1, 1, SUBJECT_HEADER.length).setValues([SUBJECT_HEADER]);
-  sh.getRange(2, 1, 1, 7).setValues([[true, '역학과 에너지', '과학, 물리, 역학', '교과서', '', DEFAULT_GREETING, '']]);
+  sh.getRange(2, 1, 1, 8).setValues([[true, '역학과 에너지', '과학, 물리, 역학', '교과서', '', DEFAULT_GREETING, '', '뭉치 박사']]);
   sh.getRange('A3:A50').insertCheckboxes();
   sh.getRange('A2').insertCheckboxes().check();
   sh.setFrozenRows(1);
@@ -157,8 +183,9 @@ function chat(payload, extraSystem, saveLog) {
   const hits = rankPages_(pages, query).slice(0, EXCERPT_PAGES)
     .sort((a, b) => a.page - b.page);
 
-  const system = !subject.tab ? (subject.prompt || getPrompt_()) + (extraSystem || '') + '\n' + NO_BOOK_NOTE : [
-    (subject.prompt || getPrompt_()) + (extraSystem || ''),
+  const extra = typeof extraSystem === 'function' ? extraSystem(subject) : (extraSystem || '');
+  const system = !subject.tab ? (subject.prompt || getPrompt_()) + extra + '\n' + NO_BOOK_NOTE : [
+    (subject.prompt || getPrompt_()) + extra,
     '',
     '[목차] (쪽 범위)',
     buildToc_(pages),
@@ -205,13 +232,13 @@ function doPost(e) {
     const list = loadSubjects_() || [findSubject_('')];
     out = {
       name: MASCOT_NAME,
-      subjects: list.map(x => ({ name: x.name, room: x.room, greeting: x.greeting, needCode: !!x.code, book: !!x.tab }))
+      subjects: list.map(x => ({ name: x.name, room: x.room, greeting: x.greeting, needCode: !!x.code, book: !!x.tab, bot: x.bot || MASCOT_NAME }))
     };
   } else if (body.action === 'checkCode') {
     out = { ok: checkCode(body.code, body.subject) };
   } else if (body.action === 'chat') {
     const limited = checkLimit_(String(body.device || '').slice(0, 64));
-    out = limited || chat({ subject: body.subject, code: body.code, history: body.history }, studyroomPersona_(), STUDYROOM_SAVE_LOG);
+    out = limited || chat({ subject: body.subject, code: body.code, history: body.history }, (sub) => studyroomPersona_(sub.bot), STUDYROOM_SAVE_LOG);
   } else {
     out = { error: '알 수 없는 요청이에요.' };
   }

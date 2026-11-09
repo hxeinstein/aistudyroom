@@ -11,6 +11,18 @@ let busy = false;
 let started = false;
 let subjects = [];      // 선생님이 '과목' 탭에서 사용 체크한 교과들 [{ name, room, greeting, needCode }]
 let current = null;     // 지금 고른 교과
+let bot = null;         // 지금 말하고 있는 챗봇 (CONFIG.BOTS 중 하나)
+let onAskTeacher = null;
+
+/** 교과를 맡은 챗봇 ('과목' 탭 H칸, 비어 있으면 첫 번째 챗봇) */
+const botOf = (x) => CONFIG.BOTS.find((b) => b.name === (x && x.bot)) || CONFIG.BOTS[0];
+const subjectsOf = (b) => subjects.filter((x) => botOf(x).id === b.id);
+/** 공부 중인 과목에 맞는 챗봇 id (없으면 null) */
+export async function botFor(roomName) {
+  try { await loadConfig(); } catch (e) { return null; }
+  const x = subjects.find((y) => matches(y, roomName));
+  return x ? botOf(x).id : null;
+}
 let configPromise = null;
 
 function loadConfig() {
@@ -50,10 +62,11 @@ const greeting = () => (current && current.greeting) || DEFAULT_GREETING;
 
 function renderSubjects() {
   const box = $('cSubjects');
+  const list = bot ? subjectsOf(bot) : subjects;
   $('cSub').textContent = `${current && current.name ? current.name + ' · ' : ''}정답 대신 힌트를 줘요`;
-  box.classList.toggle('hidden', subjects.length < 2);
+  box.classList.toggle('hidden', list.length < 2);
   box.innerHTML = '';
-  for (const x of subjects) {
+  for (const x of list) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'c-chip' + (x === current ? ' on' : '');
@@ -134,7 +147,7 @@ function render(text) {
 function addBubble(role, text, imgUrl) {
   const row = document.createElement('div');
   row.className = 'c-row ' + (role === 'user' ? 'me' : 'bot');
-  if (role !== 'user') row.innerHTML = '<img class="c-ava" src="assets/mascot.png" alt="" />';
+  if (role !== 'user') row.innerHTML = `<img class="c-ava" src="${(bot || CONFIG.BOTS[0]).img}" alt="" />`;
   const div = document.createElement('div');
   div.className = 'c-msg';
   if (imgUrl) {
@@ -163,8 +176,15 @@ function addNote(text) {
 function scrollDown() { const l = $('cLog'); l.scrollTop = l.scrollHeight; }
 
 // ---------- 열기/닫기 ----------
-export function initChat() {
-  $('cName').textContent = CONFIG.MASCOT_NAME;
+export function initChat(o = {}) {
+  onAskTeacher = o.onAskTeacher || null;
+  $('cName').textContent = CONFIG.BOTS[0].name;
+  $('cAskTeacher').onclick = () => {
+    // 챗봇으로 해결이 안 될 때만 선생님께 (이때 선생님께 알림이 감)
+    const last = [...history].reverse().find((m) => m.role === 'user' && m.text);
+    closeChat();
+    onAskTeacher && onAskTeacher({ text: last ? last.text : '', subject: current && current.name, bot: bot && bot.name });
+  };
   $('cClose').onclick = closeChat;
   $('cReset').onclick = reset;
   $('cSend').onclick = send;
@@ -184,17 +204,15 @@ export function initChat() {
   });
 }
 
-export async function openChat(roomName) {
+/**
+ * 챗봇 대화창 열기
+ * - botId: 교무실에서 누른 챗봇 / roomName: 공부 중인 과목(맞는 교과·챗봇을 먼저 고름)
+ */
+export async function openChat(roomName, botId) {
   $('chatSheet').classList.remove('hidden');
-  if (started) {
-    // 공부 중인 과목과 맞는 교과가 있고 아직 대화를 안 했으면 그 교과로 바꿔 줌
-    const match = roomName && subjects.find((x) => matches(x, roomName));
-    if (match && match !== current && !history.length) enterSubject(match);
-    return;
-  }
-  started = true;
   if (!CONFIG.CHATBOT_URL) {
-    addBubble('model', `안녕! 나는 ${CONFIG.MASCOT_NAME}야 🐾\n아직 선생님이 질문 챗봇을 연결하지 않았어. 조금만 기다려 줘!`);
+    setBot(CONFIG.BOTS.find((b) => b.id === botId) || CONFIG.BOTS[0]);
+    addBubble('model', `안녕! 나는 ${bot.name}야 🐾\n아직 선생님이 질문 챗봇을 연결하지 않았어. 조금만 기다려 줘!`);
     setComposer(false);
     return;
   }
@@ -202,15 +220,37 @@ export async function openChat(roomName) {
   try {
     await loadConfig();
   } catch (e) {
-    started = false;
     addNote('챗봇에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 열어 주세요.');
     return;
   }
-  if (!subjects.length) {
-    addBubble('model', '아직 선생님이 연결한 교과가 없어. 조금만 기다려 줘!');
+  const match = roomName && subjects.find((x) => matches(x, roomName));
+  const target = CONFIG.BOTS.find((b) => b.id === botId) || (match && botOf(match)) || bot || CONFIG.BOTS[0];
+  if (target !== bot) {
+    setBot(target);
+    const list = subjectsOf(bot);
+    if (!list.length) {
+      renderSubjects();
+      addBubble('model', `안녕! 나는 ${bot.name}야 🐾\n아직 선생님이 나랑 연결한 교과가 없어. 조금만 기다려 줘!`);
+      return;
+    }
+    enterSubject(list.find((x) => matches(x, roomName)) || list[0]);
     return;
   }
-  enterSubject(subjects.find((x) => matches(x, roomName)) || subjects[0]);
+  // 같은 챗봇: 공부 중인 과목과 맞는 교과가 있고 아직 대화를 안 했으면 그 교과로
+  if (match && botOf(match) === bot && match !== current && !history.length) enterSubject(match);
+  else if (!current && subjectsOf(bot).length) enterSubject(subjectsOf(bot)[0]);
+  else setComposer(!!current && $('cGate').classList.contains('hidden'));
+}
+
+function setBot(b) {
+  bot = b;
+  current = null;
+  history = [];
+  $('cLog').innerHTML = '';
+  clearImage();
+  $('cName').textContent = b.name;
+  $('cAvaImg').src = b.img;
+  $('cGate').classList.add('hidden');
 }
 
 function closeChat() { $('chatSheet').classList.add('hidden'); }

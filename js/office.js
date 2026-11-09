@@ -45,12 +45,34 @@ async function api(body) {
 export const isTeacher = () => !!teacher;
 /** 선생님이 아무도 없을 때 문을 누르면 */
 export function confirmClosed() {
-  if (teacher) return true;
-  if (allClosed) {
-    alert('🔒 교무실 문이 닫혀 있어요.\n선생님들이 모두 시험 출제 중이에요. 다음에 다시 와 주세요!');
-    return false;
-  }
-  return confirm('📝 지금은 선생님들이 시험 출제 중이에요.\n그래도 들어가서 메시지를 남길까요? (선생님께 알림이 가요)');
+  // 교무실에는 질문 챗봇이 있어서 언제나 들어갈 수 있음 (선생님 자리만 '시험 출제 중')
+  if (!teacher) ctx.toast(allClosed ? '📝 선생님들은 시험 출제 중이에요. 질문 코너의 챗봇에게 물어봐요 🐾' : '선생님은 자리에 안 계시지만, 챗봇에게 먼저 물어볼 수 있어요 🐾');
+  return true;
+}
+
+/**
+ * 챗봇 대화창의 [선생님께 물어보기] → 선생님 고르기 → 교무실 대화 (이때 선생님께 알림)
+ * prefill: 방금 챗봇에게 한 질문 (입력칸에 미리 넣어 둠)
+ */
+export async function askTeacher({ text, subject } = {}) {
+  if (!CONFIG.CHATBOT_URL) return ctx.toast('아직 교무실이 연결되지 않았어요');
+  await refreshSeats();
+  const list = seats.filter((x) => !(teacher && x.id === teacher.me.id));
+  const m = ctx.openModal(`
+    <h2>👩‍🏫 어느 선생님께 물어볼까요?</h2>
+    <p class="desc">고른 선생님께 알림이 가요. 방금 챗봇에게 한 질문을 그대로 보낼 수 있어요.</p>
+    <div class="todo-pick" id="askList">${list.length ? list.map((x) => `
+      <button type="button" class="todo-opt" data-seat="${x.seat}" ${x.closed ? 'disabled' : ''}>
+        <span class="o-ava big">${animalById(x.animal).emoji}</span>
+        <span style="flex:1"><div class="t">${esc(x.name)} 선생님</div><div class="m">${x.closed ? '📝 시험 출제 중 · 지금은 질문을 받지 않아요' : x.online ? '🟢 상담 가능 · 바로 답해 주실 수 있어요' : '⚪ 부재중 · 메시지를 남기면 알림이 가요'}</div></span>
+      </button>`).join('') : '<span class="hint">아직 등록한 선생님이 없어요</span>'}</div>
+    <div class="foot"><button class="btn ghost" id="askCancel" type="button">닫기</button></div>`);
+  m.querySelector('#askCancel').onclick = ctx.closeModal;
+  m.querySelectorAll('[data-seat]').forEach((b) => (b.onclick = async () => {
+    ctx.closeModal();
+    const pre = text ? (subject ? `[${subject}] ` : '') + text : '';
+    await tapSeat(Number(b.dataset.seat), null, { prefill: pre, viaBot: true });
+  }));
 }
 export const teacherName = () => (teacher ? teacher.me.name : '');
 /** 내(선생님) 문이 닫혀 있는지 */
@@ -128,15 +150,18 @@ async function refreshSeats() {
 }
 
 /* ---------- 학생: 선생님 자리 누르기 ---------- */
-export async function tapSeat(n, t) {
+export async function tapSeat(n, t, opt = {}) {
   const fresh = seats.find((x) => x.seat === n) || t;
   if (!fresh) return ctx.toast('비어 있는 자리예요');
   if (teacher && fresh.id === teacher.me.id) return;
-  if (fresh.closed && !teacher) return ctx.toast(`📝 ${fresh.name} 선생님은 시험 출제 중이에요. 다음에 다시 와 줘!`);
+  if (fresh.closed && !teacher) return ctx.toast(`📝 ${fresh.name} 선생님은 시험 출제 중이에요. 질문 코너의 챗봇에게 물어봐요 🐾`);
+  // 학생이 선생님 자리를 바로 누르면: 챗봇에게 먼저 물어보길 권함
+  if (!teacher && !opt.viaBot && !(conv && !conv.ended && conv.toId === fresh.id)
+    && !confirm(`${fresh.name} 선생님께 바로 물어볼까요?\n질문 코너의 챗봇에게 먼저 물어보면 더 빨리 답을 받을 수 있어요.\n(확인을 누르면 선생님께 알림이 가요)`)) return;
   if (conv && !conv.ended && conv.toId === fresh.id) return openSheet();
   if (conv && !conv.ended && !confirm(`지금 ${conv.with.name} 선생님과의 대화를 끝내고 ${fresh.name} 선생님께 질문할까요?\n(끝낸 대화는 바로 지워져요)`)) return;
   if (conv && !conv.ended) await endConv(true);
-  if (!fresh.online && !confirm(`${fresh.name} 선생님은 지금 부재중이에요.\n메시지를 남기면 선생님께 알림이 가요. 남길까요?`)) return;
+  if (!fresh.online && !opt.viaBot && !confirm(`${fresh.name} 선생님은 지금 부재중이에요.\n메시지를 남기면 선생님께 알림이 가요. 남길까요?`)) return;
   const p = ctx.getProfile();
   try {
     const r = await api(teacher
@@ -147,6 +172,7 @@ export async function tapSeat(n, t) {
     $('oLog').innerHTML = '';
     note(teacher ? `${fresh.name} 선생님과 대화를 시작했어요.` : `${fresh.name} 선생님께 궁금한 걸 물어보세요. 선생님이 ${fresh.online ? '곧 답해 주실 거예요' : '확인하시면 답해 주실 거예요'}.`);
     openSheet();
+    if (opt.prefill) { $('oInput').value = opt.prefill; $('oInput').dispatchEvent(new Event('input')); }
     startPoll();
   } catch (e) {
     ctx.toast('교무실에 연결하지 못했어요');

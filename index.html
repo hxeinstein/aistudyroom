@@ -58,9 +58,9 @@
   </section>
 
   <!-- 과학 질문 챗봇 -->
-  <section class="chat-sheet hidden" id="chatSheet" aria-label="뭉치 박사에게 질문">
+  <section class="chat-sheet hidden" id="chatSheet" aria-label="챗봇에게 질문">
     <header class="c-head">
-      <img class="c-ava big" src="assets/mascot.png" alt="" />
+      <img class="c-ava big" id="cAvaImg" src="assets/mascot.png" alt="" />
       <div class="c-title"><strong id="cName">뭉치 박사</strong><span id="cSub">정답 대신 힌트를 줘요</span></div>
       <button class="c-ghost" id="cReset" type="button">새 문제</button>
       <button class="icon-btn" id="cClose" type="button" aria-label="닫기">✕</button>
@@ -74,6 +74,7 @@
     </div>
     <footer class="c-foot">
       <div class="c-preview hidden" id="cPreview"><img id="cPreviewImg" alt="올릴 사진" /><span>사진 1장</span><button class="c-ghost" id="cRemoveImg" type="button">빼기</button></div>
+      <button class="ask-teacher" id="cAskTeacher" type="button">👩‍🏫 챗봇으로 안 풀리면? <b>선생님께 물어보기</b></button>
       <div class="c-compose">
         <button class="icon-btn" id="cPhoto" type="button" aria-label="문제 사진 올리기">📷</button>
         <input type="file" id="cFile" accept="image/*" hidden />
