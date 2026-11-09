@@ -199,7 +199,9 @@ function doPost(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) {}
   let out;
-  if (body.action === 'config') {
+  if (String(body.action || '').indexOf('office.') === 0) {
+    out = officeHandle_(body);   // 교무실 (Office.gs)
+  } else if (body.action === 'config') {
     const list = loadSubjects_() || [findSubject_('')];
     out = {
       name: MASCOT_NAME,

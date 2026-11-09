@@ -4,6 +4,7 @@ import { drawPlanner, ensureFonts, savePlannerImage } from './planner.js';
 import { setSound, SOUNDS } from './sound.js';
 import { initChat, openChat, hasSubjectFor } from './chat.js';
 import { CONFIG } from './config.js';
+import * as Office from './office.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -24,6 +25,15 @@ function boot() {
     mascotName: CONFIG.MASCOT_NAME,
     onMascot: () => openChat(currentRoomSubject()),
     onNearMascot: () => renderBar(),
+    onNearDoor: () => renderBar(),
+    onArea: (name) => {
+      $('roomName').textContent = name === 'office' ? '교무실' : '숲속 독서실';
+      $('seatLabel').textContent = name === 'office' ? (Office.isTeacher() ? `${Office.teacherName()} 선생님` : '선생님 자리를 눌러 질문해요') : '자리를 골라 앉아보세요';
+      Office.onArea(name);
+      renderBar();
+    },
+    onOfficeSeat: (n, t) => Office.tapSeat(n, t),
+    confirmClosedOffice: () => Office.confirmClosed(),
   });
 
   // 진행 중이던 공부 복원 (새로고침/앱 전환)
@@ -55,6 +65,9 @@ function boot() {
   $('btnStop').onclick = openStop;
   $('btnAsk').onclick = () => openChat(currentRoomSubject());
   initChat();
+  Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' } });
+  Office.maybeEnterFromLink();
+  if (new URLSearchParams(location.search).has('debug')) window.__room = { world, Office }; // 시험용
   // 다른 앱/화면을 보다 돌아와도 타이머는 계속 흐름 (태블릿으로 PDF·인강 보는 경우 등).
   // 막거나 감지하지 않고, 돌아왔을 때 안내만 한 번 보여줌.
   let hiddenAt = 0;
@@ -109,7 +122,19 @@ function renderBar() {
   const seated = world.seated >= 0;
   const studying = !!S.activeSession();
   bar.classList.toggle('hidden', studying);
-  const btns = seated
+  const inOffice = world.area === 'office';
+  const unread = Office.isTeacher() ? Office.unreadCount() : 0;
+  const btns = inOffice
+    ? [
+        ...(Office.isTeacher()
+          ? [
+              { e: '📥', t: unread ? `받은 대화 ${unread}` : '받은 대화', main: true, fn: () => Office.openInbox() },
+              { e: '🪑', t: '내 자리', fn: () => world.sitAtMyDesk() },
+            ]
+          : [{ e: '👩‍🏫', t: '선생님 로그인', fn: () => Office.openTeacherLogin() }]),
+        { e: '🚪', t: '나가기', main: !Office.isTeacher() && world.nearDoor === 'exit', fn: () => world.goOutOfOffice() },
+      ]
+    : seated
     ? [
         { e: '▶️', t: '공부 시작', main: true, fn: openStart },
         { e: '🚶', t: '일어나기', fn: () => world.standUp() },
@@ -118,7 +143,8 @@ function renderBar() {
       ]
     : [
         ...(world.nearMascot ? [{ e: '🐾', t: '뭉치에게 질문', main: true, fn: () => openChat(currentRoomSubject()) }] : []),
-        { e: '🪑', t: '빈자리 앉기', main: !world.nearMascot, fn: sitNearest },
+        ...(world.nearDoor === 'enter' ? [{ e: '🏫', t: '교무실 들어가기', main: true, fn: () => world.goToOffice() }] : []),
+        { e: '🪑', t: '빈자리 앉기', main: !world.nearMascot && world.nearDoor !== 'enter', fn: sitNearest },
         { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ];
@@ -212,6 +238,7 @@ function openSettings() {
       <input class="field" id="sDate" type="date" value="${esc(st.exam?.date || '')}" />
     </div>
     <button class="btn soft block" id="sSubjects" type="button" style="margin-top:14px">📚 내 과목 관리</button>
+    <button class="btn soft block" id="sTeacher" type="button" style="margin-top:8px">${Office.isTeacher() ? `📥 ${esc(Office.teacherName())} 선생님 · 받은 대화` : '👩‍🏫 선생님 로그인'}</button>
     <div class="foot">
       <button class="btn ghost" id="sClose">닫기</button>
       <button class="btn primary" id="sSave">저장</button>
@@ -220,6 +247,7 @@ function openSettings() {
   bindAnimalPicker(m, (a) => (animal = a));
   m.querySelector('#sClose').onclick = closeModal;
   m.querySelector('#sSubjects').onclick = () => openSubjects();
+  m.querySelector('#sTeacher').onclick = () => (Office.isTeacher() ? Office.openInbox() : Office.openTeacherLogin());
   m.querySelector('#sSave').onclick = () => {
     const name = m.querySelector('#sName').value.trim() || p.name || '익명';
     S.setProfile({ name, animal });
@@ -344,6 +372,7 @@ function showStudy() {
   $('btnAsk').classList.add('hidden');
   hasSubjectFor(sub.name).then((ok) => { if (S.activeSession()?.id === s.id) $('btnAsk').classList.toggle('hidden', !ok); });
   $('studyPanel').classList.remove('hidden');
+  document.body.classList.add('studying');
   updatePauseUI();
   renderBar();
   refreshHud();
@@ -390,6 +419,7 @@ function openStop() {
 
 function endStudyUI() {
   $('studyPanel').classList.add('hidden');
+  document.body.classList.remove('studying');
   world.setStudying(false);
   world.setPlayer({ name: st.profile?.name || '' });
   keepAwake(false);

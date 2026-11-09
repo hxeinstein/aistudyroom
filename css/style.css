@@ -232,3 +232,20 @@ textarea.field { resize: none; min-height: 84px; }
 .sub-chip { display: inline-flex; align-items: center; gap: 6px; cursor: default; transform: none; border-color: transparent; }
 .sub-x { border: 0; background: rgba(255,255,255,.7); border-radius: 50%; width: 20px; height: 20px; font-size: 11px; line-height: 1; color: var(--brown); padding: 0; }
 .add-chip { background: #fff; border: 2px dashed #D8C3A0; opacity: 1; }
+
+/* 교무실 */
+.name-tag.teacher-tag { background: #E7F0FF; padding-left: 12px; flex-direction: column; gap: 0; line-height: 1.25; border-radius: 16px; text-align: center; }
+.o-ava { width: 34px; height: 34px; border-radius: 50%; background: #FFE7D1; display: grid; place-items: center; font-size: 20px; flex: none; }
+.o-ava.big { width: 46px; height: 46px; font-size: 26px; }
+.o-note { color: var(--muted); }
+.office-sheet { z-index: 11; }
+.office-pill {
+  position: fixed; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 108px); z-index: 7;
+  border: 0; background: #4F8EF7; color: #fff; font-weight: 800; font-size: 14px; border-radius: 999px;
+  padding: 10px 16px; box-shadow: var(--shadow); max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dot { display: inline-grid; place-items: center; min-width: 20px; height: 20px; border-radius: 999px; background: #F0544F; color: #fff; font-size: 12px; padding: 0 6px; margin-left: 4px; }
+.tabs { display: flex; gap: 6px; margin: 6px 0 4px; }
+.tab { flex: 1; border: 2px solid #EADBC2; background: #fff; border-radius: 12px; padding: 9px; font-weight: 800; color: var(--muted); }
+.tab.on { border-color: var(--green); color: var(--green-d); background: #F1FBEF; }
+body.studying .office-pill { bottom: calc(env(safe-area-inset-bottom) + 250px); }

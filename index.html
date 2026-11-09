@@ -19,7 +19,7 @@
     <div class="pill">
       <button class="icon-btn" id="btnPlanner" title="스터디플래너">📒</button>
       <div class="room">
-        <strong>숲속 독서실</strong>
+        <strong id="roomName">숲속 독서실</strong>
         <span id="seatLabel">자리를 골라 앉아보세요</span>
       </div>
     </div>
@@ -74,6 +74,26 @@
         <button class="btn primary" id="cSend" type="button">보내기</button>
       </div>
       <p class="c-hint">⚠️ 이름·전화번호·학번 같은 개인정보는 쓰지 마세요 · 대화는 저장되지 않아요</p>
+    </footer>
+  </section>
+
+  <!-- 교무실 대화 -->
+  <button class="office-pill hidden" id="officePill" type="button"></button>
+  <section class="chat-sheet office-sheet hidden" id="officeSheet" aria-label="교무실 대화">
+    <header class="c-head">
+      <span class="o-ava big" id="oAva">🏫</span>
+      <div class="c-title"><strong id="oName">교무실</strong><span id="oStatus"></span></div>
+      <button class="c-ghost hidden" id="oBlock" type="button">차단</button>
+      <button class="c-ghost" id="oEnd" type="button">끝내기</button>
+      <button class="icon-btn" id="oClose" type="button" aria-label="내리기">⌄</button>
+    </header>
+    <div class="c-log" id="oLog"></div>
+    <footer class="c-foot">
+      <div class="c-compose">
+        <textarea id="oInput" rows="1" placeholder="메시지를 써 주세요"></textarea>
+        <button class="btn primary" id="oSend" type="button">보내기</button>
+      </div>
+      <p class="c-hint">⌄ 를 누르면 공부하면서 답장을 기다릴 수 있어요 · 끝내기를 누르면 대화가 바로 지워져요 · 개인정보는 쓰지 마세요</p>
     </footer>
   </section>
 
