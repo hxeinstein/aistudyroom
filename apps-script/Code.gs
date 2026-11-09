@@ -8,6 +8,13 @@
  *   GEMINI_API_KEY : 필수. Google AI Studio에서 받은 키
  *   ACCESS_CODE    : 선택. 넣으면 학생이 처음에 이 수업 코드를 입력해야 사용 가능
  *
+ * [교과 추가하기] — '과목' 탭 (처음 한 번 편집기에서 setupSubjects 실행하면 자동으로 만들어짐)
+ *   한 줄 = 교과 하나.  A 사용(체크) | B 교과 이름 | C 독서실 과목 | D 교과서 탭 이름 | E 프롬프트 | F 첫 인사
+ *   - 새 교과서 탭은 기존 '교과서' 탭과 같은 열(쪽, 대단원, 소단원, 내용)로 만들어 주세요.
+ *   - '사용'에 체크하고, D칸에 적은 탭이 실제로 있어야만 독서실·웹앱에서 쓸 수 있어요.
+ *   - E칸(프롬프트)이 비어 있으면 '프롬프트' 탭 A1을 씁니다. F칸이 비어 있으면 기본 첫 인사를 씁니다.
+ *   - 고친 내용은 다시 배포하지 않아도 바로 반영돼요.
+ *
  * [숲속 독서실 연결]
  *   독서실(웹페이지)은 이 스크립트의 웹앱 주소로 POST 요청을 보내 챗봇을 씁니다(doPost).
  *   배포 > 배포 관리 > 수정(연필) > 새 버전 으로 다시 배포해야 doPost가 반영됩니다.
@@ -25,14 +32,62 @@ const DEVICE_LIMIT = 30;              // 기기 하나당 약 6시간 동안 보
 const DAILY_LIMIT = 1500;             // 하루 전체 질문 수 상한 (모든 학생 합계)
 const STUDYROOM_SAVE_LOG = false;     // 독서실에서 온 질문은 '기록' 시트에 남기지 않음 (기존 웹앱은 SAVE_LOG 따름)
 const MASCOT_NAME = '뭉치 박사';        // 독서실 마스코트 이름 (바꾸면 아래 말투 안내에도 반영됨)
+const DEFAULT_GREETING = '어떤 문제를 풀어 볼까? 문제를 글로 쓰거나 사진으로 올려 줘!';
+const ROOM_SUBJECTS = ['국어', '수학', '영어', '과학', '사회', '한국사', '기타'];
+
 function studyroomPersona_() {
   return [
     '',
     '[독서실 캐릭터]',
-    '- 너는 "숲속 독서실"에 있는 과학 도우미 "' + MASCOT_NAME + '"야. 동그란 안경을 쓰고 태블릿을 든 하얀 강아지 캐릭터야.',
-    '- 말투는 다정한 반말로 짧게 해. 위의 규칙(정답 대신 힌트, 교과서 쪽수 안내)은 그대로 지켜.',
+    '- 너는 "숲속 독서실"의 공부 도우미 "' + MASCOT_NAME + '"야. 동그란 안경을 쓰고 태블릿을 든 하얀 강아지 캐릭터이고, 과학을 아주 좋아해.',
+    '- 말투는 다정한 반말로 짧게 해.',
+    '- 과학 말장난을 섞어서 말해. 학생을 칭찬할 때는 "저항~!", 웃을 때는 "과하하학"이라고 해.',
+    '  예: "저항~! 힘의 방향을 정확하게 잡았어!", "과하하학, 단위만 붙이면 완벽하겠다!"',
+    '- 말장난은 한 답변에 한 번 정도만 쓰고, 위의 규칙(정답 대신 힌트, 교과서 쪽수 안내)이 언제나 먼저야.',
     '- 학생이 혼자 해결하기 어려워 보이거나 수업·평가 관련 질문이면 "교무실 선생님께 물어보는 것도 좋아"라고 안내해도 돼.'
   ].join('\n');
+}
+
+/* ---------- 교과('과목' 탭) ---------- */
+
+/** 사용 체크 + 교과서 탭이 실제로 있는 교과만 돌려줌. '과목' 탭이 없으면 null(예전 방식) */
+function loadSubjects_() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName('과목');
+  if (!sh) return null;
+  return sh.getDataRange().getValues().slice(1)
+    .filter(r => r[0] === true && String(r[1]).trim() && String(r[3]).trim())
+    .map(r => ({
+      name: String(r[1]).trim(),
+      room: String(r[2]).trim() || '기타',
+      tab: String(r[3]).trim(),
+      prompt: String(r[4] || '').trim(),
+      greeting: String(r[5] || '').trim() || DEFAULT_GREETING
+    }))
+    .filter(x => !!ss.getSheetByName(x.tab));
+}
+
+/** 교과 이름으로 찾기. 이름이 없으면(기존 웹앱) 첫 번째 교과 */
+function findSubject_(name) {
+  const list = loadSubjects_();
+  if (list === null) return { name: '', room: '과학', tab: '교과서', prompt: '', greeting: DEFAULT_GREETING };
+  if (!name) return list[0] || null;
+  return list.filter(x => x.name === name)[0] || null;
+}
+
+/** 처음 한 번 편집기에서 실행: '과목' 탭을 만들고 지금의 역학과 에너지를 첫 줄로 등록 */
+function setupSubjects() {
+  const ss = SpreadsheetApp.getActive();
+  if (ss.getSheetByName('과목')) { console.log("'과목' 탭이 이미 있어요."); return; }
+  const sh = ss.insertSheet('과목', 0);
+  sh.getRange(1, 1, 1, 6).setValues([['사용', '교과 이름', '독서실 과목', '교과서 탭 이름', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)']]);
+  sh.getRange(2, 1, 1, 6).setValues([[true, '역학과 에너지', '과학', '교과서', '', DEFAULT_GREETING]]);
+  sh.getRange('A3:A50').insertCheckboxes();
+  sh.getRange('A2').insertCheckboxes().check();
+  sh.getRange('C2:C50').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(ROOM_SUBJECTS, true).build());
+  sh.setFrozenRows(1);
+  sh.setColumnWidth(5, 420);
+  console.log("'과목' 탭을 만들었어요. 새 교과는 아래 줄에 추가하세요.");
 }
 
 function doGet() {
@@ -56,6 +111,8 @@ function checkCode(code) {
  * payload = { code, history: [{ role:'user'|'model', text, image?:{mimeType, data} }] }
  */
 function chat(payload, extraSystem, saveLog) {
+  const subject = findSubject_(payload && payload.subject);
+  if (!subject) return { error: '이 교과는 아직 연결되지 않았어요. 선생님께 알려 주세요.' };
   if (!checkCode(payload && payload.code)) {
     return { error: '수업 코드가 맞지 않아요. 선생님께 코드를 다시 확인해 주세요.' };
   }
@@ -67,13 +124,13 @@ function chat(payload, extraSystem, saveLog) {
   if (!history.length) return { error: '보낼 메시지가 없어요.' };
 
   // 교과서에서 관련 쪽 찾기: 학생의 최근 질문 2개 + 챗봇의 직전 답변을 기준으로
-  const pages = loadPages_();
+  const pages = loadPages_(subject.tab);
   const query = buildQuery_(history);
   const hits = rankPages_(pages, query).slice(0, EXCERPT_PAGES)
     .sort((a, b) => a.page - b.page);
 
   const system = [
-    getPrompt_() + (extraSystem || ''),
+    (subject.prompt || getPrompt_()) + (extraSystem || ''),
     '',
     '[목차] (쪽 범위)',
     buildToc_(pages),
@@ -115,12 +172,17 @@ function doPost(e) {
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) {}
   let out;
   if (body.action === 'config') {
-    out = { needCode: !!getProp_('ACCESS_CODE'), name: MASCOT_NAME };
+    const list = loadSubjects_() || [findSubject_('')];
+    out = {
+      needCode: !!getProp_('ACCESS_CODE'),
+      name: MASCOT_NAME,
+      subjects: list.map(x => ({ name: x.name, room: x.room, greeting: x.greeting }))
+    };
   } else if (body.action === 'checkCode') {
     out = { ok: checkCode(body.code) };
   } else if (body.action === 'chat') {
     const limited = checkLimit_(String(body.device || '').slice(0, 64));
-    out = limited || chat({ code: body.code, history: body.history }, studyroomPersona_(), STUDYROOM_SAVE_LOG);
+    out = limited || chat({ subject: body.subject, code: body.code, history: body.history }, studyroomPersona_(), STUDYROOM_SAVE_LOG);
   } else {
     out = { error: '알 수 없는 요청이에요.' };
   }
@@ -156,8 +218,9 @@ function checkLimit_(device) {
 
 /* ---------- 교과서 검색 ---------- */
 
-function loadPages_() {
-  const sh = SpreadsheetApp.getActive().getSheetByName('교과서');
+function loadPages_(tab) {
+  const sh = SpreadsheetApp.getActive().getSheetByName(tab || '교과서');
+  if (!sh) return [];
   const values = sh.getDataRange().getValues().slice(1);
   return values
     .filter(r => r[0] && r[3])

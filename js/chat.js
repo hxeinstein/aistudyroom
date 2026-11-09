@@ -2,7 +2,7 @@
 // 대화는 이 화면(메모리)에만 있고, 새로고침하거나 '새 문제'를 누르면 사라짐.
 import { CONFIG } from './config.js';
 
-const GREETING = '어떤 문제를 풀어 볼까? 문제를 글로 쓰거나 사진으로 올려 줘!';
+const DEFAULT_GREETING = '어떤 문제를 풀어 볼까? 문제를 글로 쓰거나 사진으로 올려 줘!';
 const $ = (id) => document.getElementById(id);
 
 let history = [];
@@ -11,6 +11,57 @@ let busy = false;
 let started = false;
 let accessCode = '';
 let needCode = null;
+let subjects = [];      // 선생님이 '과목' 탭에서 사용 체크한 교과들 [{ name, room, greeting }]
+let current = null;     // 지금 고른 교과
+let configPromise = null;
+
+function loadConfig() {
+  if (!CONFIG.CHATBOT_URL) return Promise.resolve(null);
+  configPromise ||= call({ action: 'config' }).then((cfg) => {
+    needCode = !!cfg.needCode;
+    subjects = Array.isArray(cfg.subjects) ? cfg.subjects : [{ name: '', room: '과학', greeting: '' }];
+    return cfg;
+  }).catch((e) => { configPromise = null; throw e; });
+  return configPromise;
+}
+
+/** 독서실 과목(예: '과학')에 연결된 교과가 있는지 */
+export async function hasSubjectFor(roomName) {
+  try {
+    await loadConfig();
+    return subjects.some((x) => x.room === roomName);
+  } catch (e) {
+    return false;
+  }
+}
+
+const greeting = () => (current && current.greeting) || DEFAULT_GREETING;
+
+function renderSubjects() {
+  const box = $('cSubjects');
+  $('cSub').textContent = `${current && current.name ? current.name + ' · ' : ''}정답 대신 힌트를 줘요`;
+  box.classList.toggle('hidden', subjects.length < 2);
+  box.innerHTML = '';
+  for (const x of subjects) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'c-chip' + (x === current ? ' on' : '');
+    b.textContent = x.name;
+    b.onclick = () => switchSubject(x);
+    box.appendChild(b);
+  }
+}
+
+function switchSubject(x, ask = true) {
+  if (x === current || busy) return;
+  if (ask && history.length && !confirm(`'${x.name}'(으)로 바꾸면 지금 대화가 지워져. 바꿀까?`)) return;
+  current = x;
+  history = [];
+  $('cLog').innerHTML = '';
+  clearImage();
+  renderSubjects();
+  addBubble('model', greeting());
+}
 
 function store(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
 function load(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
@@ -98,24 +149,34 @@ export function initChat() {
   });
 }
 
-export async function openChat() {
+export async function openChat(roomName) {
   $('chatSheet').classList.remove('hidden');
-  if (started) return;
+  if (started) {
+    // 공부 중인 과목과 맞는 교과가 있고 아직 대화를 안 했으면 그 교과로 바꿔 줌
+    const match = roomName && subjects.find((x) => x.room === roomName);
+    if (match && !history.length && current && (!needCode || accessCode)) switchSubject(match, false);
+    return;
+  }
   started = true;
   if (!CONFIG.CHATBOT_URL) {
-    addBubble('model', `안녕! 나는 ${CONFIG.MASCOT_NAME}야 🐾\n아직 선생님이 과학 챗봇을 연결하지 않았어. 조금만 기다려 줘!`);
+    addBubble('model', `안녕! 나는 ${CONFIG.MASCOT_NAME}야 🐾\n아직 선생님이 질문 챗봇을 연결하지 않았어. 조금만 기다려 줘!`);
     setComposer(false);
     return;
   }
   setComposer(false);
   try {
-    const cfg = await call({ action: 'config' });
-    needCode = !!cfg.needCode;
+    await loadConfig();
   } catch (e) {
     started = false;
     addNote('챗봇에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 열어 주세요.');
     return;
   }
+  if (!subjects.length) {
+    addBubble('model', '아직 선생님이 연결한 교과가 없어. 조금만 기다려 줘!');
+    return;
+  }
+  current = subjects.find((x) => x.room === roomName) || subjects[0];
+  renderSubjects();
   if (needCode) {
     const saved = load('aistudyroom.chatCode');
     if (saved && (await call({ action: 'checkCode', code: saved }).then((r) => r.ok).catch(() => false))) {
@@ -135,7 +196,7 @@ function closeChat() { $('chatSheet').classList.add('hidden'); }
 function startChat() {
   $('cGate').classList.add('hidden');
   setComposer(true);
-  addBubble('model', GREETING);
+  addBubble('model', greeting());
 }
 
 async function tryCode() {
@@ -159,12 +220,12 @@ function setComposer(on) {
 }
 
 function reset() {
-  if (busy || !CONFIG.CHATBOT_URL || (needCode && !accessCode)) return;
+  if (busy || !current || (needCode && !accessCode)) return;
   if (history.length && !confirm('지금 대화를 지우고 새 문제를 시작할까?')) return;
   history = [];
   $('cLog').innerHTML = '';
   clearImage();
-  addBubble('model', GREETING);
+  addBubble('model', greeting());
   $('cInput').focus();
 }
 
@@ -215,7 +276,7 @@ async function send() {
   thinking.classList.add('thinking');
   thinking.innerHTML = '<span></span><span></span><span></span>';
   try {
-    const res = await call({ action: 'chat', code: accessCode, device: deviceId(), history });
+    const res = await call({ action: 'chat', subject: current.name, code: accessCode, device: deviceId(), history });
     thinking.parentElement.remove();
     if (res && res.text) {
       history.push({ role: 'model', text: res.text });

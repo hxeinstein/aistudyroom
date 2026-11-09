@@ -2,7 +2,7 @@ import * as S from './store.js';
 import { createWorld, seatName } from './world.js';
 import { drawPlanner, ensureFonts, savePlannerImage } from './planner.js';
 import { setSound, SOUNDS } from './sound.js';
-import { initChat, openChat } from './chat.js';
+import { initChat, openChat, hasSubjectFor } from './chat.js';
 import { CONFIG } from './config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -22,7 +22,8 @@ function boot() {
     onStand: () => { $('seatLabel').textContent = '자리를 골라 앉아보세요'; renderBar(); },
     onToast: toast,
     mascotName: CONFIG.MASCOT_NAME,
-    onMascot: () => openChat(),
+    onMascot: () => openChat(currentRoomSubject()),
+    onNearMascot: () => renderBar(),
   });
 
   // 진행 중이던 공부 복원 (새로고침/앱 전환)
@@ -52,7 +53,7 @@ function boot() {
   };
   $('btnPause').onclick = togglePause;
   $('btnStop').onclick = openStop;
-  $('btnAsk').onclick = () => openChat();
+  $('btnAsk').onclick = () => openChat(currentRoomSubject());
   initChat();
   // 다른 앱/화면을 보다 돌아와도 타이머는 계속 흐름 (태블릿으로 PDF·인강 보는 경우 등).
   // 막거나 감지하지 않고, 돌아왔을 때 안내만 한 번 보여줌.
@@ -87,6 +88,12 @@ window.addEventListener('pointerdown', function once() {
   window.removeEventListener('pointerdown', once);
 });
 
+// 지금 공부 중인 과목 이름 (챗봇 교과 자동 선택용)
+function currentRoomSubject() {
+  const s = S.activeSession();
+  return s ? S.subjectById(s.subject).name : null;
+}
+
 // ---------------- HUD / 행동 바 ----------------
 function refreshHud() {
   $('todayTotal').textContent = S.fmtHM(S.totalMs());
@@ -106,12 +113,13 @@ function renderBar() {
     ? [
         { e: '▶️', t: '공부 시작', main: true, fn: openStart },
         { e: '🚶', t: '일어나기', fn: () => world.standUp() },
-        { e: '🐾', t: '과학 질문', fn: () => openChat() },
+        { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ]
     : [
-        { e: '🪑', t: '빈자리 앉기', main: true, fn: sitNearest },
-        { e: '🐾', t: '과학 질문', fn: () => openChat() },
+        ...(world.nearMascot ? [{ e: '🐾', t: '뭉치에게 질문', main: true, fn: () => openChat(currentRoomSubject()) }] : []),
+        { e: '🪑', t: '빈자리 앉기', main: !world.nearMascot, fn: sitNearest },
+        { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ];
   bar.innerHTML = '';
@@ -151,11 +159,15 @@ function openModal(html, { wide = false, dismiss = true } = {}) {
 function closeModal() { $('modalWrap').classList.add('hidden'); }
 
 function animalPicker(cur) {
-  return `<div class="animals">${S.ANIMALS.map((a) => `<button class="animal-btn ${a.id === cur ? 'on' : ''}" data-a="${a.id}">${a.emoji}<small>${a.name}</small></button>`).join('')}</div>`;
+  const a = S.animalById(cur);
+  return `<div class="animals">${S.ANIMALS.map((x) => `<button type="button" class="animal-btn ${x.id === cur ? 'on' : ''}" data-a="${x.id}">${x.emoji}<small>${x.name}</small></button>`).join('')}</div>
+    <div class="animal-trait" id="animalTrait">${a.emoji} <b>${a.name}</b> · ${a.trait}</div>`;
 }
 function bindAnimalPicker(root, onPick) {
   root.querySelectorAll('.animal-btn').forEach((b) => (b.onclick = () => {
     root.querySelectorAll('.animal-btn').forEach((x) => x.classList.toggle('on', x === b));
+    const a = S.animalById(b.dataset.a);
+    root.querySelector('#animalTrait').innerHTML = `${a.emoji} <b>${a.name}</b> · ${a.trait}`;
     onPick(b.dataset.a);
   }));
 }
@@ -276,6 +288,9 @@ function showStudy() {
   $('studySubject').textContent = `${sub.icon} ${sub.name}`;
   $('studySubject').style.background = sub.color;
   $('studyTitle').textContent = s.title;
+  // 이 과목이 챗봇 교과로 연결돼 있을 때만 '질문' 버튼 표시
+  $('btnAsk').classList.add('hidden');
+  hasSubjectFor(sub.name).then((ok) => { if (S.activeSession()?.id === s.id) $('btnAsk').classList.toggle('hidden', !ok); });
   $('studyPanel').classList.remove('hidden');
   updatePauseUI();
   renderBar();

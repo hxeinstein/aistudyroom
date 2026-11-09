@@ -1,5 +1,7 @@
 // 3D 숲속 독서실 — 둥글고 아기자기한 로우폴리 스타일 (외부 그림 파일 없이 코드로 생성)
 import * as THREE from '../vendor/three.module.min.js';
+import { makeAnimal, animateAnimal, animalSpeed } from './animals.js';
+export { makeAnimal };
 
 const FONT = '"Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
 const DECK_Y = 0.3;
@@ -19,99 +21,8 @@ function mesh(geo, material, { x = 0, y = 0, z = 0, cast = true, receive = false
   return o;
 }
 
-// ---------------- 동물 캐릭터 ----------------
-const ANIMAL_LOOK = {
-  bear: { fur: '#B98552', muzzle: '#EBCFA6', ear: 'round', inner: '#8C5E37' },
-  rabbit: { fur: '#F5EEE6', muzzle: '#FFFFFF', ear: 'long', inner: '#F6B8C4' },
-  cat: { fur: '#F2B46A', muzzle: '#FCE6C6', ear: 'point', inner: '#F7A9A0' },
-  fox: { fur: '#EC8A3C', muzzle: '#FFF4E6', ear: 'point', inner: '#3B2A22' },
-  panda: { fur: '#F7F6F1', muzzle: '#FFFFFF', ear: 'round', inner: '#2E2E33', patch: true },
-  frog: { fur: '#8CCB6B', muzzle: '#B9E59B', ear: 'frog', inner: '#FFFFFF' },
-};
+// ---------------- 동물 캐릭터 (js/animals.js) ----------------
 const CLOTHES = ['#7FB3E8', '#F59FB4', '#9ED28C', '#F7C96B', '#B79CE8', '#7FD0C7'];
-
-export function makeAnimal(type, clothes = '#7FB3E8') {
-  const L = ANIMAL_LOOK[type] || ANIMAL_LOOK.bear;
-  const g = new THREE.Group();
-  const fur = mat(L.fur);
-  const cloth = mat(clothes);
-
-  const legGeo = new THREE.CapsuleGeometry(0.075, 0.12, 4, 8);
-  const legL = mesh(legGeo, fur, { x: -0.1, y: 0.13 });
-  const legR = mesh(legGeo, fur, { x: 0.1, y: 0.13 });
-  const body = mesh(new THREE.CapsuleGeometry(0.2, 0.2, 6, 14), cloth, { y: 0.45 });
-  const collar = mesh(new THREE.TorusGeometry(0.13, 0.035, 6, 16), '#FFFFFF', { y: 0.66 });
-  collar.rotation.x = Math.PI / 2;
-  const armGeo = new THREE.CapsuleGeometry(0.06, 0.16, 4, 8);
-  const armL = new THREE.Group();
-  armL.position.set(-0.23, 0.56, 0);
-  armL.add(mesh(armGeo, cloth, { y: -0.1 }));
-  armL.add(mesh(new THREE.SphereGeometry(0.065, 8, 8), fur, { y: -0.21 }));
-  const armR = armL.clone();
-  armR.position.x = 0.23;
-
-  // 머리
-  const head = new THREE.Group();
-  head.position.y = 0.95;
-  const skull = mesh(new THREE.SphereGeometry(0.33, 20, 16), fur);
-  skull.scale.set(1.05, 0.95, 0.98);
-  head.add(skull);
-  const muzzle = mesh(new THREE.SphereGeometry(0.14, 14, 10), mat(L.muzzle), { y: -0.09, z: 0.25 });
-  muzzle.scale.set(1.2, 0.8, 0.7);
-  head.add(muzzle);
-  head.add(mesh(new THREE.SphereGeometry(0.035, 8, 8), '#3A2A2A', { y: -0.04, z: 0.34 }));
-  const eyeGeo = new THREE.SphereGeometry(0.038, 10, 10);
-  for (const sx of [-1, 1]) {
-    if (L.patch) {
-      const p = mesh(new THREE.SphereGeometry(0.075, 10, 10), '#2E2E33', { x: sx * 0.12, y: 0.03, z: 0.27 });
-      p.scale.set(1, 1.2, 0.5);
-      head.add(p);
-    }
-    const eye = mesh(eyeGeo, L.patch ? '#FFFFFF' : '#2A2222', { x: sx * 0.12, y: 0.04, z: 0.3 });
-    eye.userData.eye = true;
-    head.add(eye);
-    const cheek = mesh(new THREE.SphereGeometry(0.05, 8, 8), mat('#FF9AA8', { transparent: true, opacity: 0.7 }), { x: sx * 0.21, y: -0.07, z: 0.24 });
-    cheek.scale.z = 0.3;
-    head.add(cheek);
-    // 귀
-    let ear;
-    if (L.ear === 'round') {
-      ear = mesh(new THREE.SphereGeometry(0.1, 12, 10), L.patch ? '#2E2E33' : fur, { x: sx * 0.24, y: 0.25 });
-      ear.scale.z = 0.6;
-    } else if (L.ear === 'long') {
-      ear = new THREE.Group();
-      ear.position.set(sx * 0.12, 0.36, -0.02);
-      ear.rotation.z = -sx * 0.12;
-      ear.add(mesh(new THREE.CapsuleGeometry(0.065, 0.3, 4, 10), fur, { y: 0.12 }));
-      const inner = mesh(new THREE.CapsuleGeometry(0.035, 0.22, 4, 8), L.inner, { y: 0.12, z: 0.04 });
-      ear.add(inner);
-    } else if (L.ear === 'point') {
-      ear = mesh(new THREE.ConeGeometry(0.11, 0.2, 4), fur, { x: sx * 0.2, y: 0.3 });
-      ear.rotation.set(0, Math.PI / 4, -sx * 0.25);
-    } else {
-      ear = new THREE.Group();
-      ear.position.set(sx * 0.15, 0.25, 0.08);
-      ear.add(mesh(new THREE.SphereGeometry(0.1, 12, 10), fur));
-      ear.add(mesh(new THREE.SphereGeometry(0.06, 10, 10), '#FFFFFF', { z: 0.06 }));
-      ear.add(mesh(new THREE.SphereGeometry(0.032, 8, 8), '#2A2222', { z: 0.11 }));
-      if (sx === -1) head.children.filter((c) => c.userData.eye).forEach((e) => (e.visible = false));
-    }
-    head.add(ear);
-  }
-  if (L.ear === 'frog') head.children.filter((c) => c.userData.eye).forEach((e) => (e.visible = false));
-  if (type === 'fox' || type === 'cat') {
-    const tail = mesh(new THREE.CapsuleGeometry(0.07, 0.25, 4, 8), fur, { y: 0.35, z: -0.25 });
-    tail.rotation.x = -0.9;
-    g.add(tail);
-  }
-  if (type === 'rabbit' || type === 'bear' || type === 'panda') {
-    g.add(mesh(new THREE.SphereGeometry(0.07, 8, 8), type === 'panda' ? '#2E2E33' : fur, { y: 0.32, z: -0.2 }));
-  }
-
-  g.add(legL, legR, body, collar, armL, armR, head);
-  g.userData = { legL, legR, armL, armR, head, body, phase: Math.random() * 10 };
-  return g;
-}
 
 // 과학 질문 도우미 마스코트: 하얀 복슬 강아지 + 동그란 안경 + 주황 반다나 + 태블릿
 export function makeMascot() {
@@ -177,45 +88,6 @@ export function makeMascot() {
   g.userData = { legL, legR, armL, armR, head, body, tail, tablet, phase: 0, mascot: true };
   g.traverse((o) => { o.userData.mascotPart = true; });
   return g;
-}
-
-function animateAnimal(a, mode, t, dt) {
-  const u = a.userData;
-  u.phase += dt * (mode === 'walk' ? 11 : 2);
-  const p = u.phase;
-  if (mode === 'walk') {
-    u.legL.rotation.x = Math.sin(p) * 0.6;
-    u.legR.rotation.x = -Math.sin(p) * 0.6;
-    u.armL.rotation.x = -Math.sin(p) * 0.5;
-    u.armR.rotation.x = Math.sin(p) * 0.5;
-    u.body.position.y = 0.45 + Math.abs(Math.sin(p)) * 0.03;
-    u.head.position.y = 0.95 + Math.abs(Math.sin(p)) * 0.04;
-    u.head.rotation.x = 0;
-  } else if (mode === 'sit' || mode === 'study') {
-    u.legL.rotation.x = u.legR.rotation.x = -1.4;
-    const write = mode === 'study';
-    u.armL.rotation.x = write ? -1.1 : -0.3;
-    u.armR.rotation.x = write ? -1.15 + Math.sin(t * 9) * 0.06 : -0.3;
-    u.armR.rotation.z = write ? Math.sin(t * 4.5) * 0.08 : 0;
-    u.body.position.y = 0.45;
-    u.head.position.y = 0.95 + Math.sin(t * 1.6) * 0.008;
-    u.head.rotation.x = write ? 0.32 + Math.sin(t * 0.9) * 0.05 : 0.05;
-    u.head.rotation.z = write ? Math.sin(t * 0.5) * 0.06 : 0;
-  } else if (u.mascot) {
-    u.body.position.y = 0.46 + Math.sin(p) * 0.01;
-    u.head.position.y = 0.98 + Math.sin(p) * 0.015;
-    u.head.rotation.z = Math.sin(p * 0.5) * 0.08;
-    u.head.rotation.x = 0.1 + Math.sin(p * 0.35) * 0.06; // 태블릿 보는 중
-    u.tail.rotation.z = Math.sin(t * 6) * 0.3;
-  } else {
-    u.legL.rotation.x = u.legR.rotation.x = 0;
-    u.armL.rotation.x = u.armR.rotation.x = Math.sin(p) * 0.04;
-    u.armR.rotation.z = 0;
-    u.body.position.y = 0.45 + Math.sin(p) * 0.008;
-    u.head.position.y = 0.95 + Math.sin(p) * 0.012;
-    u.head.rotation.x = 0;
-    u.head.rotation.z = Math.sin(p * 0.5) * 0.05;
-  }
 }
 
 // ---------------- 텍스처 ----------------
@@ -510,12 +382,14 @@ export function createWorld(container, opts = {}) {
     a.el.innerHTML = (a.me ? '<b class="me-dot">나</b>' : '') + `<span>${esc(name)}</span>` + (status ? `<small>${esc(status)}</small>` : '');
   }
 
+  const cushionMat = [m('#F7C6D0'), m('#FFE9A8')];
   // 같이 공부하는 분위기를 위한 NPC (1단계: 혼자 쓰는 버전)
   const npcDefs = [
-    { animal: 'cat', name: '꾸벅 고양이', status: '📐 수학', seat: 1 },
-    { animal: 'rabbit', name: '열공 토끼', status: '🔤 영어', seat: 6 },
-    { animal: 'panda', name: '새벽 판다', status: '🧪 과학', seat: 11 },
-    { animal: 'fox', name: '몰입 여우', status: '📖 국어', seat: 8 },
+    { animal: 'elephant', name: '든든한 코끼리', status: '📐 수학', seat: 1 },
+    { animal: 'mouse', name: '꼼꼼 생쥐', status: '🔤 영어', seat: 6 },
+    { animal: 'giraffe', name: '높이 기린', status: '🧪 과학', seat: 11 },
+    { animal: 'sloth', name: '느긋 나무늘보', status: '📖 국어', seat: 8 },
+    { animal: 'penguin', name: '뒤뚱 펭귄', status: '🌏 사회', seat: 3 },
   ];
   npcDefs.forEach((d, i) => {
     const a = addActor(d.animal, CLOTHES[(i + 2) % CLOTHES.length], d);
@@ -532,26 +406,47 @@ export function createWorld(container, opts = {}) {
   scene.add(mascot.obj);
   mascot.el.className = 'name-tag mascot-tag';
   labelsEl.appendChild(mascot.el);
-  mascot.el.innerHTML = `<span>🐾 ${esc(opts.mascotName || '과학 도우미')}</span><small>과학 질문</small>`;
+  mascot.el.innerHTML = `<span>🐾 ${esc(opts.mascotName || '과학 도우미')}</span><small>질문 도우미</small>`;
   actors.push(mascot);
   addObs(-2.4, 6.3, 0.7, 0.7);
 
   function sitActor(a, seat) {
     seat.occupant = a;
     a.seat = seat;
+    const u = a.obj.userData;
+    const sc = u.scale || 1;
+    // 쥐·햄스터처럼 작은 동물은 방석을 쌓아야 책상에 겨우 닿음
+    let lift = 0;
+    if (u.cushion) {
+      seat.cushions = new THREE.Group();
+      for (let i = 0; i < 2; i++) {
+        const c = mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.14, 16), cushionMat[i], { y: 0.465 + i * 0.14, z: 0.82 });
+        seat.cushions.add(c);
+      }
+      seat.group.add(seat.cushions);
+      lift = 0.28;
+    }
     a.obj.position.copy(seat.chairPos);
-    a.obj.position.y = DECK_Y + 0.2;
-    a.obj.position.z -= 0.05;
+    a.obj.position.y = DECK_Y + 0.395 + lift - 0.2 * sc;
+    // 덩치가 크면 뒤로 물러앉아서 엉덩이가 의자 밖으로 튀어나옴
+    a.obj.position.z += -0.05 + Math.max(0, sc - 1) * 0.3;
     a.obj.rotation.y = Math.PI;
     a.mode = 'sit';
+  }
+  function clearCushions(seat) {
+    if (seat.cushions) { seat.group.remove(seat.cushions); seat.cushions = null; }
   }
 
   const player = addActor(opts.animal || 'bear', CLOTHES[0], { name: opts.name || '' }, true);
   player.animal = opts.animal || 'bear';
+  const playerSpeed = () => animalSpeed(player.animal);
   player.obj.position.set(0, DECK_Y, 6.2);
   player.obj.rotation.y = Math.PI;
   let path = [];
   let pendingSeat = null;
+  let pendingMascot = false;
+  let nearMascot = false;
+  const MASCOT_FRONT = new THREE.Vector3(-2.05, DECK_Y, 7.05);
   let studying = false;
 
   // ---------------- 길찾기 (격자 A*) ----------------
@@ -630,6 +525,7 @@ export function createWorld(container, opts = {}) {
     path = findPath(player.obj.position, target);
   }
   function walkToSeat(idx) {
+    pendingMascot = false;
     const seat = seats[idx];
     if (!seat || (seat.occupant && seat.occupant !== player)) return false;
     if (player.seat === seat) return true;
@@ -650,6 +546,7 @@ export function createWorld(container, opts = {}) {
     if (!player.seat) return;
     const s = player.seat;
     s.occupant = null;
+    clearCushions(s);
     s.bulb.material.emissiveIntensity = 0;
     player.seat = null;
     player.obj.position.copy(s.approach);
@@ -694,7 +591,14 @@ export function createWorld(container, opts = {}) {
     ray.setFromCamera(ndc, camera);
     const hits = ray.intersectObjects(scene.children, true);
     for (const h of hits) {
-      if (h.object.userData.mascotPart) { opts.onMascot && opts.onMascot(); return; }
+      if (h.object.userData.mascotPart) {
+        // 가까이 있으면 바로, 멀면 뭉치 앞까지 걸어간 뒤 열기
+        if (nearMascot && !player.seat) { opts.onMascot && opts.onMascot(); return; }
+        pendingSeat = null;
+        walkTo(MASCOT_FRONT);
+        pendingMascot = true;
+        return;
+      }
       const s = h.object.userData.seat;
       if (s != null) {
         if (seats[s].occupant && seats[s].occupant !== player) { opts.onToast && opts.onToast('다른 친구가 공부 중인 자리예요 🤫'); return; }
@@ -705,6 +609,7 @@ export function createWorld(container, opts = {}) {
         const p = h.point;
         const t = new THREE.Vector3(clamp(p.x, BOUNDS.x0, BOUNDS.x1), DECK_Y, clamp(p.z, BOUNDS.z0, BOUNDS.z1));
         pendingSeat = null;
+        pendingMascot = false;
         walkTo(t);
         return;
       }
@@ -769,6 +674,7 @@ export function createWorld(container, opts = {}) {
       if (player.seat) standUp();
       path = [];
       pendingSeat = null;
+      pendingMascot = false;
       const c = Math.cos(yaw), s = Math.sin(yaw);
       const dx = kx * c + kz * s, dz = -kx * s + kz * c;
       const len = Math.hypot(dx, dz);
@@ -781,13 +687,18 @@ export function createWorld(container, opts = {}) {
       const d = v.length();
       if (d < 0.08) {
         path.shift();
+        if (!path.length && pendingMascot) {
+          pendingMascot = false;
+          faceDir(mascot.obj.position.x - p.x, mascot.obj.position.z - p.z, 1);
+          opts.onMascot && opts.onMascot();
+        }
         if (!path.length && pendingSeat) {
           const sTarget = pendingSeat;
           pendingSeat = null;
           if (!sTarget.occupant) sitDown(sTarget);
         }
       } else {
-        const step = Math.min(d, 3 * dt);
+        const step = Math.min(d, 3 * playerSpeed() * dt);
         p.x += (v.x / d) * step;
         p.z += (v.z / d) * step;
         faceDir(v.x, v.z, dt);
@@ -798,6 +709,9 @@ export function createWorld(container, opts = {}) {
       player.mode = moving ? 'walk' : 'idle';
       p.y = DECK_Y;
     }
+    // 뭉치 박사 근처인지 (하단 '질문' 버튼 표시용)
+    const near = !player.seat && Math.hypot(p.x - mascot.obj.position.x, p.z - mascot.obj.position.z) < 1.9;
+    if (near !== nearMascot) { nearMascot = near; opts.onNearMascot && opts.onNearMascot(near); }
 
     for (const a of actors) animateAnimal(a.obj, a.mode, t + a.obj.userData.phase, dt);
     clouds.forEach((c, i) => { c.position.x += dt * (0.3 + i * 0.05); if (c.position.x > 40) c.position.x = -40; });
@@ -821,7 +735,8 @@ export function createWorld(container, opts = {}) {
     const w = container.clientWidth, h = container.clientHeight;
     for (const a of actors) {
       v.copy(a.obj.position);
-      v.y += a.mode === 'sit' || a.mode === 'study' ? 1.25 : 1.45;
+      const ud = a.obj.userData;
+      v.y += (ud.height || 1.4) * (ud.scale || 1) * (a.mode === 'sit' || a.mode === 'study' ? 0.92 : 1) + 0.12;
       v.project(camera);
       const vis = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 && !close;
       a.el.style.display = vis ? '' : 'none';
@@ -837,7 +752,7 @@ export function createWorld(container, opts = {}) {
 
   function moveStep(dx, dz, dt) {
     const p = player.obj.position;
-    const sp = 3 * dt;
+    const sp = 3 * playerSpeed() * dt;
     const nx = clamp(p.x + dx * sp, BOUNDS.x0, BOUNDS.x1);
     if (!blocked(nx, p.z)) p.x = nx;
     const nz = clamp(p.z + dz * sp, BOUNDS.z0, BOUNDS.z1);
@@ -877,9 +792,18 @@ export function createWorld(container, opts = {}) {
         scene.add(fresh);
         player.obj = fresh;
         player.animal = animal;
+        if (player.seat) {
+          const seat = player.seat;
+          const mode = player.mode;
+          clearCushions(seat);
+          sitActor(player, seat);
+          player.mode = mode;
+        }
       }
       if (name !== undefined) setLabel(player, { name, status });
     },
+    walkToMascot() { pendingSeat = null; walkTo(MASCOT_FRONT); pendingMascot = true; },
+    get nearMascot() { return nearMascot; },
     get seated() { return player.seat ? player.seat.idx : -1; },
   };
 }

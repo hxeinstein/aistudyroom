@@ -51,13 +51,14 @@
   </section>
 
   <!-- 과학 질문 챗봇 -->
-  <section class="chat-sheet hidden" id="chatSheet" aria-label="과학 질문">
+  <section class="chat-sheet hidden" id="chatSheet" aria-label="뭉치 박사에게 질문">
     <header class="c-head">
       <img class="c-ava big" src="assets/mascot.png" alt="" />
-      <div class="c-title"><strong id="cName">과학 도우미</strong><span>역학과 에너지 · 정답 대신 힌트를 줘요</span></div>
+      <div class="c-title"><strong id="cName">뭉치 박사</strong><span id="cSub">정답 대신 힌트를 줘요</span></div>
       <button class="c-ghost" id="cReset" type="button">새 문제</button>
       <button class="icon-btn" id="cClose" type="button" aria-label="닫기">✕</button>
     </header>
+    <div class="c-subjects hidden" id="cSubjects"></div>
     <div class="c-log" id="cLog"></div>
     <div class="c-gate hidden" id="cGate">
       <p>선생님이 알려준 <b>수업 코드</b>를 넣어 줘.</p>

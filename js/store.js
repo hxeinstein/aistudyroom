@@ -16,12 +16,26 @@ export const SUBJECTS = [
 export const subjectById = (id) => SUBJECTS.find((s) => s.id === id) || SUBJECTS[SUBJECTS.length - 1];
 
 export const ANIMALS = [
-  { id: 'bear', name: '곰', emoji: '🐻' },
-  { id: 'rabbit', name: '토끼', emoji: '🐰' },
-  { id: 'cat', name: '고양이', emoji: '🐱' },
-  { id: 'fox', name: '여우', emoji: '🦊' },
-  { id: 'panda', name: '판다', emoji: '🐼' },
-  { id: 'frog', name: '개구리', emoji: '🐸' },
+  { id: 'bear', name: '곰', emoji: '🐻', trait: '든든하고 포근한 기본 체형' },
+  { id: 'rabbit', name: '토끼', emoji: '🐰', trait: '긴 귀 · 걸을 때 깡총깡총' },
+  { id: 'cat', name: '고양이', emoji: '🐱', trait: '뾰족 귀와 수염, 살랑이는 꼬리' },
+  { id: 'fox', name: '여우', emoji: '🦊', trait: '끝이 하얀 복슬 꼬리' },
+  { id: 'panda', name: '판다', emoji: '🐼', trait: '까만 눈 무늬와 까만 팔다리' },
+  { id: 'frog', name: '개구리', emoji: '🐸', trait: '머리 위 동그란 눈 · 폴짝폴짝' },
+  { id: 'mouse', name: '생쥐', emoji: '🐭', trait: '아주 작아서 방석을 쌓고 겨우 앉아요' },
+  { id: 'hamster', name: '햄스터', emoji: '🐹', trait: '작고 볼이 빵빵 · 방석 필요' },
+  { id: 'elephant', name: '코끼리', emoji: '🐘', trait: '덩치가 커서 엉덩이가 의자 밖으로!' },
+  { id: 'giraffe', name: '기린', emoji: '🦒', trait: '긴 목 · 칸막이 너머까지 보여요' },
+  { id: 'lion', name: '사자', emoji: '🦁', trait: '풍성한 갈기와 끝이 둥근 꼬리' },
+  { id: 'tiger', name: '호랑이', emoji: '🐯', trait: '이마의 줄무늬' },
+  { id: 'cheetah', name: '치타', emoji: '🐆', trait: '날씬하고 제일 빨리 걸어요' },
+  { id: 'sheep', name: '양', emoji: '🐑', trait: '복슬복슬 양털 머리' },
+  { id: 'sloth', name: '나무늘보', emoji: '🦥', trait: '모든 게 느릿느릿 (걸음도 느려요)' },
+  { id: 'hippo', name: '하마', emoji: '🦛', trait: '큰 주둥이 · 엉덩이가 튀어나와요' },
+  { id: 'raccoon', name: '너구리', emoji: '🦝', trait: '눈가 가면과 줄무늬 꼬리' },
+  { id: 'otter', name: '수달', emoji: '🦦', trait: '조금 작고 날렵 · 긴 꼬리' },
+  { id: 'penguin', name: '펭귄', emoji: '🐧', trait: '부리와 날개 · 뒤뚱뒤뚱 걸어요' },
+  { id: 'deer', name: '사슴', emoji: '🦌', trait: '사슴뿔 · 가볍고 빠른 걸음' },
 ];
 export const animalById = (id) => ANIMALS.find((a) => a.id === id) || ANIMALS[0];
 
