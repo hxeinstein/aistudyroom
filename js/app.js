@@ -48,7 +48,22 @@ function boot() {
   };
   $('btnPause').onclick = togglePause;
   $('btnStop').onclick = openStop;
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.activeSession() && !S.isPaused()) keepAwake(true); });
+  // 다른 앱/화면을 보다 돌아와도 타이머는 계속 흐름 (태블릿으로 PDF·인강 보는 경우 등).
+  // 막거나 감지하지 않고, 돌아왔을 때 안내만 한 번 보여줌.
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    const studying = S.activeSession() && !S.isPaused();
+    if (document.visibilityState === 'hidden') {
+      hiddenAt = studying ? Date.now() : 0;
+      return;
+    }
+    if (studying) keepAwake(true);
+    const away = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = 0;
+    if (studying && away >= 60 * 1000) {
+      toast(`다른 화면에 있던 ${S.fmtHM(away)}도 공부 시간에 포함됐어요 📚 (쉬었다면 ☕ 휴식을 눌러주세요)`, 5000);
+    }
+  });
   applySound(false);
 }
 
@@ -111,12 +126,12 @@ function sitNearest() {
 }
 
 let toastTimer;
-function toast(msg) {
+function toast(msg, ms = 2200) {
   const t = $('toast');
   t.textContent = msg;
   t.classList.remove('hidden');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.add('hidden'), 2200);
+  toastTimer = setTimeout(() => t.classList.add('hidden'), ms);
 }
 
 // ---------------- 모달 ----------------
