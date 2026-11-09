@@ -2,6 +2,8 @@ import * as S from './store.js';
 import { createWorld, seatName } from './world.js';
 import { drawPlanner, ensureFonts, savePlannerImage } from './planner.js';
 import { setSound, SOUNDS } from './sound.js';
+import { initChat, openChat } from './chat.js';
+import { CONFIG } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -19,6 +21,8 @@ function boot() {
     onSit: (idx) => { $('seatLabel').textContent = `${seatName(idx)} 자리에 앉음`; renderBar(); if (!S.activeSession()) openStart(); },
     onStand: () => { $('seatLabel').textContent = '자리를 골라 앉아보세요'; renderBar(); },
     onToast: toast,
+    mascotName: CONFIG.MASCOT_NAME,
+    onMascot: () => openChat(),
   });
 
   // 진행 중이던 공부 복원 (새로고침/앱 전환)
@@ -48,6 +52,8 @@ function boot() {
   };
   $('btnPause').onclick = togglePause;
   $('btnStop').onclick = openStop;
+  $('btnAsk').onclick = () => openChat();
+  initChat();
   // 다른 앱/화면을 보다 돌아와도 타이머는 계속 흐름 (태블릿으로 PDF·인강 보는 경우 등).
   // 막거나 감지하지 않고, 돌아왔을 때 안내만 한 번 보여줌.
   let hiddenAt = 0;
@@ -100,12 +106,12 @@ function renderBar() {
     ? [
         { e: '▶️', t: '공부 시작', main: true, fn: openStart },
         { e: '🚶', t: '일어나기', fn: () => world.standUp() },
-        { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
+        { e: '🐾', t: '과학 질문', fn: () => openChat() },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ]
     : [
         { e: '🪑', t: '빈자리 앉기', main: true, fn: sitNearest },
-        { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
+        { e: '🐾', t: '과학 질문', fn: () => openChat() },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ];
   bar.innerHTML = '';

@@ -45,8 +45,35 @@
     <div class="study-sub" id="studySub">집중 중… 스탠드가 켜졌어요 💡</div>
     <div class="study-btns">
       <button class="btn soft" id="btnPause">☕ 잠깐 휴식</button>
+      <button class="btn soft" id="btnAsk">🐾 질문</button>
       <button class="btn primary" id="btnStop">⏹ 이 공부 끝</button>
     </div>
+  </section>
+
+  <!-- 과학 질문 챗봇 -->
+  <section class="chat-sheet hidden" id="chatSheet" aria-label="과학 질문">
+    <header class="c-head">
+      <img class="c-ava big" src="assets/mascot.png" alt="" />
+      <div class="c-title"><strong id="cName">과학 도우미</strong><span>역학과 에너지 · 정답 대신 힌트를 줘요</span></div>
+      <button class="c-ghost" id="cReset" type="button">새 문제</button>
+      <button class="icon-btn" id="cClose" type="button" aria-label="닫기">✕</button>
+    </header>
+    <div class="c-log" id="cLog"></div>
+    <div class="c-gate hidden" id="cGate">
+      <p>선생님이 알려준 <b>수업 코드</b>를 넣어 줘.</p>
+      <div class="row"><input class="field" id="cCodeInput" autocomplete="off" aria-label="수업 코드" /><button class="btn primary" id="cCodeBtn" type="button">확인</button></div>
+      <div class="c-gate-msg" id="cGateMsg"></div>
+    </div>
+    <footer class="c-foot">
+      <div class="c-preview hidden" id="cPreview"><img id="cPreviewImg" alt="올릴 사진" /><span>사진 1장</span><button class="c-ghost" id="cRemoveImg" type="button">빼기</button></div>
+      <div class="c-compose">
+        <button class="icon-btn" id="cPhoto" type="button" aria-label="문제 사진 올리기">📷</button>
+        <input type="file" id="cFile" accept="image/*" hidden />
+        <textarea id="cInput" rows="1" placeholder="문제나 내 풀이를 써 줘"></textarea>
+        <button class="btn primary" id="cSend" type="button">보내기</button>
+      </div>
+      <p class="c-hint">대화는 저장되지 않아요 · 창을 닫아도 이 화면을 새로고침하기 전까지는 남아 있어요</p>
+    </footer>
   </section>
 
   <div class="toast hidden" id="toast"></div>
