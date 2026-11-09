@@ -625,7 +625,7 @@ export function createWorld(container, opts = {}) {
       if (!want) officeSitters.delete(desk.n);
       const el = desk.label.el;
       el.classList.toggle('hidden', !t);
-      if (t) el.innerHTML = `<span>${esc(t.name)} 선생님</span><small>${t.online ? '🟢 상담 가능' : '⚪ 부재중'}</small>`;
+      if (t) el.innerHTML = `<span>${esc(t.name)} 선생님</span><small>${t.closed ? '📝 시험 출제 중' : t.online ? '🟢 상담 가능' : '⚪ 부재중'}</small>`;
     }
   }
   const officeSitters = new Map();

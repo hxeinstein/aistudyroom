@@ -16,6 +16,7 @@ let seatTimer = null;
 let inbox = [];
 let lastUnread = 0;
 let sending = false;
+let allClosed = false;     // 모든 선생님이 문을 닫음 → 교무실에 들어갈 수 없음
 
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
 function lsSet(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -42,9 +43,32 @@ export const isTeacher = () => !!teacher;
 /** 선생님이 아무도 없을 때 문을 누르면 */
 export function confirmClosed() {
   if (teacher) return true;
+  if (allClosed) {
+    alert('🔒 교무실 문이 닫혀 있어요.\n선생님들이 모두 시험 출제 중이에요. 다음에 다시 와 주세요!');
+    return false;
+  }
   return confirm('📝 지금은 선생님들이 시험 출제 중이에요.\n그래도 들어가서 메시지를 남길까요? (선생님께 알림이 가요)');
 }
 export const teacherName = () => (teacher ? teacher.me.name : '');
+/** 내(선생님) 문이 닫혀 있는지 */
+export const myDoorClosed = () => {
+  if (!teacher) return false;
+  const mine = seats.find((x) => x.id === teacher.me.id);
+  return mine ? !!mine.closed : !!teacher.me.closed;
+};
+/** 선생님: 내 문 열기/닫기 */
+export async function toggleDoor() {
+  if (!teacher) return;
+  const closed = !myDoorClosed();
+  let r;
+  try { r = await api({ action: 'office.door', token: teacher.token, closed }); } catch (e) { return ctx.toast('바꾸지 못했어요. 다시 해 주세요'); }
+  if (r.error) return ctx.toast(r.error);
+  teacher.me.closed = closed;
+  lsSet('aistudyroom.teacher', teacher);
+  await refreshSeats();
+  ctx.toast(closed ? '🔒 문을 닫았어요. 학생에게 “시험 출제 중”으로 보여요' : '🔓 문을 열었어요. 학생 질문을 받을 수 있어요');
+  if ($('ibDoor')) $('ibDoor').textContent = closed ? '🔓 문 열기 (질문 받기)' : '🔒 문 닫기 (시험 출제 중)';
+}
 export const unreadCount = () => inbox.reduce((a, x) => a + (x.unread || 0), 0);
 
 export function initOffice(c) {
@@ -90,7 +114,9 @@ async function refreshSeats() {
     if (r && r.seats) {
       seats = r.seats;
       ctx.world.setOfficeSeats(seats);
-      ctx.world.setOfficeOpen(seats.some((x) => x.online));
+      ctx.world.setOfficeOpen(seats.some((x) => x.online && !x.closed));
+      allClosed = seats.length > 0 && seats.every((x) => x.closed);
+      ctx.renderBar && ctx.renderBar();
     }
   } catch (e) { /* 다음에 다시 */ }
 }
@@ -100,6 +126,7 @@ export async function tapSeat(n, t) {
   const fresh = seats.find((x) => x.seat === n) || t;
   if (!fresh) return ctx.toast('비어 있는 자리예요');
   if (teacher && fresh.id === teacher.me.id) return;
+  if (fresh.closed && !teacher) return ctx.toast(`📝 ${fresh.name} 선생님은 시험 출제 중이에요. 다음에 다시 와 줘!`);
   if (conv && !conv.ended && conv.toId === fresh.id) return openSheet();
   if (conv && !conv.ended && !confirm(`지금 ${conv.with.name} 선생님과의 대화를 끝내고 ${fresh.name} 선생님께 질문할까요?\n(끝낸 대화는 바로 지워져요)`)) return;
   if (conv && !conv.ended) await endConv(true);
@@ -321,6 +348,7 @@ export function openTeacherLogin() {
     ctx.world.setTeacher(r.me.id);
     ctx.closeModal();
     ctx.toast(`${r.me.name} 선생님, 로그인했어요. ${r.me.seat}번 자리예요`);
+    if (ctx.world.area === 'office' && $('seatLabel')) $('seatLabel').textContent = `${r.me.name} 선생님`;
     try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
     startTeacherSync();
     await refreshSeats();
@@ -369,6 +397,8 @@ export function openInbox() {
   const m = ctx.openModal(`
     <h2>📥 받은 대화</h2>
     <p class="desc">${esc(teacher.me.name)} 선생님 · ${teacher.me.seat}번 자리 · 대화는 끝내면 바로 지워져요</p>
+    <button class="btn soft block" id="ibDoor" type="button">${myDoorClosed() ? '🔓 문 열기 (질문 받기)' : '🔒 문 닫기 (시험 출제 중)'}</button>
+    <p class="hint">문을 닫으면 학생에게 “시험 출제 중”으로 보이고 새 질문을 받지 않아요. 하던 대화는 그대로예요.</p>
     <div class="todo-pick" id="inboxList"></div>
     <label class="lbl">다른 선생님께 메시지</label>
     <div class="chips" id="teacherList"></div>
@@ -377,6 +407,7 @@ export function openInbox() {
       <button class="btn primary" id="ibClose" type="button">닫기</button>
     </div>`);
   m.querySelector('#ibClose').onclick = ctx.closeModal;
+  m.querySelector('#ibDoor').onclick = () => toggleDoor();
   m.querySelector('#ibLogout').onclick = () => { logout(); ctx.closeModal(); ctx.toast('로그아웃했어요'); };
   renderInbox();
   refreshSeats().then(() => {

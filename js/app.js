@@ -130,6 +130,9 @@ function renderBar() {
           ? [
               { e: '📥', t: unread ? `받은 대화 ${unread}` : '받은 대화', main: true, fn: () => Office.openInbox() },
               { e: '🪑', t: '내 자리', fn: () => world.sitAtMyDesk() },
+              Office.myDoorClosed()
+                ? { e: '🔓', t: '문 열기', fn: () => Office.toggleDoor() }
+                : { e: '🔒', t: '문 닫기', fn: () => Office.toggleDoor() },
             ]
           : [{ e: '👩‍🏫', t: '선생님 로그인', fn: () => Office.openTeacherLogin() }]),
         { e: '🚪', t: '나가기', main: !Office.isTeacher() && world.nearDoor === 'exit', fn: () => world.goOutOfOffice() },

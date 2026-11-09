@@ -7,7 +7,8 @@
  *   (메일 알림 권한 승인 창이 뜨면 허용) 그 뒤 '배포 → 배포 관리 → 새 버전'으로 다시 배포하세요.
  *   초대코드가 더 필요하면 makeTeacherInvite 를 실행하거나, 시트 위쪽 메뉴 [🐾 독서실 → 교사 초대코드 만들기]
  *
- * [교사 탭]  A 사용 | B 초대코드 | C 이름 | D 비밀번호(암호화) | E 알림 이메일 | F 자리(1~10) | G 동물 | H 등록일
+ * [교사 탭]  A 사용 | B 초대코드 | C 이름 | D 비밀번호(암호화) | E 알림 이메일 | F 자리(1~10) | G 동물 | H 등록일 | I 문 닫음
+ *   - I칸 '문 닫음': 선생님이 독서실에서 [문 닫기]를 누르면 체크돼요. 체크되면 '시험 출제 중'으로 보이고 학생의 새 질문을 받지 않아요.
  *   - 초대코드는 한 번 등록하면 그 선생님 것이 됨(다른 사람이 다시 쓸 수 없음)
  *   - '사용' 체크를 풀면 그 선생님은 바로 로그인할 수 없어요 (권한 빼기)
  *   - 비밀번호를 잊으면: 그 줄의 C~H칸을 지우면 같은 초대코드로 다시 등록할 수 있어요
@@ -30,12 +31,17 @@ const STUDYROOM_URL = 'https://hxeinstein.github.io/aistudyroom/';
 function setupOffice() {
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName('교사');
+  const header = [['사용', '초대코드', '이름', '비밀번호(암호화)', '알림 이메일', '자리', '동물', '등록일', '문 닫음']];
   if (!sh) {
     sh = ss.insertSheet('교사');
-    sh.getRange(1, 1, 1, 8).setValues([['사용', '초대코드', '이름', '비밀번호(암호화)', '알림 이메일', '자리', '동물', '등록일']]);
+    sh.getRange(1, 1, 1, 9).setValues(header);
     sh.setFrozenRows(1);
     sh.getRange('A2:A30').insertCheckboxes();
+    sh.getRange('I2:I30').insertCheckboxes();
     for (let i = 0; i < 3; i++) makeTeacherInvite();
+  } else {
+    sh.getRange(1, 1, 1, 9).setValues(header);   // 예전 탭이면 머리글만 최신으로
+    sh.getRange('I2:I30').insertCheckboxes();
   }
   if (!ss.getSheetByName('차단')) {
     const b = ss.insertSheet('차단');
@@ -87,6 +93,7 @@ function officeHandle_(body) {
       case 'sync': return officeSync_(body);
       case 'close': return officeClose_(body);
       case 'block': return officeBlock_(body);
+      case 'door': return officeDoor_(body);
       default: return { error: '알 수 없는 요청이에요.' };
     }
   } catch (e) {
@@ -103,6 +110,7 @@ function teachers_() {
   return sh.getDataRange().getValues().slice(1).map((r, i) => ({
     row: i + 2, on: r[0] === true, code: String(r[1] || '').trim(), name: String(r[2] || '').trim(),
     hash: String(r[3] || ''), email: String(r[4] || '').trim(), seat: Number(r[5]) || 0, animal: String(r[6] || 'bear'),
+    closed: r[8] === true,
   })).filter((t) => t.code);
 }
 const tid_ = (code) => sha_('tid:' + code).slice(0, 12);
@@ -128,7 +136,7 @@ function teacherByToken_(token) {
   cache.put('tsess_' + token, code, OFFICE_TTL); // 쓰는 동안 연장
   return t;
 }
-function me_(t) { return { id: tid_(t.code), name: t.name, seat: t.seat, animal: t.animal }; }
+function me_(t) { return { id: tid_(t.code), name: t.name, seat: t.seat, animal: t.animal, closed: t.closed }; }
 
 function officeRegister_(b) {
   const code = String(b.code || '').trim().toUpperCase();
@@ -179,7 +187,7 @@ function officeList_() {
     seats: teachers_().filter((t) => t.on && t.hash).map((t) => {
       const id = tid_(t.code);
       const last = Number(cache.get('tpres_' + id) || 0);
-      return { id: id, name: t.name, seat: t.seat, animal: t.animal, online: now - last < ONLINE_MS };
+      return { id: id, name: t.name, seat: t.seat, animal: t.animal, online: now - last < ONLINE_MS, closed: t.closed };
     }),
   };
 }
@@ -236,6 +244,7 @@ function officeOpen_(b) {
   if (!target) return { error: '그 선생님을 찾을 수 없어요.' };
   const teacher = teacherByToken_(b.token);
   if (b.token && !teacher) return { error: '다시 로그인해 주세요.', relogin: true };
+  if (target.closed && !teacher) return { error: target.name + ' 선생님은 지금 시험 출제 중이라 질문을 받지 않아요. 다음에 다시 와 줘!', closed: true };
   let a;
   if (teacher) {
     if (tid_(teacher.code) === target.id) return { error: '자기 자신과는 대화할 수 없어요.' };
@@ -374,4 +383,13 @@ function officeBlock_(b) {
   if (sh) sh.appendRow([c.a.device, c.a.nick, teacher.name, new Date()]);
   CacheService.getScriptCache().remove('conv_' + b.conv);
   return { ok: true };
+}
+
+/** 선생님이 내 문 열기/닫기 (닫으면 '시험 출제 중', 학생의 새 질문을 받지 않음) */
+function officeDoor_(b) {
+  const teacher = teacherByToken_(b.token);
+  if (!teacher) return { error: '다시 로그인해 주세요.', relogin: true };
+  const sh = SpreadsheetApp.getActive().getSheetByName('교사');
+  sh.getRange(teacher.row, 9).insertCheckboxes().setValue(!!b.closed);
+  return { ok: true, closed: !!b.closed };
 }
