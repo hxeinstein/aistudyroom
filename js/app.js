@@ -20,9 +20,15 @@ function boot() {
   world = createWorld($('world'), {
     animal: profile.animal,
     name: profile.name,
-    onSit: (idx) => { $('seatLabel').textContent = `${seatName(idx)} 자리에 앉음`; renderBar(); Room.syncNow(); if (!S.activeSession()) openStart(); },
-    onStand: () => { $('seatLabel').textContent = '자리를 골라 앉아보세요'; renderBar(); Room.syncNow(); },
-    onRemoteStudent: (sid, nick) => Office.callStudent(sid, nick),
+    onSit: async (idx) => {
+      $('seatLabel').textContent = `${seatName(idx)} 자리에 앉음`;
+      renderBar();
+      // 실시간: 먼저 앉은 친구가 있으면 일어나기
+      if (!(await Room.claimSeat(idx))) { if (!S.activeSession()) world.standUp(); return; }
+      if (!S.activeSession()) openStart();
+    },
+    onStand: () => { $('seatLabel').textContent = '자리를 골라 앉아보세요'; renderBar(); Room.releaseSeat(); },
+    onRemoteTap: (uid, info) => (Office.isTeacher() ? Office.callStudent(uid, info.n, info.a) : openCheer(uid, info)),
     onToast: toast,
     bots: CONFIG.BOTS,
     onBot: (id) => openChat(currentRoomSubject(), id),
@@ -74,15 +80,14 @@ function boot() {
   Room.initRoom({
     world, toast,
     isTeacher: () => Office.isTeacher(),
-    onCalls: (calls) => Office.receiveCalls(calls),
-    onTaken: () => { if (!S.activeSession()) world.standUp(); },
-    // 다른 사람에게 보이는 내 정보: 자리, 닉네임, 동물, 공부 중인 과목과 시간
+    onCall: (call) => Office.receiveCalls([call]),
+    // 다른 사람에게 보이는 내 정보: 닉네임, 동물, 공부 중인 과목과 시간 (위치·자리는 world가 채움)
     getMe: () => {
       const s = S.activeSession();
+      const el = s ? S.activeElapsed() : 0;
       return {
-        seat: world.area === 'main' ? world.seated : -1,
-        nick: st.profile?.name || '학생', animal: st.profile?.animal || 'bear',
-        subj: s ? S.subjectById(s.subject).name : '', studying: !!s, paused: S.isPaused(), elapsed: s ? S.activeElapsed() : 0,
+        n: st.profile?.name || '학생', a: st.profile?.animal || 'bear',
+        sj: s ? S.subjectById(s.subject).name : '', st: !!s, ps: S.isPaused(), el: Math.floor(el / 60000) * 60000, // 1분 단위
       };
     },
   });
@@ -464,6 +469,23 @@ function endStudyUI() {
   keepAwake(false);
   renderBar();
   refreshHud();
+}
+
+// ---------------- 친구에게 응원 ----------------
+const CHEERS = ['👏', '💪', '🔥', '😊', '🍀', '⭐'];
+function openCheer(uid, info) {
+  const m = openModal(`
+    <div class="big-emoji">${S.animalById(info.a).emoji}</div>
+    <h2 class="center">${esc(info.n)}</h2>
+    <p class="desc center">${info.st && !info.ps ? `📚 ${esc(info.sj || '공부')} 열공 중` : info.st ? '☕ 쉬는 중' : '독서실에 함께 있어요'}<br/>응원을 보내 볼까요? (채팅은 할 수 없어요)</p>
+    <div class="cheers">${CHEERS.map((e) => `<button type="button" class="cheer-btn" data-e="${e}">${e}</button>`).join('')}</div>
+    <div class="foot"><button class="btn ghost" id="chClose" type="button">닫기</button></div>`);
+  m.querySelector('#chClose').onclick = closeModal;
+  m.querySelectorAll('.cheer-btn').forEach((b) => (b.onclick = () => {
+    Room.sendCheer(uid, b.dataset.e, st.profile?.name);
+    closeModal();
+    toast(`${info.n}에게 ${b.dataset.e} 응원을 보냈어요`);
+  }));
 }
 
 // ---------------- 오늘 공부끝 ----------------

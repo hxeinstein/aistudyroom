@@ -68,11 +68,15 @@
 6. **G칸 수업 코드**: 적으면 그 코드를 아는 학생만 사용(우리 학교 교과서 교과 추천), 비우면 누구나. 시험 기간마다 바꿔도 돼요.
    이미 `과목` 탭이 있다면 `setupSubjects`를 한 번 더 실행하면 머리글(G칸)만 최신으로 바뀝니다.
 
-## 👥 같이 공부하기 (자리 공유)
-- 다른 학생들이 **자기가 앉은 자리에 보여요**. 이름표에 닉네임과 "📚 물리학Ⅰ 열공 중 · 42분"처럼 과목·시간이 떠요.
-- 이미 누가 앉은 자리에는 앉을 수 없어요. 걸어다니는 모습은 나누지 않고, 앉기·일어나기·공부 시작/끝/휴식과 30초마다 알려요 (반영까지 최대 30초).
-- 학생끼리 채팅은 안 돼요. 서로 보이기만 해요. 진짜 친구가 3명 이상이면 분위기용 친구들은 쉬어요.
-- 시트에는 아무것도 남지 않아요 (임시 저장소, 2분 동안 신호가 없으면 자리에서 사라짐). 공부방은 1개(12자리)로 시작하고, 부족하면 늘려요.
+## 👥 같이 공부하기 (실시간)
+- **진짜 친구들이 실시간으로 보여요**: 걸어 들어오고, 자리에 앉고, 공부를 시작하면 스탠드가 켜지고 "📚 물리학Ⅰ 열공 중 · 42분"이 떠요. 앱을 닫으면 바로 사라져요.
+- 자리는 **먼저 앉은 친구만** 차지해요. 교무실에 간 친구는 교무실에서 보여요.
+- 친구를 누르면 **👏💪🔥😊🍀⭐ 응원**을 보낼 수 있어요 (머리 위에 떠오름). 학생끼리 채팅은 안 돼요.
+- 선생님(구경 시점)은 학생을 눌러 **말을 걸 수 있어요**.
+- 진짜 친구가 3명 이상이면 분위기용 친구들은 쉬어요.
+- **Firebase 실시간 데이터베이스**(프로젝트 `aistudyroom`, 싱가포르, 무료 요금제·동시 접속 100명)를 써요. 나누는 건 닉네임·동물·위치·자리·공부 과목·시간뿐이고, 익명 로그인이라 개인정보는 없어요.
+  설정 값은 `js/config.js`의 `FIREBASE`, 보안 규칙은 아래 [Firebase 보안 규칙](#firebase-보안-규칙).
+- 연결이 안 되면(인터넷·차단) 혼자 공부 모드로 그대로 쓸 수 있어요.
 
 ## 🏫 교무실 (챗봇 선생님) · 👩‍🏫 진짜 선생님
 - **교무실에는 챗봇 선생님 책상만** 있어요 (뭉치 박사 · 과학, 도덕후 · 도덕 …). 과목에 맞는 책상을 눌러 질문해요. 교무실은 언제나 열려 있어요.
@@ -93,6 +97,12 @@
    다음부터는 **초대코드 + 닉네임 + 비밀번호**로 로그인하고, 한 번 로그인한 기기는 로그아웃할 때까지 계속 로그인돼 있어요.
 5. 초대코드가 더 필요하면 시트 메뉴 **🐾 독서실 → 교사 초대코드 만들기**. 권한을 빼려면 `교사` 탭의 '사용' 체크 해제.
 
+## Firebase 보안 규칙
+Realtime Database → 규칙에 그대로 넣어요. 학생은 자기 정보만 쓸 수 있고, 남이 앉은 자리는 빼앗을 수 없어요.
+```json
+{"rules":{"rooms":{"$room":{"players":{".read":"auth != null","$uid":{".write":"auth != null && auth.uid === $uid",".validate":"!newData.exists() || (newData.child('n').isString() && newData.child('n').val().length <= 12)"}},"seats":{".read":"auth != null","$seat":{".write":"auth != null && ((!data.exists() && newData.val() === auth.uid) || (data.exists() && data.val() === auth.uid && !newData.exists()) || (data.exists() && !root.child('rooms').child($room).child('players').child(data.val()).exists() && newData.val() === auth.uid))"}},"calls":{"$uid":{".read":"auth != null && auth.uid === $uid",".write":"auth != null","$id":{".validate":"!newData.exists() || (newData.child('conv').isString() && newData.child('key').isString())"}}},"fx":{".read":"auth != null","$id":{".write":"auth != null",".validate":"!newData.exists() || (newData.child('e').isString() && newData.child('e').val().length <= 4 && newData.child('to').isString())"}}}}}}
+```
+
 ## 실행
 정적 파일만으로 동작합니다 (빌드 없음).
 ```bash
@@ -112,19 +122,19 @@ js/planner.js     스터디플래너 이미지 렌더링 + 사진 저장
 js/sound.js       백색소음 · 빗소리 (직접 합성)
 js/chat.js        뭉치 박사 질문 챗봇 창 (Apps Script 호출)
 js/office.js      교무실 대화·선생님 로그인·받은 대화함·학생에게 말 걸기
-js/room.js        공부방 자리 공유 (다른 학생들이 자리에 보임)
+js/room.js        같이 공부하기 (Firebase 실시간: 위치·자리·응원·선생님 말 걸기)
 js/config.js      챗봇 주소 · 마스코트 이름 설정
 apps-script/      Code.gs(힌트 코치 + 독서실 입구) · Office.gs(교무실) · Index.html(기존 웹앱)
 assets/            챗봇 그림 (mascot.png 뭉치 박사, dodeokhu.png 도덕후)
-vendor/           three.js r160 (MIT)
+vendor/           three.js r160 (MIT), firebase.js (Firebase JS SDK 11 묶음, Apache-2.0)
 ```
 3D 공간과 캐릭터는 그림 파일 없이 코드로 직접 만들었습니다.
 
 ## 로드맵
 - [x] **1단계 — 혼자 쓰는 독서실**: 3D 공간, 좌석, 과목 선택, 타이머·휴식, 자동 기록, 플래너 사진 저장
 - [x] 교무실: 챗봇 선생님 책상, 선생님 부르기(담당 선생님), 초대코드+비밀번호, 1:1 대화, 메일 알림
-- [x] **2단계 — 같이 쓰는 독서실** (자리 공유, 선생님 구경·말 걸기)
-- [ ] 공부방 여러 개(자리 부족 시), 실시간 이동 공유(필요하면 Firebase)
+- [x] **2단계 — 같이 쓰는 독서실** (Firebase 실시간: 이동·자리·응원, 선생님 구경·말 걸기)
+- [ ] 공부방 여러 개(자리 부족 시)
 - [ ] (예전 계획): 실시간 접속으로 다른 학생 캐릭터 표시 (지금은 분위기용 NPC 4명), 이모지 응원
 - [ ] **3단계 — 시험 대비**: 시험 범위 진행률, 주간 리포트, 뽀모도로 타이머
 - [ ] 배경 꾸미기: 필요하면 AI 이미지(예: Gemini)로 그린 하늘·숲 배경을 `assets/`에 넣고 `world.js`의 `skyTexture` 자리에 적용

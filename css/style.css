@@ -263,3 +263,11 @@ body.studying .zoom-ctl { display: none; }
 
 .ask-teacher { display: block; width: 100%; margin-bottom: 8px; border: 2px dashed #9DBBF2; background: #EEF4FF; color: #2F5DB8;
   border-radius: 14px; padding: 8px 10px; font-size: 13px; }
+
+/* 응원 */
+.cheers { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.cheer-btn { border: 0; background: #fff; border-radius: 16px; font-size: 30px; padding: 10px 0; box-shadow: 0 3px 0 #EADBC2; }
+.cheer-btn:active { transform: translateY(2px); }
+.name-tag { overflow: visible; }
+.fx-pop { position: absolute; left: 50%; top: -6px; transform: translateX(-50%); font-size: 30px; pointer-events: none; animation: fxUp 2.6s ease-out forwards; }
+@keyframes fxUp { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -14px) scale(1.15); } 80% { opacity: 1; transform: translate(-50%, -46px) scale(1); } 100% { opacity: 0; transform: translate(-50%, -60px); } }

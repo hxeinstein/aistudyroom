@@ -394,6 +394,8 @@ function officeSync_(b) {
     out.msgs = c.msgs.filter((m) => m.i > since).map((m) => ({ i: m.i, mine: m.from === who, text: m.text, t: m.t }));
     const other = who === 'a' ? c.b : c.a;
     out.otherOnline = other.type === 'teacher' ? Date.now() - Number(cache.get('tpres_' + other.id) || 0) < ONLINE_MS : true;
+    out.called = !!c.called;   // 선생님이 먼저 건 대화인지 (학생 화면에서 확인용)
+    if (other.type === 'teacher') out.otherName = other.name;
     if (c.seen[who] !== c.n) {
       const lock = LockService.getScriptLock();
       if (lock.tryLock(2000)) {
@@ -517,30 +519,41 @@ function roomSync_(b) {
 /** 선생님: 공부방 자리 현황 보기 (구경용) */
 function roomPeek_() { return { seats: roomPublic_(roomState_()) }; }
 
-/** 선생님 → 학생에게 말 걸기 */
+/**
+ * 선생님 → 학생에게 말 걸기
+ * 독서실(Firebase)에서 보이는 학생에게 걸 때: { token, nick, animal } → 대화를 만들고 열쇠(key)를 돌려줌.
+ * 선생님 화면이 그 열쇠를 실시간 연결(Firebase)로 학생에게 전달해요. (예전 방식: { token, sid })
+ */
 function officeCall_(b) {
   const teacher = teacherByToken_(b.token);
   if (!teacher) return { error: '다시 로그인해 주세요.', relogin: true };
   const cache = CacheService.getScriptCache();
-  const device = cache.get('sid_' + String(b.sid || ''));
-  if (!device) return { error: '그 학생은 지금 독서실에 없어요.' };
-  const seatInfo = roomPublic_(roomState_()).filter((x) => x.sid === b.sid)[0];
+  let device = '';
+  let nick = String(b.nick || '학생').slice(0, 12), animal = String(b.animal || 'bear').slice(0, 12);
+  if (b.sid) {
+    device = cache.get('sid_' + String(b.sid)) || '';
+    if (!device) return { error: '그 학생은 지금 독서실에 없어요.' };
+    const seatInfo = roomPublic_(roomState_()).filter((x) => x.sid === b.sid)[0];
+    if (seatInfo) { nick = seatInfo.nick; animal = seatInfo.animal; }
+  }
   const me = tid_(teacher.code);
   const key = Utilities.getUuid();
   const id = Utilities.getUuid().replace(/-/g, '').slice(0, 16);
   const c = {
-    a: { type: 'student', device: device, nick: seatInfo ? seatInfo.nick : '학생', animal: seatInfo ? seatInfo.animal : 'bear', key: key },
+    a: { type: 'student', device: device || ('call:' + id), nick: nick, animal: animal, key: key },
     b: { type: 'teacher', id: me, name: teacher.name, animal: teacher.animal },
-    msgs: [], seen: { a: 0, b: 0 }, n: 0, t: Date.now(),
+    msgs: [], seen: { a: 0, b: 0 }, n: 0, t: Date.now(), called: true,
   };
   const lock = LockService.getScriptLock();
   lock.waitLock(5000);
   try {
     putConv_(id, c);
     const box = inbox_(me); box.push(id); setInbox_(me, box);
-    const calls = JSON.parse(cache.get('calls_' + device) || '[]');
-    calls.push({ conv: id, key: key, name: teacher.name, id: me });
-    cache.put('calls_' + device, JSON.stringify(calls.slice(-5)), OFFICE_TTL);
+    if (device) {
+      const calls = JSON.parse(cache.get('calls_' + device) || '[]');
+      calls.push({ conv: id, key: key, name: teacher.name, id: me });
+      cache.put('calls_' + device, JSON.stringify(calls.slice(-5)), OFFICE_TTL);
+    }
   } finally { lock.releaseLock(); }
-  return { conv: id, with: { name: c.a.nick + ' 학생', animal: c.a.animal, student: true } };
+  return { conv: id, key: key, name: teacher.name, id: me, with: { name: nick + ' 학생', animal: animal, student: true } };
 }

@@ -761,8 +761,8 @@ export function createWorld(container, opts = {}) {
     if (player.seat || player.officeDesk) standUp();
     path = findPath(player.obj.position, target);
   }
-  // ---------------- 다른 학생들 (자리 공유) ----------------
-  const remotes = new Map();   // 자리 번호 → { sid, animal, a, info, at }
+  // ---------------- 다른 학생들 (실시간, Firebase) ----------------
+  const remotes = new Map();   // uid → { a, info, target, seatIdx }
   let observer = false;        // 선생님: 캐릭터 없이 구경하는 시점
   const hashN = (str) => { let h = 0; for (const ch of String(str)) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); };
   function removeActor(a) {
@@ -794,55 +794,119 @@ export function createWorld(container, opts = {}) {
     n.mode = 'study';
     seat.bulb.material.emissiveIntensity = 1.4;
   }
-  function removeRemote(k) {
-    const r = remotes.get(k);
+  function unseatRemote(r) {
+    if (r.seatIdx >= 0) {
+      const seat = seats[r.seatIdx];
+      if (seat && seat.occupant === r.a) freeSeat(seat);
+      r.a.seat = null;
+      r.seatIdx = -1;
+    }
+  }
+  function removeRemote(uid) {
+    const r = remotes.get(uid);
     if (!r) return;
-    if (r.a.seat && r.a.seat.occupant === r.a) freeSeat(r.a.seat);
+    unseatRemote(r);
     removeActor(r.a);
-    remotes.delete(k);
+    remotes.delete(uid);
   }
   const fmtMin = (ms) => { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`; };
   function remoteLabel(r) {
     const x = r.info;
-    const live = x.studying && !x.paused;
-    const ms = x.elapsed + (live ? Date.now() - r.at : 0);
-    const status = live ? `📚 ${x.subj || '공부'} 열공 중 · ${fmtMin(ms)}` : x.studying ? '☕ 쉬는 중' : '🪑 자리에 앉음';
-    setLabel(r.a, { name: x.nick, status });
+    const live = x.st && !x.ps;
+    const ms = (x.el || 0) + (live ? Date.now() - r.at : 0);
+    const status = live ? `📚 ${x.sj || '공부'} 열공 중 · ${fmtMin(ms)}` : x.st ? '☕ 쉬는 중' : '';
+    setLabel(r.a, { name: x.n, status });
   }
   setInterval(() => remotes.forEach(remoteLabel), 5000);
-  /** 서버에서 받은 다른 학생들 자리: [{ seat, sid, nick, animal, subj, studying, paused, elapsed }] */
-  function setRemoteSeats(list) {
+  /**
+   * 다른 학생들: [{ uid, n(닉네임), a(동물), x, z, ry, s(자리, -1), ar('main'|'office'), sj(과목), st(공부 중), ps(쉬는 중), el(공부 ms) }]
+   */
+  function setRemotePlayers(list) {
     const now = Date.now();
     const seen = new Set();
     for (const x of list || []) {
-      const seat = seats[x.seat];
-      if (!seat || seat.occupant === player) continue;
-      seen.add(x.seat);
-      let r = remotes.get(x.seat);
-      if (r && (r.sid !== x.sid || r.animal !== x.animal)) { removeRemote(x.seat); r = null; }
+      seen.add(x.uid);
+      let r = remotes.get(x.uid);
+      if (r && r.info.a !== x.a) { removeRemote(x.uid); r = null; }
       if (!r) {
-        if (seat.occupant && seat.occupant.npc) hideNpc(seat.occupant);
-        const a = addActor(x.animal || 'bear', CLOTHES[hashN(x.sid) % CLOTHES.length], { name: x.nick });
+        const a = addActor(x.a || 'bear', CLOTHES[hashN(x.uid) % CLOTHES.length], { name: x.n });
         a.remote = true;
-        a.obj.traverse((o) => { o.userData.remoteSid = x.sid; o.userData.remoteNick = x.nick; });
-        sitActor(a, seat);
-        r = { sid: x.sid, animal: x.animal, a };
-        remotes.set(x.seat, r);
+        a.obj.traverse((o) => { o.userData.remoteUid = x.uid; o.userData.remoteNick = x.n; });
+        a.obj.position.set(Number(x.x) || 0, DECK_Y, Number(x.z) || 6);
+        r = { a, info: x, target: new THREE.Vector3(), ry: 0, seatIdx: -1 };
+        remotes.set(x.uid, r);
       }
       r.info = x;
       r.at = now;
-      const live = x.studying && !x.paused;
-      r.a.mode = live ? 'study' : 'sit';
-      seat.bulb.material.emissiveIntensity = live ? 1.4 : 0;
+      r.a.area = x.ar === 'office' ? 'office' : 'main';
+      r.a.obj.traverse((o) => { o.userData.remoteNick = x.n; });
+      const wantSeat = r.a.area === 'main' && x.s >= 0 && seats[x.s] ? x.s : -1;
+      if (wantSeat !== r.seatIdx) {
+        unseatRemote(r);
+        if (wantSeat >= 0) {
+          const seat = seats[wantSeat];
+          if (seat.occupant && seat.occupant.npc) hideNpc(seat.occupant);
+          if (!seat.occupant) { sitActor(r.a, seat); r.seatIdx = wantSeat; }
+        }
+      }
+      if (r.seatIdx >= 0) {
+        const live = x.st && !x.ps;
+        r.a.mode = live ? 'study' : 'sit';
+        seats[r.seatIdx].bulb.material.emissiveIntensity = live ? 1.4 : 0;
+      } else {
+        r.target.set(Number(x.x) || 0, DECK_Y, Number(x.z) || 0);
+        r.ry = Number(x.ry) || 0;
+        // 다른 공간에서 넘어왔으면 바로 그 자리로
+        if (r.a.obj.position.distanceTo(r.target) > 6) r.a.obj.position.copy(r.target);
+      }
       remoteLabel(r);
     }
-    for (const k of [...remotes.keys()]) if (!seen.has(k)) removeRemote(k);
+    for (const uid of [...remotes.keys()]) if (!seen.has(uid)) removeRemote(uid);
     // 분위기용 친구들: 진짜 친구가 3명 이상이면 쉬고, 진짜 친구가 그 자리에 앉으면 비켜 줌
-    const many = remotes.size >= 3;
+    const many = [...remotes.values()].filter((r) => r.a.area === 'main').length >= 3;
+    const taken = new Set([...remotes.values()].map((r) => r.seatIdx));
     for (const n of actors.filter((a) => a.npc)) {
-      if (many || remotes.has(n.homeSeat)) hideNpc(n);
+      if (many || taken.has(n.homeSeat)) hideNpc(n);
       else showNpc(n);
     }
+  }
+  /** 다른 학생들 걸음 (받은 위치로 부드럽게) */
+  function stepRemotes(dt) {
+    for (const r of remotes.values()) {
+      r.a.obj.visible = r.a.area === area.name;
+      if (r.seatIdx >= 0) continue;
+      const p = r.a.obj.position;
+      const d = Math.hypot(r.target.x - p.x, r.target.z - p.z);
+      if (d > 0.04) {
+        const step = Math.min(d, Math.max(3 * animalSpeed(r.info.a) * dt, d * dt * 4));
+        p.x += ((r.target.x - p.x) / d) * step;
+        p.z += ((r.target.z - p.z) / d) * step;
+        r.a.mode = 'walk';
+        const want = Math.atan2(r.target.x - p.x, r.target.z - p.z);
+        let diff = Math.atan2(Math.sin(want - r.a.obj.rotation.y), Math.cos(want - r.a.obj.rotation.y));
+        r.a.obj.rotation.y += diff * Math.min(1, dt * 10);
+      } else {
+        r.a.mode = 'idle';
+        let diff = Math.atan2(Math.sin(r.ry - r.a.obj.rotation.y), Math.cos(r.ry - r.a.obj.rotation.y));
+        r.a.obj.rotation.y += diff * Math.min(1, dt * 6);
+      }
+      p.y = DECK_Y;
+    }
+  }
+  /** 응원 이모지: 머리 위에 잠깐 떠오름 (uid가 null이면 나) */
+  function showFx(uid, emoji) {
+    const a = uid ? remotes.get(uid)?.a : player;
+    if (!a) return;
+    const el = document.createElement('div');
+    el.className = 'fx-pop';
+    el.textContent = emoji;
+    a.el.appendChild(el);
+    setTimeout(() => el.remove(), 2600);
+  }
+  /** 실시간으로 나눌 내 상태 */
+  function getPlayerState() {
+    const p = player.obj.position;
+    return { x: Math.round(p.x * 100) / 100, z: Math.round(p.z * 100) / 100, ry: Math.round(player.obj.rotation.y * 100) / 100, ar: area.name, s: area.name === 'main' && player.seat ? player.seat.idx : -1 };
   }
   /** 선생님: 캐릭터 없이 구경 (화면은 보이지 않는 시점을 따라 움직임) */
   function setObserver(on) {
@@ -1020,17 +1084,16 @@ export function createWorld(container, opts = {}) {
       if (ud.officeExit) { goOutOfOffice(); return; }
       if (ud.officeSeat) { tapDesk(ud.officeSeat); return; }
       if (ud.botId) { tapBot(ud.botId); return; }  // 챗봇: 가까우면 바로, 멀면 걸어가서 말 걸기
-      if (ud.remoteSid) {
-        // 진짜 친구: 선생님은 말 걸기, 학생은 조용히
-        if (observer) { opts.onRemoteStudent && opts.onRemoteStudent(ud.remoteSid, ud.remoteNick); return; }
-        opts.onToast && opts.onToast(`${ud.remoteNick} 친구가 공부 중이에요 🤫`);
-        return;
+      if (ud.remoteUid) {
+        // 진짜 친구: 선생님은 말 걸기, 학생은 응원 보내기
+        const r = remotes.get(ud.remoteUid);
+        if (r && r.a.obj.visible) { opts.onRemoteTap && opts.onRemoteTap(ud.remoteUid, r.info); return; }
       }
       const s = h.object.userData.seat;
       if (s != null) {
         const occ = seats[s].occupant;
         if (occ && occ !== player) {
-          if (observer && occ.remote) { const r = [...remotes.values()].find((x) => x.a === occ); if (r) { opts.onRemoteStudent && opts.onRemoteStudent(r.sid, r.info.nick); return; } }
+          if (occ.remote) { const e = [...remotes.entries()].find(([, x]) => x.a === occ); if (e) { opts.onRemoteTap && opts.onRemoteTap(e[0], e[1].info); return; } }
           opts.onToast && opts.onToast('다른 친구가 공부 중인 자리예요 🤫');
           return;
         }
@@ -1168,6 +1231,7 @@ export function createWorld(container, opts = {}) {
       : (Math.hypot(p.x - EXIT_SPOT.x, p.z - EXIT_SPOT.z) < 1.3 ? 'exit' : null);
     if (door !== nearDoor) { nearDoor = door; opts.onNearDoor && opts.onNearDoor(door); }
 
+    stepRemotes(dt);
     for (const a of actors) if (!a.fixed) animateAnimal(a.obj, a.mode, t + a.obj.userData.phase, dt);
     for (const av of officeSitters.values()) animateAnimal(av, 'study', t + av.userData.phase, dt);
     clouds.forEach((c, i) => { c.position.x += dt * (0.3 + i * 0.05); if (c.position.x > 40) c.position.x = -40; });
@@ -1200,7 +1264,7 @@ export function createWorld(container, opts = {}) {
       const ud = a.obj.userData;
       v.y += (ud.height || 1.4) * (ud.scale || 1) * (a.mode === 'sit' || a.mode === 'study' ? 0.92 : 1) + 0.12;
       v.project(camera);
-      const here = a.me || (a.area || 'main') === area.name;
+      const here = (a.me && !observer) || (!a.me && (a.area || 'main') === area.name);
       const vis = here && !a.el.classList.contains('hidden') && v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 && !close;
       a.el.style.display = vis ? '' : 'none';
       if (vis) {
@@ -1289,7 +1353,9 @@ export function createWorld(container, opts = {}) {
     enterOffice,
     setOfficeSeats,
     setOfficeOpen,
-    setRemoteSeats,
+    setRemotePlayers,
+    showFx,
+    getPlayerState,
     setObserver,
     get observer() { return observer; },
     setTeacher(id) { myTeacherId = id || null; officeDesks.forEach((d) => { d.teacher = { ...(d.teacher || {}), _force: Math.random() }; }); },

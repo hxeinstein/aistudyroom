@@ -1,6 +1,7 @@
 // 교무실 — 학생 ↔ 선생님, 선생님 ↔ 선생님 1:1 대화 (Apps Script Office.gs)
 // 대화는 서버의 임시 저장소에만 있고, 어느 한쪽이 '끝내기'를 누르면 바로 지워짐.
 import { CONFIG } from './config.js';
+import * as Room from './room.js';
 import { animalById, ANIMALS } from './store.js';
 
 const TEACHER_COLORS = ['#B79CE8', '#7FB3E8', '#9ED28C', '#F59FB4', '#F7C96B', '#5E6B7D'];
@@ -297,6 +298,12 @@ async function poll() {
     return;
   }
   if (r.error) return;
+  if (c.fromCall && r.called === false) {
+    // 선생님이 건 대화가 아니면(장난 등) 받지 않음
+    conv = null; sheetOpen = false; $('officeSheet').classList.add('hidden'); updatePill();
+    return;
+  }
+  if (c.fromCall && r.otherName && c.with.name !== r.otherName) { c.with.name = r.otherName; renderHead(); }
   if (typeof r.otherOnline === 'boolean' && c.with) c.with.online = r.otherOnline;
   let fresh = 0;
   for (const m of r.msgs || []) {
@@ -536,16 +543,18 @@ export function maybeEnterFromLink() {
 }
 
 /* ---------- 선생님 → 학생 말 걸기 ---------- */
-export async function callStudent(sid, nick) {
+export async function callStudent(uid, nick, animal) {
   if (!teacher) return;
   if (!confirm(`${nick} 학생에게 말을 걸까요?\n학생 화면에 "선생님이 말을 걸었어요" 알림이 떠요.`)) return;
   let r;
-  try { r = await api({ action: 'office.call', token: teacher.token, sid }); } catch (e) { return ctx.toast('연결하지 못했어요'); }
+  try { r = await api({ action: 'office.call', token: teacher.token, nick, animal }); } catch (e) { return ctx.toast('연결하지 못했어요'); }
   if (r.error) return ctx.toast(r.error);
+  // 대화 열쇠를 실시간 연결로 학생에게 바로 전달
+  try { await Room.sendCall(uid, { conv: r.conv, key: r.key, name: r.name, id: r.id }); } catch (e) { return ctx.toast('학생에게 전달하지 못했어요. 잠시 후 다시 해 주세요'); }
   if (conv && !conv.ended) await endConv(true);
   conv = { conv: r.conv, key: null, with: { ...r.with }, toId: null, since: 0, ended: false, student: true };
   $('oLog').innerHTML = '';
-  note(`${nick} 학생에게 말을 걸었어요. 학생이 다음에 독서실과 연결될 때(최대 30초) 알림이 떠요.`);
+  note(`${nick} 학생에게 말을 걸었어요. 학생 화면에 바로 알림이 떠요.`);
   openSheet();
   startPoll();
 }
@@ -560,7 +569,7 @@ function takeCall() {
   if (conv && !conv.ended) return; // 지금 대화가 끝나면 이어서
   const c = pendingCalls.shift();
   if (!c) return;
-  conv = { conv: c.conv, key: c.key, with: { name: c.name, animal: 'bear', online: true }, toId: c.id, since: 0, ended: false, student: false };
+  conv = { conv: c.conv, key: c.key, with: { name: c.name, animal: 'bear', online: true }, toId: c.id, since: 0, ended: false, student: false, fromCall: true };
   $('oLog').innerHTML = '';
   note(`${c.name} 선생님이 말을 걸었어요 🙋`);
   ctx.toast(`💬 ${c.name} 선생님이 말을 걸었어요`);
