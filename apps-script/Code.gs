@@ -7,6 +7,7 @@
  * [스크립트 속성] (프로젝트 설정 > 스크립트 속성)
  *   GEMINI_API_KEY : 필수. Google AI Studio에서 받은 키
  *   ACCESS_CODE    : 선택. 넣으면 학생이 처음에 이 수업 코드를 입력해야 사용 가능
+ *   GEMINI_MODEL   : 선택. 쓸 제미나이 모델 이름 (예: gemini-2.5-flash). 비우면 아래 MODEL
  *
  * [교과 추가하기] — '과목' 탭 (처음 한 번 편집기에서 setupSubjects 실행하면 자동으로 만들어짐)
  *   한 줄 = 교과 하나.  A 사용(체크) | B 교과 이름 | C 연결 낱말 | D 교과서 탭 이름 | E 프롬프트 | F 첫 인사
@@ -28,7 +29,7 @@
  *   웹앱 액세스 권한은 '모든 사용자'여야 독서실에서 부를 수 있어요.
  */
 
-const MODEL = 'gemini-flash-latest';  // 필요하면 'gemini-2.5-flash' 등으로 바꾸기
+const MODEL = 'gemini-2.5-flash';     // 기본 모델. 스크립트 속성 GEMINI_MODEL에 적으면 그 모델을 먼저 씀 (코드를 덮어써도 유지)
 const EXCERPT_PAGES = 4;              // 한 번에 챗봇에게 보여줄 교과서 쪽 수
 const MAX_TURNS = 30;                 // 서버로 보내는 최근 대화 수
 const MAX_IMAGES = 2;                 // 서버로 보내는 최근 사진 수
@@ -367,7 +368,7 @@ function toContents_(history) {
 const DAY_LIMIT_MSG = '오늘은 뭉치 박사가 질문을 너무 많이 받아서 쉬는 중이야 🐾 내일 다시 물어봐 줘! (급하면 교무실 선생님께 질문해 봐)';
 
 function callGemini_(key, system, contents) {
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent';
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + (getProp_('GEMINI_MODEL') || MODEL) + ':generateContent';
   const options = {
     method: 'post',
     contentType: 'application/json',
