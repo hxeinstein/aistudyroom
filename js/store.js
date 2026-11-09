@@ -40,7 +40,7 @@ export function dayStartTs(key) {
 }
 
 function blank() {
-  return { v: 1, profile: null, exam: { name: '시험', date: '' }, sound: false, days: {}, active: null };
+  return { v: 1, profile: null, exam: { name: '시험', date: '' }, sound: 'off', days: {}, active: null };
 }
 
 let state = load();
@@ -72,8 +72,8 @@ export function setExam(exam) {
   state.exam = exam;
   save();
 }
-export function setSound(on) {
-  state.sound = on;
+export function setSound(mode) {
+  state.sound = mode;
   save();
 }
 

@@ -1,7 +1,7 @@
 import * as S from './store.js';
 import { createWorld, seatName } from './world.js';
 import { drawPlanner, ensureFonts, savePlannerImage } from './planner.js';
-import { setRain } from './sound.js';
+import { setSound, SOUNDS } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -39,20 +39,30 @@ function boot() {
   setInterval(refreshHud, 1000);
   $('btnPlanner').onclick = () => openPlanner(S.dayKey());
   $('btnSettings').onclick = openSettings;
-  $('btnSound').onclick = () => { S.setSound(!st.sound); applySound(); };
+  $('btnSound').onclick = () => {
+    const i = SOUNDS.findIndex((x) => x.id === soundMode());
+    const next = SOUNDS[(i + 1) % SOUNDS.length];
+    S.setSound(next.id);
+    applySound();
+    toast(`${next.icon} ${next.name}`);
+  };
   $('btnPause').onclick = togglePause;
   $('btnStop').onclick = openStop;
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.activeSession() && !S.isPaused()) keepAwake(true); });
   applySound(false);
 }
 
+// 예전 저장값(true/false) 호환
+const soundMode = () => (st.sound === true ? 'rain' : st.sound || 'off');
 function applySound(play = true) {
-  $('btnSound').textContent = st.sound ? '🌧️' : '🔇';
-  if (play || !st.sound) setRain(st.sound);
+  const mode = soundMode();
+  $('btnSound').textContent = SOUNDS.find((x) => x.id === mode).icon;
+  $('btnSound').title = SOUNDS.find((x) => x.id === mode).name;
+  if (play || mode === 'off') setSound(mode);
 }
 // 브라우저 정책상 소리는 첫 터치 후에 켤 수 있음
 window.addEventListener('pointerdown', function once() {
-  if (st.sound) setRain(true);
+  if (soundMode() !== 'off') setSound(soundMode());
   window.removeEventListener('pointerdown', once);
 });
 
