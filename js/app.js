@@ -52,9 +52,11 @@ function boot() {
   const a = st.active;
   if (a) {
     if (a.day !== S.dayKey()) {
-      S.stopSession(false);
+      S.stopSession(false, a.alive);   // 날이 바뀌었으면 마지막으로 켜져 있던 때까지만
     } else if (world.restoreSeat(a.seat ?? 0)) {
       showStudy();
+      const gone = S.awayAfterClose();
+      if (gone) setTimeout(() => askAway(gone.from, gone.ms, true), 600);
     } else {
       S.stopSession(false);
     }
@@ -64,6 +66,8 @@ function boot() {
   renderBar();
   refreshHud();
   setInterval(refreshHud, 1000);
+  setInterval(() => { if (document.visibilityState === 'visible') S.touchAlive(); }, 15000);
+  window.addEventListener('pagehide', () => { if (document.visibilityState === 'visible') S.touchAlive(); });
   $('btnPlanner').onclick = () => openPlanner(S.dayKey());
   $('btnSettings').onclick = openSettings;
   $('btnSound').onclick = (e) => { e.stopPropagation(); toggleSoundMenu(); };
@@ -99,14 +103,14 @@ function boot() {
     const studying = S.activeSession() && !S.isPaused();
     if (document.visibilityState === 'hidden') {
       hiddenAt = studying ? Date.now() : 0;
+      if (studying) S.touchAlive();
       return;
     }
     if (studying) keepAwake(true);
     const away = hiddenAt ? Date.now() - hiddenAt : 0;
     hiddenAt = 0;
-    if (studying && away >= 60 * 1000) {
-      toast(`다른 화면에 있던 ${S.fmtHM(away)}도 공부 시간에 포함됐어요 📚 (쉬었다면 ☕ 휴식을 눌러주세요)`, 5000);
-    }
+    if (studying && away >= 60 * 1000) askAway(Date.now() - away, away, false);
+    else S.touchAlive();
   });
   applySound(false);
 }
@@ -486,6 +490,25 @@ function togglePause() {
   if (S.isPaused()) S.resumeSession(); else S.pauseSession();
   updatePauseUI();
   Room.syncNow();
+}
+
+// 독서실을 떠나 있다 돌아오면: 그동안 공부했는지 쉬었는지 고르기
+function askAway(from, ms, closed) {
+  if (!S.activeSession() || S.isPaused()) return;
+  const m = openModal(`
+    <div class="big-emoji">👀</div>
+    <h2 class="center">그동안 뭐 했어?</h2>
+    <p class="desc center">${closed ? '독서실 화면을 닫았다가' : '다른 화면에 갔다가'} <b>${S.fmtHM(ms)}</b> 만에 돌아왔어요.</p>
+    <div class="foot" style="flex-direction:column">
+      <button class="btn primary block" id="awStudy">📚 공부했어요 <small>(공부 시간에 넣기)</small></button>
+      <button class="btn soft block" id="awRest">☕ 쉬었어요 <small>(공부 시간에서 빼기)</small></button>
+    </div>`, { dismiss: false });
+  m.querySelector('#awStudy').onclick = () => { S.touchAlive(); closeModal(); toast('공부 시간에 넣었어요 📚'); };
+  m.querySelector('#awRest').onclick = () => {
+    S.excludeAway(from, Date.now());
+    closeModal(); refreshHud();
+    toast(`${S.fmtHM(ms)}은 공부 시간에서 뺐어요 ☕`);
+  };
 }
 
 function openStop() {

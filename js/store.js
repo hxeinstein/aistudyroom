@@ -202,12 +202,36 @@ export function resumeSession() {
   a.segStart = Date.now();
   save();
 }
-/** 세션 종료. done=true면 연결된 할 일 체크 */
-export function stopSession(done) {
+/** 독서실 화면이 켜져 있다는 신호 (탭을 닫았다 다시 열었을 때 얼마나 떠나 있었는지 알려고) */
+export function touchAlive() {
+  const a = state.active;
+  if (!a || a.segStart == null) return;
+  a.alive = Date.now();
+  save();
+}
+/** 탭을 닫았다가 다시 열었을 때: 마지막으로 켜져 있던 때부터 지금까지 (공부 중이었을 때만) */
+export function awayAfterClose() {
+  const a = state.active;
+  if (!a || a.segStart == null || !a.alive) return null;
+  const ms = Date.now() - a.alive;
+  return ms >= 60 * 1000 ? { from: a.alive, ms } : null;
+}
+/** 떠나 있던 시간(from ~ to)을 공부 시간에서 빼기 */
+export function excludeAway(from, to) {
+  const a = state.active;
+  const s = activeSession();
+  if (!s || a.segStart == null) return;
+  if (from > a.segStart) pushSeg(s, a.segStart, from);
+  a.segStart = Math.max(to, from);
+  a.alive = Date.now();
+  save();
+}
+/** 세션 종료. done=true면 연결된 할 일 체크 (end: 끝난 시각, 기본은 지금) */
+export function stopSession(done, end) {
   const a = state.active;
   const s = activeSession();
   if (!s) return null;
-  if (a.segStart != null) pushSeg(s, a.segStart, Date.now());
+  if (a.segStart != null) pushSeg(s, a.segStart, Math.max(a.segStart, end || Date.now()));
   const day = state.days[a.day];
   if (done) {
     const t = day.todos.find((x) => x.id === s.todoId);
