@@ -867,7 +867,7 @@ export function createWorld(container, opts = {}) {
   for (let i = 0; i < 40; i++) {
     const a = prnd() * Math.PI * 2, r = 12.5 + prnd() * 7;
     const x = Math.cos(a) * r, z = Math.sin(a) * r * 0.85;
-    if (z > 2.5 && Math.abs(x) < 14) continue;   // 화면 앞쪽은 비워서 시야 확보
+    if (z > 2.5 && x > -14) continue;   // 화면 앞쪽과 오솔길 쪽은 비워서 시야 확보
     const g = new THREE.Group();
     tree(PX + x, z, 0.9 + prnd() * 0.7, prnd() < 0.4);
   }
@@ -1048,8 +1048,11 @@ export function createWorld(container, opts = {}) {
     // 길가 나무 (양옆으로 숲 느낌) · 작은 등
     for (let i = 0; i < 14; i++) {
       const t = 0.08 + (i / 14) * 0.72, p = trail.getPointAt(t), tg = trail.getTangentAt(t);
-      const sd = (i % 2 ? 1 : -1) * (2.6 + trnd() * 1.8);
-      tree(p.x - tg.z * sd, p.z + tg.x * sd, 0.8 + trnd() * 0.5, trnd() < 0.4);
+      // 화면(카메라) 쪽인 앞쪽(+z)에는 나무를 두지 않아 걸어가는 모습이 가려지지 않게
+      const d = 2.6 + trnd() * 1.8;
+      const a1 = [p.x - tg.z * d, p.z + tg.x * d], a2 = [p.x + tg.z * d, p.z - tg.x * d];
+      const [tx, tz] = a1[1] < a2[1] ? a1 : a2;
+      tree(tx, tz - 0.8, 0.8 + trnd() * 0.5, trnd() < 0.4);
     }
     for (const t of [0.15, 0.4, 0.65]) {
       const p = trail.getPointAt(t), tg = trail.getTangentAt(t);
@@ -1258,8 +1261,45 @@ export function createWorld(container, opts = {}) {
       }
     } else meteor.material.opacity = 0;
   }
-  function enterPark() { switchArea('park', PARK_ENTRY.clone(), Math.PI); opts.onSfx && opts.onSfx('step'); }
-  function exitPark() { if (player.ride) leaveRide(true); player.slide = null; switchArea('main', new THREE.Vector3(-8.4, DECK_Y, -0.2), Math.PI / 2); }
+  // 오솔길을 따라 걸어가는 모습 (몇 초) → 도착하면 쉼터 / 공부방으로
+  let trailWalk = null;   // { t, back }
+  const TRAIL_SEC = 4.2;
+  function startTrailWalk(back) {
+    path = []; pendingSeat = null; pendingBot = null; pendingOffice = null;
+    trailWalk = { t: 0, back: !!back };
+    opts.onTrail && opts.onTrail(true);
+  }
+  function stepTrailWalk(dt) {
+    if (!trailWalk) return false;
+    trailWalk.t += dt;
+    const k = Math.min(1, trailWalk.t / TRAIL_SEC);
+    const u = trailWalk.back ? 1 - k : k;
+    const pt = trail.getPointAt(u), tg = trail.getTangentAt(u);
+    const p = player.obj.position;
+    p.set(pt.x, 0.02 + (DECK_Y - 0.01) * Math.max(0, (u - 0.82) / 0.18), pt.z);
+    const dir = trailWalk.back ? -1 : 1;
+    faceDir(tg.x * dir, tg.z * dir, dt * 2);
+    player.mode = 'walk';
+    if (k >= 1) {
+      const back = trailWalk.back;
+      trailWalk = null;
+      opts.onTrail && opts.onTrail(false);
+      if (back) { p.set(-8.4, DECK_Y, -0.2); player.mode = 'idle'; }
+      else { switchArea('park', PARK_ENTRY.clone(), Math.PI); opts.onSfx && opts.onSfx('step'); }
+    }
+    return true;
+  }
+  function enterPark() {
+    if (observer) { switchArea('park', PARK_ENTRY.clone(), Math.PI); return; }
+    startTrailWalk(false);
+  }
+  function exitPark() {
+    if (player.ride) leaveRide(true); player.slide = null;
+    if (observer) { switchArea('main', new THREE.Vector3(-8.4, DECK_Y, -0.2), Math.PI / 2); return; }
+    const end = trail.getPointAt(1);
+    switchArea('main', new THREE.Vector3(end.x, DECK_Y, end.z), 0);
+    startTrailWalk(true);
+  }
   function goToPark() {
     if (area.name === 'park') return;
     if (area.name === 'office') { exitOffice(); }
@@ -1388,7 +1428,7 @@ export function createWorld(container, opts = {}) {
   }
 
   function walkTo(target) {
-    if (studying) return;
+    if (studying || trailWalk) return;
     if (player.seat || player.officeDesk || player.ride) standUp();
     path = findPath(player.obj.position, target);
   }
@@ -1756,7 +1796,7 @@ export function createWorld(container, opts = {}) {
     if (!down) return;
     const wasDrag = down.drag;
     down = null;
-    if (wasDrag || e.target !== el || studying) return;
+    if (wasDrag || e.target !== el || studying || trailWalk) return;
     const r = el.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
@@ -1917,6 +1957,8 @@ export function createWorld(container, opts = {}) {
     if (!kx && !kz && (stick.x || stick.y)) { kx = stick.x; kz = stick.y; mag = Math.min(1, Math.hypot(kx, kz)); }
     const p = player.obj.position;
     let moving = false;
+    const walkingTrail = stepTrailWalk(dt);
+    if (walkingTrail) { kx = kz = 0; }
     if ((kx || kz) && !studying && !player.slide) {
       if (follow) stopFollow();
       if (player.seat || player.officeDesk || player.ride) standUp();
@@ -1929,7 +1971,7 @@ export function createWorld(container, opts = {}) {
       const len = Math.hypot(dx, dz);
       moveStep(dx / len, dz / len, dt * (mag < 0.35 ? 0.45 : mag));
       moving = true;
-    } else if (path.length && !player.slide) {
+    } else if (path.length && !player.slide && !walkingTrail) {
       const target = path[0];
       v.subVectors(target, p);
       v.y = 0;
@@ -1986,7 +2028,7 @@ export function createWorld(container, opts = {}) {
         faceDir(v.x, v.z, dt);
       }
     }
-    if (!player.seat && !player.officeDesk && !player.ride && !player.slide) {
+    if (!player.seat && !player.officeDesk && !player.ride && !player.slide && !walkingTrail) {
       player.mode = moving ? 'walk' : 'idle';
       p.y = DECK_Y;
     }

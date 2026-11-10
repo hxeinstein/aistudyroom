@@ -51,6 +51,7 @@ function boot(skipOnboarding = false) {
     onOfficeSeat: (n, t) => Office.tapSeat(n, t),
     onRide: (r) => { renderBar(); if (r && r.stretch) startStretch(); else if (!r) stopStretch(); },
     onVend: () => openVend(),
+    onTrail: (on) => document.body.classList.toggle('on-trail', on),   // 오솔길을 걷는 동안 버튼 줄 숨김
     onSfx: (k) => sfx(k),
     confirmClosedOffice: () => Office.confirmClosed(),
   });

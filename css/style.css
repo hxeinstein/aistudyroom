@@ -488,3 +488,4 @@ body.in-park .study-panel { display: none; }
 /* 모달 제목 왼쪽 위 리본 느낌 */
 .modal h2 { color: var(--brown); }
 .toast { border-radius: 20px; }
+body.on-trail .actionbar, body.on-trail .joy { display: none !important; }
