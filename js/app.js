@@ -8,6 +8,7 @@ import * as Office from './office.js';
 import * as Room from './room.js';
 import * as Board from './board.js';
 import { initJoystick } from './joystick.js';
+import { badWord } from './words.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -167,7 +168,7 @@ function refreshHud() {
   const s = S.activeSession();
   if (s) {
     $('studyTimer').textContent = S.fmtClock(S.activeElapsed());
-    world.setPlayer({ name: st.profile?.name || '', status: S.isPaused() ? `☕ 쉬는 중` : `📚 ${S.subjectById(s.subject).name} 열공 중 · ${S.fmtHM(S.activeElapsed())}` });
+    world.setPlayer({ name: st.profile?.name || '', goal: S.getGoal(), status: S.isPaused() ? `☕ 쉬는 중` : `📚 ${S.subjectById(s.subject).name} 열공 중 · ${S.fmtHM(S.activeElapsed())}` });
   }
 }
 
@@ -298,9 +299,6 @@ function openOnboarding() {
   };
 }
 
-// 모두에게 보이는 글(목표) 거르기 — 게시판과 같은 낱말
-const BAD_WORDS = ['시발', '씨발', 'ㅅㅂ', 'ㅆㅂ', '병신', 'ㅂㅅ', '개새', '좆', '존나', 'ㅈㄴ', '꺼져', '죽어', '닥쳐', '미친놈', '미친년', '애미', '느금', 'fuck', 'shit', 'bitch'];
-const badWord = (t) => { const x = String(t).toLowerCase().replace(/\s/g, ''); return BAD_WORDS.some((w) => x.includes(w)); };
 
 // ---------------- 지금 접속 중 (오른쪽 위 👥) ----------------
 function fmtMin(ms) { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`; }
@@ -463,6 +461,7 @@ function openSettings() {
     const goal = m.querySelector('#sGoal').value.trim();
     if (badWord(goal)) return toast('목표에 쓸 수 없는 말이 있어요');
     S.setGoal(goal);
+    world.setPlayer({ name, goal });
     S.setShowInRank(m.querySelector('#sRank').checked);
     Room.syncNow();
     world.setPlayer({ animal, name });

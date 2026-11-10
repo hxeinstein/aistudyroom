@@ -388,3 +388,7 @@ body.studying .joy, body.observer .joy { display: none !important; }
   display: flex; align-items: center; gap: 8px; white-space: nowrap;
 }
 .follow-bar button { border: 0; background: #fff; color: #2F5DB8; border-radius: 999px; padding: 6px 12px; font-weight: 800; }
+/* 이름표 아래 오늘의 목표 (앉아 있을 때) */
+.name-tag.has-goal { flex-direction: column; align-items: center; gap: 1px; border-radius: 14px; padding: 4px 12px; }
+.name-tag .nt-row { display: flex; align-items: center; gap: 6px; }
+.name-tag .nt-goal { font-size: 11px; font-weight: 700; color: var(--brown); max-width: 180px; overflow: hidden; text-overflow: ellipsis; }

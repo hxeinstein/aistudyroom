@@ -1,4 +1,5 @@
 // 3D 숲속 독서실 — 둥글고 아기자기한 로우폴리 스타일 (외부 그림 파일 없이 코드로 생성)
+import { badWord } from './words.js';
 import * as THREE from '../vendor/three.module.min.js';
 import { makeAnimal, animateAnimal, animalSpeed } from './animals.js';
 export { makeAnimal };
@@ -471,8 +472,12 @@ export function createWorld(container, opts = {}) {
     actors.push(a);
     return a;
   }
-  function setLabel(a, { name, status }) {
-    a.el.innerHTML = (a.me ? '<b class="me-dot">나</b>' : '') + `<span>${esc(name)}</span>` + (status ? `<small>${esc(status)}</small>` : '');
+  // goal: 자리에 앉아 있을 때 이름표 아래에 '🎯 오늘의 목표' 한 줄
+  function setLabel(a, { name, status, goal }) {
+    const row = (a.me ? '<b class="me-dot">나</b>' : '') + `<span>${esc(name)}</span>` + (status ? `<small>${esc(status)}</small>` : '');
+    const g = goal && a.seat && !badWord(goal) ? goal : '';
+    a.el.classList.toggle('has-goal', !!g);
+    a.el.innerHTML = g ? `<div class="nt-row">${row}</div><div class="nt-goal">🎯 ${esc(g)}</div>` : row;
   }
 
   const cushionMat = [m('#F7C6D0'), m('#FFE9A8')];
@@ -527,7 +532,7 @@ export function createWorld(container, opts = {}) {
   player.animal = opts.animal || 'bear';
   player.lookKey = 's:' + player.animal;
   let teacherLook = null;
-  let baseAnimal = player.animal, baseName = opts.name || '', baseStatus = '';
+  let baseAnimal = player.animal, baseName = opts.name || '', baseStatus = '', baseGoal = '';
   const playerSpeed = () => animalSpeed(player.animal);
   player.obj.position.set(0, DECK_Y, 6.2);
   player.obj.rotation.y = Math.PI;
@@ -937,7 +942,7 @@ export function createWorld(container, opts = {}) {
     const live = x.st && !x.ps;
     const ms = (x.el || 0) + (live ? Date.now() - r.at : 0);
     const status = live ? `📚 ${x.sj || '공부'} 열공 중 · ${fmtMin(ms)}` : x.st ? '☕ 쉬는 중' : '';
-    setLabel(r.a, { name: x.n, status });
+    setLabel(r.a, { name: x.n, status, goal: x.gl });
   }
   setInterval(() => remotes.forEach(remoteLabel), 5000);
   /**
@@ -1093,11 +1098,14 @@ export function createWorld(container, opts = {}) {
     player.seat = null;
     player.obj.position.copy(s.approach);
     player.mode = 'idle';
+    myLabel();
     deskLight.intensity = 0;
     opts.onStand && opts.onStand();
   }
+  function myLabel() { setLabel(player, { name: teacherLook ? `${teacherLook.name} 선생님` : baseName, status: baseStatus, goal: teacherLook ? '' : baseGoal }); }
   function sitDown(seat) {
     sitActor(player, seat);
+    myLabel();
     opts.onSit && opts.onSit(seat.idx);
   }
   function setStudying(on) {
@@ -1499,9 +1507,10 @@ export function createWorld(container, opts = {}) {
     },
     zoomBy(f) { setZoom(zoomTarget * f); },
     resetView() { yawTarget = 0; pitchTarget = 0.65; setZoom(11.9); },
-    setPlayer({ animal, name, status, force }) {
+    setPlayer({ animal, name, status, goal, force }) {
       if (animal) baseAnimal = animal;
       if (name !== undefined) { baseName = name; baseStatus = status; }
+      if (goal !== undefined) baseGoal = goal;
       const look = teacherLook;
       const want = look ? look.animal || 'bear' : baseAnimal;
       const key = look ? `t:${want}:${look.color}:${look.glasses ? 1 : 0}` : `s:${want}`;
@@ -1526,7 +1535,7 @@ export function createWorld(container, opts = {}) {
         if (player.officeDesk) sitAtDesk(player.officeDesk);
         player.obj.visible = !observer;
       }
-      setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus });
+      setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus, goal: look ? '' : baseGoal });
     },
     walkToBot: tapBot,
     startFollow,
