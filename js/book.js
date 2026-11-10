@@ -12,7 +12,7 @@ const el = {
   pdf: $('pdf'), pdfInfo: $('pdfInfo'), subject: $('subject'), tab: $('tab'), room: $('room'), bot: $('bot'),
   register: $('register'), pdfPage: $('pdfPage'), bookPage: $('bookPage'), offsetInfo: $('offsetInfo'),
   preview: $('pagePreview'), toc: $('toc'), extract: $('extract'), upload: $('upload'), bar: $('bar'),
-  status: $('status'), warn: $('warn'), done: $('done'), loginWarn: $('loginWarn'),
+  status: $('status'), warn: $('warn'), done: $('done'), loginWarn: $('loginWarn'), loginBox: $('loginBox'),
 };
 
 let doc = null;       // pdf.js 문서
@@ -21,14 +21,26 @@ let busy = false;
 
 /* ---------- 관리자 확인 ---------- */
 function teacher() { try { return JSON.parse(localStorage.getItem('aistudyroom.teacher') || 'null'); } catch (e) { return null; } }
-const me = teacher();
-const isAdmin = !!(me && me.token && me.me && me.me.admin);
+let me = teacher();
+let isAdmin = !!(me && me.token && me.me && me.me.admin);
 if (!isAdmin) {
-  el.loginWarn.hidden = false;
-  el.loginWarn.innerHTML = me
-    ? '관리자 선생님만 쓸 수 있어요. 관리자 초대코드로 가입한 선생님으로 <a href="./">독서실</a>에서 로그인해 주세요.'
-    : '먼저 <a href="./">독서실</a>에서 관리자 선생님으로 로그인한 뒤, 이 페이지를 다시 열어 주세요. (같은 브라우저)';
+  el.loginBox.hidden = false;
+  if (me) el.loginWarn.textContent = '지금 로그인한 선생님은 관리자가 아니에요. 관리자 초대코드로 로그인해 주세요.';
 }
+// 이 페이지에서 바로 로그인 (컴퓨터·휴대폰 어디서든)
+$('lgBtn').addEventListener('click', async () => {
+  const body = { action: 'office.login', code: $('lgCode').value, name: $('lgName').value, password: $('lgPw').value };
+  el.loginWarn.textContent = '확인 중…';
+  let r;
+  try { r = await api(body); } catch (e) { el.loginWarn.textContent = '연결하지 못했어요. 인터넷을 확인해 주세요.'; return; }
+  if (r.error) { el.loginWarn.textContent = r.error; return; }
+  if (!r.me || !r.me.admin) { el.loginWarn.textContent = '관리자 초대코드로 가입한 선생님만 쓸 수 있어요.'; return; }
+  me = { token: r.token, me: r.me };
+  try { localStorage.setItem('aistudyroom.teacher', JSON.stringify(me)); } catch (e) {}
+  isAdmin = true;
+  el.loginBox.hidden = true;
+  refreshButtons();
+});
 
 CONFIG.BOTS.forEach((b) => {
   const o = document.createElement('option');
@@ -188,6 +200,7 @@ el.upload.addEventListener('click', async () => {
       for (let tries = 0; tries < 3 && !r; tries++) {
         try { r = await api(body); } catch (e) { if (tries === 2) throw e; await new Promise((ok) => setTimeout(ok, 2000 * (tries + 1))); }
       }
+      if (r && r.relogin) { el.loginBox.hidden = false; isAdmin = false; }
       if (!r || r.error) throw new Error((r && r.error) || '응답이 없어요');
       last = r;
       setProgress(i + 1, total);

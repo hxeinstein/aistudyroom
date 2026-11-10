@@ -28,7 +28,16 @@
     <h1>📚 교과서 넣기 <small style="font-size:14px;color:var(--muted)">(관리자)</small></h1>
     <p class="desc">교과서 PDF에서 쪽마다 글자를 뽑아 챗봇이 쓰는 구글 시트에 새 탭으로 넣어요.
       PDF는 <b>이 컴퓨터 브라우저 안에서만</b> 읽고, 어디에도 올리지 않아요. 그래서 용량이 커도 괜찮아요.</p>
-    <div class="warn" id="loginWarn" hidden></div>
+    <div class="card" id="loginBox" hidden>
+      <label class="lbl">관리자 선생님 로그인</label>
+      <div class="row2">
+        <input class="field" id="lgCode" placeholder="초대코드 (예: T-ADMIN0)" autocomplete="off" />
+        <input class="field" id="lgName" placeholder="닉네임" />
+        <input class="field" id="lgPw" type="password" placeholder="비밀번호" />
+        <button class="btn primary" id="lgBtn" type="button">로그인</button>
+      </div>
+      <div class="warn" id="loginWarn"></div>
+    </div>
 
     <div class="card">
       <label class="lbl">1. 교과서 PDF 고르기 (학생용 교과서 추천)</label>
