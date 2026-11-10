@@ -55,6 +55,7 @@ function boot(skipOnboarding = false) {
     confirmClosedOffice: () => Office.confirmClosed(),
   });
   initJoystick(world);
+  world.setBanner(Sch.schoolName() || '숲속 독서실');   // 우리 학교 이름 가랜드
   initWeather(world, () => toast('❄️ 첫눈이에요! 쉼터에 나가 볼까?', 6000));
   startStats();
   startNotice();
@@ -1152,7 +1153,7 @@ async function start() {
   if (cur.code) {
     // 학교 코드가 바뀌었거나 꺼졌는지 확인 (이름·기본 학교 여부도 새로)
     post({ action: 'school.check', code: cur.code }).then((r) => {
-      if (r && r.ok) { if (r.code !== cur.code || r.def !== cur.def || r.name !== cur.name || JSON.stringify(r.weather || null) !== JSON.stringify(cur.weather || null)) { Sch.setSchool(r); if (r.def !== cur.def || !cur.weather !== !r.weather) location.reload(); } }
+      if (r && r.ok) { if (r.code !== cur.code || r.def !== cur.def || r.name !== cur.name || JSON.stringify(r.weather || null) !== JSON.stringify(cur.weather || null)) { Sch.setSchool(r); if (r.name !== cur.name && world) world.setBanner(r.name); if (r.def !== cur.def || !cur.weather !== !r.weather) location.reload(); } }
       else if (r && r.error) { Sch.setSchool(null); toast('학교 코드가 바뀌었어요. 새 학교 코드를 넣어 주세요', 5000); openSchoolGate(false); }
     }).catch(() => {});
   }

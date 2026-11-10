@@ -563,6 +563,57 @@ export function createWorld(container, opts = {}) {
   let studying = false;
 
 
+  // ---------------- 학교 이름 가랜드 (안쪽 벽 위, 글자 하나에 깃발 하나) ----------------
+  let banner = null;
+  const FLAG_COLORS = ['#F7A8B8', '#FFD670', '#9ED8A8', '#9CC8F2', '#D7B8F5', '#FFB98A'];
+  function setBanner(text) {
+    if (banner) { scene.remove(banner.group); banner = null; }
+    const chars = [...String(text || '').trim()].slice(0, 20);
+    if (!chars.length) return;
+    const group = new THREE.Group();
+    // 두 책상 묶음 사이 통로 위, 양쪽 기둥에 걸어요 (들어오자마자 화면 위쪽에 보이게)
+    const Z = (PAIR_Z[0] + PAIR_Z[1]) / 2, HALF = 9.4;
+    const sagY = (x) => DECK_Y + 3.0 - 0.45 * (1 - (x / HALF) ** 2);   // 가운데가 살짝 처진 줄
+    // 글자 깃발 간격: 글자가 많으면 좁게
+    const gap = Math.min(0.9, 15.5 / chars.length);
+    const w = gap * 0.86;
+    const xs = [];
+    const start = -((chars.length - 1) * gap) / 2;
+    chars.forEach((_, i) => xs.push({ x: start + i * gap, ch: chars[i] }));
+    // 양옆은 글자 없는 작은 깃발로 채움
+    for (let x = start - gap; x > -HALF + 0.3; x -= gap) xs.unshift({ x, ch: '' });
+    for (let x = start + chars.length * gap; x < HALF - 0.3; x += gap) xs.push({ x, ch: '' });
+    const flags = [];
+    xs.forEach((f, i) => {
+      const tex = canvasTex(128, 140, (c, cw, ch) => {
+        c.fillStyle = FLAG_COLORS[i % FLAG_COLORS.length];
+        c.beginPath(); c.moveTo(4, 4); c.lineTo(cw - 4, 4); c.lineTo(cw / 2, ch - 4); c.closePath(); c.fill();
+        c.strokeStyle = 'rgba(107,74,46,0.25)'; c.lineWidth = 4; c.stroke();
+        if (f.ch) { c.fillStyle = '#5A3E26'; c.font = `900 64px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(f.ch, cw / 2, 50); }
+      });
+      const size = f.ch ? w : w * 0.72;
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(size, size * 1.09), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+      const pivot = new THREE.Group();
+      pivot.position.set(f.x, sagY(f.x), Z);
+      flag.position.y = -size * 0.545;
+      pivot.add(flag);
+      group.add(pivot);
+      flags.push({ pivot, p: i * 0.7 });
+    });
+    const pts = [];
+    for (let k = 0; k <= 40; k++) { const x = -HALF + (2 * HALF * k) / 40; pts.push(new THREE.Vector3(x, sagY(x) + 0.02, Z)); }
+    group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#8A5A33' })));
+    for (const px of [-HALF - 0.05, HALF + 0.05]) {
+      group.add(mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.1, 8), '#8A5A33', { x: px, y: DECK_Y + 1.55, z: Z }));
+      group.add(mesh(new THREE.SphereGeometry(0.13, 10, 10), '#F5C451', { x: px, y: DECK_Y + 3.15, z: Z }));
+    }
+    scene.add(group);
+    banner = { group, flags };
+  }
+  function stepBanner(t) {
+    if (banner) for (const f of banner.flags) f.pivot.rotation.x = Math.sin(t * 1.6 + f.p) * 0.08;   // 살랑살랑
+  }
+
   // ---------------- 응원 게시판 · 건의함 (안쪽 벽, 책장 사이) ----------------
   const BOARD_POS = { x: -0.7, z: -6.55 };
   const BOX_POS = { x: 1.75, z: -6.5 };
@@ -1898,6 +1949,7 @@ export function createWorld(container, opts = {}) {
 
     stepRemotes(dt);
     stepPark(dt, t);
+    stepBanner(t);
     for (const a of actors) if (!a.fixed) animateAnimal(a.obj, a.mode, t + a.obj.userData.phase, dt);
     for (const av of officeSitters.values()) animateAnimal(av, 'study', t + av.userData.phase, dt);
     clouds.forEach((c, i) => { c.position.x += dt * (0.3 + i * 0.05); if (c.position.x > 40) c.position.x = -40; });
@@ -2030,6 +2082,7 @@ export function createWorld(container, opts = {}) {
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus, goal: look ? '' : baseGoal });
     },
     walkToBot: tapBot,
+    setBanner,
     // 쉼터
     goToPark,
     tapRide,
