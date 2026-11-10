@@ -729,12 +729,13 @@ export function createWorld(container, opts = {}) {
   // 데크 끝 표지판 + 징검돌
   const post = new THREE.Group();
   post.position.set(9.55, DECK_Y, 1.0);
-  post.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 6), '#8A5A33', { y: 0.6 }));
+  // 기둥은 팻말 양옆에 (가운데 기둥이 글씨를 가리지 않게)
+  for (const sx of [-0.56, 0.56]) post.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.35, 6), '#8A5A33', { x: sx, y: 0.67, z: -0.03 }));
   const arrow = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.38), new THREE.MeshLambertMaterial({ map: signTexture('교무실 →'), transparent: true }));
-  arrow.position.y = 1.1;
+  arrow.position.set(0, 1.1, 0.03);
   post.add(arrow);
   const arrowClosed = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), closedSign.material);
-  arrowClosed.position.y = 1.15;
+  arrowClosed.position.set(0, 1.15, 0.035);
   post.add(arrowClosed);
   post.traverse((o) => { o.userData.officeDoor = true; });
   scene.add(post);
@@ -992,10 +993,10 @@ export function createWorld(container, opts = {}) {
   scene.add(parkExitSign);
   // 공부방 입구의 '쉼터' 표지판
   const toPark = new THREE.Group(); toPark.position.set(1.7, DECK_Y, 7.65);
-  toPark.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 8), '#8A5A33', { y: 0.6 }));
+  for (const sx of [-0.47, 0.47]) toPark.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.3, 8), '#8A5A33', { x: sx, y: 0.65, z: -0.03 }));
   const tp = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.3), new THREE.MeshBasicMaterial({ map: canvasTex(320, 96, (c, w, h) => {
     c.fillStyle = '#E8F5E1'; c.beginPath(); c.roundRect(3, 3, w - 6, h - 6, 18); c.fill();
-    c.fillStyle = '#3F7F3B'; c.font = `900 40px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🌿 쉼터 →', w / 2, h / 2 + 2);
+    c.fillStyle = '#3F7F3B'; c.font = `900 40px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🌿 쉼터', w / 2, h / 2 + 2);
   }), transparent: true }));
   tp.position.set(0, 1.15, 0.04); toPark.add(tp);
   toPark.traverse((o) => { o.userData.toPark = true; });

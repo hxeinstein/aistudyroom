@@ -42,7 +42,7 @@ function boot(skipOnboarding = false) {
     onNearBot: () => renderBar(),
     onNearDoor: () => renderBar(),
     onArea: (name) => {
-      $('roomName').textContent = name === 'office' ? '교무실' : name === 'park' ? '🌿 쉼터' : (Sch.schoolName() ? `${Sch.schoolName()} 독서실` : '숲속 독서실');
+      $('roomName').textContent = name === 'office' ? '교무실' : name === 'park' ? '🌿 쉼터' : (Sch.schoolName() || '숲속 독서실');
       $('seatLabel').textContent = name === 'office' ? (Office.isTeacher() ? `${Office.teacherName()} 선생님` : '질문 코너의 챗봇에게 먼저 물어봐요') : name === 'park' ? '벤치에 앉거나 놀이기구를 눌러 봐요' : '자리를 골라 앉아보세요';
       Office.onArea(name);
       onParkArea(name);
@@ -56,7 +56,7 @@ function boot(skipOnboarding = false) {
   });
   initJoystick(world);
   world.setBanner(Sch.schoolName() || '숲속 독서실');   // 우리 학교 이름 가랜드
-  if (Sch.schoolName()) $('roomName').textContent = `${Sch.schoolName()} 독서실`;
+  if (Sch.schoolName()) $('roomName').textContent = Sch.schoolName();
   initWeather(world, () => toast('❄️ 첫눈이에요! 쉼터에 나가 볼까?', 6000));
   startStats();
   startNotice();

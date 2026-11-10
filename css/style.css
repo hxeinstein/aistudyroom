@@ -367,7 +367,13 @@ body.studying .joy, body.observer .joy { display: none !important; }
 .pp-btn { border: 0; background: #fff; width: 34px; height: 34px; border-radius: 50%; font-size: 16px; flex: none; box-shadow: 0 2px 0 #EADBC2; }
 .pp-btn:active { transform: scale(.92); }
 @media (max-width: 480px) {
-  .hud-left { max-width: calc(100vw - 254px); }
+  /* 휴대폰: 위쪽 버튼을 조금 작게 해서 왼쪽 이름표 자리를 넓힘 */
+  .hud .icon-btn { width: 36px; height: 36px; font-size: 17px; }
+  .people-btn { height: 36px; font-size: 14px; }
+  .pill { gap: 4px; padding: 5px; }
+  .room strong { font-size: 13px; }
+  .room span { font-size: 11px; }
+  .hud-left { max-width: calc(100vw - 220px); }
   .hud-left .pill { min-width: 0; }
   .room { min-width: 0; padding-right: 8px; }
   .room strong, .room span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
