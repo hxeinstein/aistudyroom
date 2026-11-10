@@ -857,10 +857,21 @@ export function createWorld(container, opts = {}) {
   // 땅 · 산책로
   const parkGround = mesh(new THREE.CylinderGeometry(21, 21.5, 0.3, 48), '#9BD67A', { x: PX, y: DECK_Y - 0.15, cast: false, receive: true });
   scene.add(parkGround);
-  const pathRing = new THREE.Mesh(new THREE.RingGeometry(7.65, 8.95, 72), mat('#E8D2A4'));
+  // 산책로: 오솔길과 같은 갈색 흙길 + 진한 테두리 + 자갈
+  for (const [r0, r1] of [[7.5, 7.68], [8.92, 9.1]]) {
+    const edge = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 72), mat('#9C7046'));
+    edge.rotation.x = -Math.PI / 2; edge.scale.y = 0.75; edge.position.set(PX, DECK_Y + 0.011, 0); scene.add(edge);
+  }
+  const pathRing = new THREE.Mesh(new THREE.RingGeometry(7.65, 8.95, 72), mat('#C69A68'));
   pathRing.rotation.x = -Math.PI / 2; pathRing.scale.y = 0.75; pathRing.position.set(PX, DECK_Y + 0.012, 0); pathRing.receiveShadow = true;
   scene.add(pathRing);
-  const entryPath = mesh(new THREE.BoxGeometry(1.3, 0.02, 3.2), '#E8D2A4', { x: PX, y: DECK_Y + 0.011, z: 7.6, cast: false, receive: true });
+  scene.add(mesh(new THREE.BoxGeometry(1.64, 0.018, 3.2), '#9C7046', { x: PX, y: DECK_Y + 0.009, z: 7.6, cast: false, receive: true }));
+  const entryPath = mesh(new THREE.BoxGeometry(1.32, 0.02, 3.2), '#C69A68', { x: PX, y: DECK_Y + 0.011, z: 7.6, cast: false, receive: true });
+  { const prd2 = mulberry(77);
+    for (let i = 0; i < 90; i++) {
+      const a = prd2() * Math.PI * 2, r = 7.75 + prd2() * 1.1;
+      scene.add(mesh(new THREE.CylinderGeometry(0.05 + prd2() * 0.05, 0.06, 0.02, 6), prd2() < 0.5 ? '#B08658' : '#D8B98C', { x: PX + Math.cos(a) * r, y: DECK_Y + 0.025, z: Math.sin(a) * r * 0.75, cast: false }));
+    } }
   scene.add(entryPath);
   // 나무 · 꽃
   const prnd = mulberry(21);
