@@ -51,6 +51,8 @@ function boot() {
   });
   initJoystick(world);
   initWeather(world);
+  startStats();
+  startNotice();
 
   // 진행 중이던 공부 복원 (새로고침/앱 전환)
   const a = st.active;
@@ -401,6 +403,114 @@ function renderPeople() {
   }));
 }
 
+// ---------------- 공부 통계 보내기 (관리자 요약용, 이름 없이 기기 번호만) ----------------
+async function post(body) {
+  const res = await fetch(CONFIG.CHATBOT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  return res.json();
+}
+function deviceId() {
+  let id = '';
+  try { id = localStorage.getItem('aistudyroom.device') || ''; } catch (e) {}
+  if (!id) { id = Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem('aistudyroom.device', id); } catch (e) {} }
+  return id;
+}
+let lastStat = '';
+function sendStat() {
+  if (!CONFIG.CHATBOT_URL || Office.isTeacher()) return;
+  const ms = Math.floor(S.totalMs() / 60000) * 60000;
+  if (ms < 60000) return;
+  const day = S.dayKey();
+  if (lastStat === day + ':' + ms) return;
+  lastStat = day + ':' + ms;
+  const subjects = {};
+  Object.entries(S.subjectTotals(day)).forEach(([id, v]) => { const n = S.subjectById(id).name; subjects[n] = (subjects[n] || 0) + v; });
+  post({ action: 'stat.day', device: deviceId(), day, ms, subjects }).catch(() => { lastStat = ''; });
+}
+function startStats() {
+  setTimeout(sendStat, 20000);
+  setInterval(sendStat, 10 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') sendStat(); });
+}
+
+// ---------------- 공지 (관리자가 쓰면 모두의 화면 위에) ----------------
+function startNotice() {
+  if (!CONFIG.CHATBOT_URL) return;
+  const load = async () => {
+    let r;
+    try { r = await post({ action: 'notice.get' }); } catch (e) { return; }
+    showNotice(r && r.notice, r && r.id);
+  };
+  load();
+  setInterval(load, 5 * 60 * 1000);
+}
+function showNotice(text, id) {
+  let seen = '';
+  try { seen = localStorage.getItem('aistudyroom.noticeSeen') || ''; } catch (e) {}
+  $('noticeBar')?.remove();
+  if (!text || seen === id) return;
+  const bar = document.createElement('div');
+  bar.id = 'noticeBar';
+  bar.className = 'notice-bar';
+  bar.innerHTML = `<span>📢 ${esc(text)}</span><button type="button" aria-label="닫기">✕</button>`;
+  bar.querySelector('button').onclick = () => { try { localStorage.setItem('aistudyroom.noticeSeen', id); } catch (e) {} bar.remove(); };
+  document.body.appendChild(bar);
+}
+
+// ---------------- 관리자: 독서실 요약 · 질문 통계 · 공지 ----------------
+async function openSummary() {
+  const m = openModal(`<h2>📈 독서실 요약</h2><div id="smBody"><p class="hint">불러오는 중…</p></div>
+    <div class="foot"><button class="btn primary" id="smClose" type="button">닫기</button></div>`, { wide: true });
+  m.querySelector('#smClose').onclick = closeModal;
+  let r;
+  try { r = await post({ action: 'office.admin', op: 'summary', token: Office.teacherToken() }); } catch (e) { r = { error: '연결하지 못했어요' }; }
+  const box = m.querySelector('#smBody');
+  if (!box) return;
+  if (r.error) { box.innerHTML = `<p class="warn">${esc(r.error)}</p>`; return; }
+  const h = (min) => (min >= 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min}분`);
+  const online = Room.onlinePlayers().length;
+  const maxW = Math.max(60, ...r.week.map((x) => x.min));
+  const maxS = Math.max(1, ...r.subjects.map((x) => x.min));
+  const maxQ = Math.max(1, ...r.questions.week.map((x) => x.n));
+  const wd = ['일', '월', '화', '수', '목', '금', '토'];
+  box.innerHTML = `
+    <div class="sm-tiles">
+      <div><small>지금 접속</small><b>${online}명</b></div>
+      <div><small>오늘 공부한 학생</small><b>${r.today.students}명</b></div>
+      <div><small>오늘 총 공부</small><b>${h(r.today.min)}</b></div>
+      <div><small>오늘 챗봇 질문</small><b>${r.questions.today}개</b></div>
+    </div>
+    ${r.freshReports || r.freshSuggests ? `<p class="sm-alert">${r.freshReports ? `🚨 새 신고 ${r.freshReports}건 ` : ''}${r.freshSuggests ? `📮 새 건의 ${r.freshSuggests}건` : ''} — ⚙️ 설정에서 확인해 주세요</p>` : ''}
+    <label class="lbl">최근 7일 독서실 전체 공부 시간</label>
+    <div class="sm-week">${r.week.map((x) => { const d = new Date(x.day + 'T12:00:00'); return `<div class="sm-col" title="${x.day} · ${x.students}명 · ${h(x.min)}"><span class="sm-v">${x.min ? Math.round(x.min / 60) + 'h' : ''}</span><i style="height:${Math.max(x.min ? 4 : 0, (x.min / maxW) * 100)}%"></i><small>${wd[d.getDay()]}<br>${x.students}명</small></div>`; }).join('')}</div>
+    <label class="lbl">오늘 많이 공부한 과목 (학생이 정한 과목 이름)</label>
+    ${r.subjects.length ? r.subjects.map((x) => `<div class="sm-bar"><span>${esc(x.name)}</span><i><b style="width:${(x.min / maxS) * 100}%"></b></i><em>${h(x.min)}</em></div>`).join('') : '<p class="hint">아직 오늘 기록이 없어요</p>'}
+    <label class="lbl">챗봇 질문 (최근 7일 · 교과별)</label>
+    ${r.questions.week.length ? r.questions.week.map((x) => `<div class="sm-bar"><span>${esc(x.subject)}</span><i><b style="width:${(x.n / maxQ) * 100}%"></b></i><em>${x.n}개 <small>(오늘 ${x.today})</small></em></div>`).join('') : '<p class="hint">아직 질문이 없어요</p>'}
+    <label class="lbl">많이 물어본 교과서 쪽 (최근 7일)</label>
+    ${r.topPages.length ? `<ol class="sm-pages">${r.topPages.map((x) => `<li><b>${esc(x.subject)} ${x.page}쪽</b> <span>${esc(x.unit)}</span> <em>${x.n}번</em></li>`).join('')}</ol>` : '<p class="hint">교과서가 연결된 질문이 아직 없어요</p>'}
+    <p class="hint">학생 이름과 질문 내용은 모으지 않아요. 기기마다 오늘 공부 시간과 과목별 시간, 챗봇이 찾은 교과서 쪽만 세요. (시트 '공부통계' · '질문통계' 탭)</p>`;
+}
+async function openNoticeEditor() {
+  let cur = '';
+  try { cur = (await post({ action: 'notice.get' })).notice || ''; } catch (e) {}
+  const m = openModal(`<h2>📢 공지 띄우기</h2>
+    <p class="desc">모든 학생 화면 위에 한 줄로 떠요. 학생이 ✕를 누르면 그 공지는 다시 안 떠요. 비우고 저장하면 공지를 내려요.</p>
+    <input class="field" id="ntText" maxlength="120" placeholder="예: 오늘 밤 10시부터 교무실 상담을 쉬어요" value="${esc(cur)}" />
+    <p class="hint">학생 화면에는 5분 안에 나타나요.</p>
+    <div class="foot"><button class="btn ghost" id="ntOff" type="button">공지 내리기</button><button class="btn primary" id="ntGo" type="button">띄우기</button></div>`);
+  const save = async (text) => {
+    let r;
+    try { r = await post({ action: 'office.admin', op: 'notice', token: Office.teacherToken(), text }); } catch (e) { r = { error: '연결하지 못했어요' }; }
+    if (r.error) return toast(r.error);
+    closeModal();
+    toast(text ? '공지를 띄웠어요 📢' : '공지를 내렸어요');
+    startNoticeOnce();
+  };
+  m.querySelector('#ntGo').onclick = () => save(m.querySelector('#ntText').value.trim());
+  m.querySelector('#ntOff').onclick = () => save('');
+}
+async function startNoticeOnce() { try { const r = await post({ action: 'notice.get' }); showNotice(r.notice, r.id); } catch (e) {} }
+
 // 선생님 설정: 캐릭터·과목 대신 선생님 일만
 function openTeacherSettings() {
   const admin = Office.isAdmin();
@@ -409,7 +519,9 @@ function openTeacherSettings() {
     <button class="btn primary block" id="tsInbox" type="button">📥 받은 대화</button>
     ${admin ? `
     <label class="lbl">관리자</label>
-    <button class="btn soft block" id="tsAdmin" type="button">🛠️ 관리자 메뉴 (신고 · 차단 · 선생님)</button>
+    <button class="btn soft block" id="tsSummary" type="button">📈 독서실 요약 · 질문 통계</button>
+    <button class="btn soft block" id="tsNotice" type="button" style="margin-top:8px">📢 공지 띄우기</button>
+    <button class="btn soft block" id="tsAdmin" type="button" style="margin-top:8px">🛠️ 관리자 메뉴 (신고 · 차단 · 선생님)</button>
     <button class="btn soft block" id="tsSuggest" type="button" style="margin-top:8px">📮 건의함 보기</button>
     <button class="btn soft block" id="tsBook" type="button" style="margin-top:8px">📚 교과서 넣기 (컴퓨터 추천)</button>` : ''}
     <div class="foot">
@@ -421,6 +533,8 @@ function openTeacherSettings() {
   m.querySelector('#tsInbox').onclick = () => Office.openInbox();
   if (admin) {
     m.querySelector('#tsAdmin').onclick = () => Office.openAdminMenu();
+    m.querySelector('#tsSummary').onclick = () => openSummary();
+    m.querySelector('#tsNotice').onclick = () => openNoticeEditor();
     m.querySelector('#tsSuggest').onclick = () => Board.openSuggestAdmin();
     m.querySelector('#tsBook').onclick = () => window.open('book.html', '_blank', 'noopener');
   }
@@ -671,6 +785,7 @@ function openStop() {
   const end = (done) => {
     S.stopSession(done);
     endStudyUI();
+    setTimeout(sendStat, 500);
     closeModal();
     toast(done ? '할 일 완료! 플래너에 체크했어요 ✅' : '기록했어요. 다음에 이어서 해요');
   };

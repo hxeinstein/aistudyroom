@@ -606,6 +606,8 @@ function boardHandle_(body) {
     if (a === 'suggest.list') return suggestList_(body);
     if (a === 'suggest.mark') return suggestMark_(body);
     if (a === 'book.import') return bookImport_(body);
+    if (a === 'stat.day') return statDay_(body);
+    if (a === 'notice.get') return noticeGet_();
   } catch (e) {
     console.error(e);
     return { error: '잠시 문제가 생겼어요. 조금 뒤에 다시 해 주세요.' };
@@ -722,7 +724,7 @@ function suggestMark_(b) {
  * body = { token, tab, start(첫 묶음이면 true → 탭을 새로 만들거나 비움), rows: [[쪽, 대단원, 소단원, 내용], ...],
  *          register?: { name, room, bot } (마지막 묶음에서 '과목' 탭에 교과 등록) }
  */
-const RESERVED_TABS = ['과목', '교사', '차단', '신고', '게시판', '건의함', '프롬프트', '기록'];
+const RESERVED_TABS = ['과목', '교사', '차단', '신고', '게시판', '건의함', '프롬프트', '기록', '공부통계', '질문통계'];
 function bookImport_(b) {
   const t = teacherByToken_(b.token);
   if (!t) return { error: '다시 로그인해 주세요.', relogin: true };
@@ -836,6 +838,8 @@ function officeAdmin_(b) {
         return { ok: true };
       }
       case 'newInvite': return { ok: true, code: makeTeacherInvite() };
+      case 'summary': return adminSummary_();
+      case 'notice': return noticeSet_(b, me);
       case 'toggleTeacher':
       case 'resetTeacher':
       case 'logoutTeacher': {
@@ -884,4 +888,133 @@ function adminOverview_() {
     devices: t.keys.length, online: Date.now() - Number(cache.get('tpres_' + tid_(t.code)) || 0) < ONLINE_MS,
   }));
   return { reports: reports, blocks: blocks, teachers: teachers, freshReports: reports.filter((x) => x.status === '새 신고').length };
+}
+
+
+/* ---------- 공부 통계 · 질문 통계 · 공지 (관리자 화면) ----------
+ * '공부통계' 탭: 날짜 | 기기(암호화) | 공부 분 | 과목별(JSON) | 갱신 — 학생 이름은 남기지 않아요
+ * '질문통계' 탭: 날짜 | 교과 | 쪽 | 단원 | 횟수 — 질문 내용은 남기지 않아요
+ */
+const statSheet_ = () => sheet_('공부통계', ['날짜', '기기(암호화)', '공부 분', '과목별 분', '갱신']);
+const qSheet_ = () => sheet_('질문통계', ['날짜', '교과', '쪽', '단원', '횟수']);
+const cellDay_ = (v) => (v instanceof Date ? Utilities.formatDate(v, 'Asia/Seoul', 'yyyy-MM-dd') : String(v).replace(/^'/, ''));
+const today_ = () => Utilities.formatDate(new Date(Date.now() - 6 * 3600000), 'Asia/Seoul', 'yyyy-MM-dd');   // 독서실 하루는 아침 6시부터
+
+/** 학생 기기가 오늘 공부 시간을 10분마다 알려 줌 */
+function statDay_(b) {
+  const day = String(b.day || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { error: '잘못된 요청이에요.' };
+  if (!b.device) return { error: '기기 정보가 없어요.' };
+  const dh = devHash_(b.device);
+  const min = Math.max(0, Math.min(24 * 60, Math.round(Number(b.ms || 0) / 60000)));
+  const subj = {};
+  Object.keys(b.subjects || {}).slice(0, 20).forEach((k) => { subj[String(k).slice(0, 12)] = Math.max(0, Math.min(24 * 60, Math.round(Number(b.subjects[k]) / 60000))); });
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    const sh = statSheet_();
+    const cache = CacheService.getScriptCache();
+    const ck = 'strow_' + day + '_' + dh;
+    let row = Number(cache.get(ck) || 0);
+    if (row && String(sh.getRange(row, 2).getValue()) !== dh) row = 0;
+    if (!row) {
+      const vals = sh.getDataRange().getValues();
+      for (let i = vals.length - 1; i >= 1; i--) {
+        const d = cellDay_(vals[i][0]);
+        if (d === day && String(vals[i][1]) === dh) { row = i + 1; break; }
+        if (d < day && i < vals.length - 300) break;   // 오래된 줄까지는 보지 않음
+      }
+    }
+    const data = [["'" + day, dh, min, JSON.stringify(subj), new Date()]];
+    if (row) sh.getRange(row, 1, 1, 5).setValues(data);
+    else { sh.appendRow(data[0]); row = sh.getLastRow(); }
+    cache.put(ck, String(row), 21600);
+  } finally { lock.releaseLock(); }
+  return { ok: true };
+}
+
+/** 챗봇 질문 하나 세기: 교과 + 가장 관련 있는 교과서 쪽 */
+function recordQuestion_(subject, top) {
+  const day = today_();
+  const page = top ? Number(top.page) || '' : '';
+  const unit = top ? String(top.section || top.unit || '').slice(0, 40) : '';
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(3000)) return;
+  try {
+    const sh = qSheet_();
+    const cache = CacheService.getScriptCache();
+    const ck = 'qrow_' + sha_(day + '|' + subject + '|' + page).slice(0, 20);
+    let row = Number(cache.get(ck) || 0);
+    if (row) {
+      const r = sh.getRange(row, 1, 1, 5).getValues()[0];
+      const d = cellDay_(r[0]);
+      if (d !== day || String(r[1]) !== subject || String(r[2]) !== String(page)) row = 0;
+    }
+    if (!row) {
+      const vals = sh.getDataRange().getValues();
+      for (let i = vals.length - 1; i >= 1 && i > vals.length - 400; i--) {
+        const d = cellDay_(vals[i][0]);
+        if (d === day && String(vals[i][1]) === subject && String(vals[i][2]) === String(page)) { row = i + 1; break; }
+      }
+    }
+    if (row) sh.getRange(row, 5).setValue(Number(sh.getRange(row, 5).getValue() || 0) + 1);
+    else { sh.appendRow(["'" + day, subject, page, unit, 1]); row = sh.getLastRow(); }
+    cache.put(ck, String(row), 21600);
+  } finally { lock.releaseLock(); }
+}
+
+/** 관리자: 오늘 독서실 요약 + 최근 7일 + 질문 통계 */
+function adminSummary_() {
+  const day = today_();
+  const dayOf = cellDay_;
+  const days = [];
+  for (let i = 6; i >= 0; i--) days.push(Utilities.formatDate(new Date(Date.now() - 6 * 3600000 - i * 86400000), 'Asia/Seoul', 'yyyy-MM-dd'));
+  const week = {}; days.forEach((d) => (week[d] = { students: 0, min: 0 }));
+  const subj = {};
+  statSheet_().getDataRange().getValues().slice(1).forEach((r) => {
+    const d = dayOf(r[0]);
+    if (!week[d]) return;
+    const m = Number(r[2]) || 0;
+    if (m < 1) return;
+    week[d].students++; week[d].min += m;
+    if (d === day) { try { const o = JSON.parse(r[3] || '{}'); Object.keys(o).forEach((k) => (subj[k] = (subj[k] || 0) + Number(o[k] || 0))); } catch (e) {} }
+  });
+  const qBySubj = {}, qToday = {}, pages = {};
+  qSheet_().getDataRange().getValues().slice(1).forEach((r) => {
+    const d = dayOf(r[0]);
+    if (days.indexOf(d) < 0) return;
+    const n = Number(r[4]) || 0, s = String(r[1]);
+    qBySubj[s] = (qBySubj[s] || 0) + n;
+    if (d === day) qToday[s] = (qToday[s] || 0) + n;
+    if (r[2] !== '' && r[2] !== null) {
+      const k = s + '|' + r[2];
+      pages[k] = pages[k] || { subject: s, page: Number(r[2]), unit: String(r[3] || ''), n: 0 };
+      pages[k].n += n;
+    }
+  });
+  const fresh = (rows, col, val) => rows.filter((r) => String(r[col] || val) === val).length;
+  return {
+    day: day,
+    today: week[day],
+    week: days.map((d) => ({ day: d, students: week[d].students, min: week[d].min })),
+    subjects: Object.keys(subj).map((k) => ({ name: k, min: subj[k] })).sort((a, b) => b.min - a.min).slice(0, 8),
+    questions: { today: Object.keys(qToday).reduce((a, k) => a + qToday[k], 0), week: Object.keys(qBySubj).map((k) => ({ subject: k, n: qBySubj[k], today: qToday[k] || 0 })).sort((a, b) => b.n - a.n) },
+    topPages: Object.keys(pages).map((k) => pages[k]).sort((a, b) => b.n - a.n).slice(0, 10),
+    freshReports: fresh(reportSheet_().getDataRange().getValues().slice(1).filter((r) => r[2]), 5, '새 신고'),
+    freshSuggests: fresh(suggestSheet_().getDataRange().getValues().slice(1).filter((r) => r[2]), 4, '새 건의'),
+  };
+}
+
+/** 공지: 관리자가 쓰면 모든 학생 화면 위에 한 줄로 */
+function noticeGet_() {
+  const p = PropertiesService.getScriptProperties();
+  return { notice: p.getProperty('NOTICE') || '', id: p.getProperty('NOTICE_ID') || '' };
+}
+function noticeSet_(b, me) {
+  const text = String(b.text || '').trim().slice(0, 120);
+  const p = PropertiesService.getScriptProperties();
+  if (!text) { p.deleteProperty('NOTICE'); p.deleteProperty('NOTICE_ID'); return { ok: true, notice: '' }; }
+  p.setProperty('NOTICE', text);
+  p.setProperty('NOTICE_ID', String(Date.now()));
+  return { ok: true, notice: text };
 }

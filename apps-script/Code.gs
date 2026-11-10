@@ -199,8 +199,12 @@ function chat(payload, extraSystem, saveLog) {
   // 교과서에서 관련 쪽 찾기: 학생의 최근 질문 2개 + 챗봇의 직전 답변을 기준으로
   const pages = subject.tab ? loadPages_(subject.tab) : [];
   const query = buildQuery_(history);
-  const hits = rankPages_(pages, query).slice(0, EXCERPT_PAGES)
-    .sort((a, b) => a.page - b.page);
+  const ranked = rankPages_(pages, query).slice(0, EXCERPT_PAGES);
+  const hits = ranked.slice().sort((a, b) => a.page - b.page);
+  // 질문 통계 (관리자 화면용): 교과 + 가장 관련 있는 교과서 쪽만 세요. 질문 내용은 남기지 않아요.
+  if (history.length && history[history.length - 1].role === 'user') {
+    try { recordQuestion_(subject.name, ranked[0] || null); } catch (e) { console.error(e); }
+  }
 
   const extra = typeof extraSystem === 'function' ? extraSystem(subject) : (extraSystem || '');
   const system = !subject.tab ? promptFor_(subject) + extra + '\n' + NO_BOOK_NOTE : [
@@ -246,7 +250,7 @@ function doPost(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) {}
   let out;
-  if (/^(board|suggest|book)\./.test(String(body.action || ''))) {
+  if (/^(board|suggest|book|stat|notice)\./.test(String(body.action || ''))) {
     out = boardHandle_(body);    // 응원 게시판 · 건의함 (Office.gs)
   } else if (body.action === 'room.sync') {
     out = roomSync_(body);       // 공부방 자리 공유 (Office.gs)
