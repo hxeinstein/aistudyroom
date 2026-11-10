@@ -103,7 +103,7 @@ function loadSubjects_(school) {
   if (!sh) return null;
   // J칸(학교 코드): 비우면 기본 학교만, '*'면 모든 학교, 코드를 적으면 그 학교만
   const sc = schoolCode_(school);
-  const forSchool = (r) => { const j = String(r[9] || '').trim().toUpperCase(); return j === '*' || (j ? j.split(/[,\s]+/).indexOf(sc) >= 0 : sc === DEFAULT_SCHOOL); };
+  const forSchool = (r) => { const j = String(r[9] || '').trim().toUpperCase(); return j === '*' || (j ? j.split(/[,\s]+/).map(aliasSc_).indexOf(sc) >= 0 : sc === DEFAULT_SCHOOL); };
   return sh.getDataRange().getValues().slice(1)
     .filter(r => r[0] === true && String(r[1]).trim() && forSchool(r))
     .map(r => ({

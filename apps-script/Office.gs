@@ -125,7 +125,7 @@ function teachers_() {
     ...parseLook_(r[6]),
     closed: r[8] === true,
     keys: parseKeys_(r[9]),
-    school: String(r[10] || '').trim().toUpperCase() || DEFAULT_SCHOOL,
+    school: scOf_(r[10]),
   })).filter((t) => t.code);
 }
 /** 캐릭터: {"a":"deer","c":"#B79CE8","g":1} (예전 값은 동물 이름만) */
@@ -613,7 +613,7 @@ function boardHandle_(body) {
     if (a === 'book.import') return bookImport_(body);
     if (a === 'stat.day') return statDay_(body);
     if (a === 'notice.get') return noticeGet_(body);
-    if (a === 'school.check') { const s = schoolInfo_(String(body.code || '').trim().toUpperCase()); return s && s.on ? { ok: true, code: s.code, name: s.name } : { error: '학교 코드가 맞지 않아요. 선생님께 다시 물어봐 줘.' }; }
+    if (a === 'school.check') { const s = schoolInfo_(String(body.code || '').trim().toUpperCase()); return s && s.on ? { ok: true, code: aliasSc_(s.code), name: s.name } : { error: '학교 코드가 맞지 않아요. 선생님께 다시 물어봐 줘.' }; }
   } catch (e) {
     console.error(e);
     return { error: '잠시 문제가 생겼어요. 조금 뒤에 다시 해 주세요.' };
@@ -1051,7 +1051,10 @@ function noticeSet_(b, me) {
  */
 const DEFAULT_SCHOOL = 'SCHOOL';
 const DEFAULT_SCHOOL_NAME = '우리 학교';
-const scOf_ = (v) => String(v || '').trim().toUpperCase() || DEFAULT_SCHOOL;
+// 예전 코드 → 지금 코드 (처음에 SCHOOL로 만들었다가 SCHOOL로 바꿈)
+const SCHOOL_ALIAS = { SCHOOL: 'SCHOOL' };
+const aliasSc_ = (c) => SCHOOL_ALIAS[c] || c;
+const scOf_ = (v) => aliasSc_(String(v || '').trim().toUpperCase()) || DEFAULT_SCHOOL;
 function schoolSheet_() {
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName('학교');
@@ -1071,13 +1074,13 @@ function schools_() {
   const list = schoolSheet_().getDataRange().getValues().slice(1)
     .map((r, i) => ({ row: i + 2, code: String(r[0] || '').trim().toUpperCase(), name: String(r[1] || '').trim(), on: r[2] === true }))
     .filter((x) => x.code);
-  cache.put('schools', JSON.stringify(list), 300);
+  cache.put('schools', JSON.stringify(list), 60);   // 시트에서 바꾸면 1분 안에 반영
   return list;
 }
-function schoolInfo_(code) { return schools_().filter((x) => x.code === code)[0] || null; }
+function schoolInfo_(code) { code = aliasSc_(code); return schools_().filter((x) => aliasSc_(x.code) === code)[0] || null; }
 /** 요청의 학교 코드 → 쓸 수 있는 학교 코드 (없거나 꺼졌으면 기본 학교) */
 function schoolCode_(v) {
-  const c = String(v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  const c = aliasSc_(String(v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12));
   if (!c || c === DEFAULT_SCHOOL) return DEFAULT_SCHOOL;
   const s = schoolInfo_(c);
   return s && s.on ? c : DEFAULT_SCHOOL;
