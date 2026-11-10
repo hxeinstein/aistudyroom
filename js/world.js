@@ -4,7 +4,7 @@ import * as THREE from '../vendor/three.module.min.js';
 import { makeAnimal, animateAnimal, animalSpeed } from './animals.js';
 export { makeAnimal };
 
-const FONT = '"Sunflower", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
+const FONT = '"Do Hyeon", "Sunflower", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
 const BANNER_FONT = '"Do Hyeon", "Sunflower", "Noto Sans KR", sans-serif';   // 학교 이름 가랜드
 const DECK_Y = 0.3;
 const BOUNDS = { x0: -9.2, x1: 9.2, z0: -6.4, z1: 7.4 };
@@ -482,12 +482,15 @@ export function createWorld(container, opts = {}) {
     actors.push(a);
     return a;
   }
-  // goal: 자리에 앉아 있을 때 이름표 아래에 '🎯 오늘의 목표' 한 줄
+  // 이름표: 닉네임 / 🎯 목표(앉아 있을 때) / 상태(열공 중) 를 세 줄로 쌓아서 옆으로 넘치지 않게
   function setLabel(a, { name, status, goal }) {
-    const row = (a.me ? '<b class="me-dot">나</b>' : '') + `<span>${esc(name)}</span>` + (status ? `<small>${esc(status)}</small>` : '');
     const g = goal && a.seat && !badWord(goal) ? goal : '';
-    a.el.classList.toggle('has-goal', !!g);
-    a.el.innerHTML = g ? `<div class="nt-row">${row}</div><div class="nt-goal">🎯 ${esc(g)}</div>` : row;
+    const stack = !!(g || status);
+    a.el.classList.toggle('has-goal', stack);
+    const nameRow = (a.me ? '<b class="me-dot">나</b>' : '') + `<span>${esc(name)}</span>`;
+    a.el.innerHTML = stack
+      ? `<div class="nt-row">${nameRow}</div>${g ? `<div class="nt-goal">🎯 ${esc(g)}</div>` : ''}${status ? `<small class="nt-status">${esc(status)}</small>` : ''}`
+      : nameRow;
   }
 
   const cushionMat = [m('#F7C6D0'), m('#FFE9A8')];

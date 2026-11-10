@@ -1051,7 +1051,7 @@ async function takePhoto() {
     g.fillStyle = '#FFF8E9'; g.fillRect(0, 0, c.width, c.height);
     g.save(); g.beginPath(); g.roundRect(padP, padP, W, H, 18 * k); g.clip(); g.drawImage(src, padP, padP); g.restore();
     const box = $('world').getBoundingClientRect();
-    g.font = `700 ${Math.round(13 * k)}px "Sunflower", "Noto Sans KR", sans-serif`; g.textBaseline = 'middle';
+    g.font = `700 ${Math.round(13 * k)}px "Do Hyeon", "Sunflower", "Noto Sans KR", sans-serif`; g.textBaseline = 'middle';
     document.querySelectorAll('.name-tag').forEach((el) => {
       if (el.style.display === 'none' || el.classList.contains('hidden')) return;
       const r = el.getBoundingClientRect();
@@ -1061,9 +1061,9 @@ async function takePhoto() {
       g.fillStyle = '#3B2F25'; g.textAlign = 'center'; g.fillText(el.textContent.replace(/^나/, '나 ').slice(0, 40), x + w / 2, y + h / 2 + 1);
     });
     const d = new Date();
-    g.fillStyle = '#6B4A2E'; g.textAlign = 'left'; g.font = `900 ${Math.round(22 * k)}px "Sunflower", "Noto Sans KR", sans-serif`;
+    g.fillStyle = '#6B4A2E'; g.textAlign = 'left'; g.font = `900 ${Math.round(22 * k)}px "Do Hyeon", "Sunflower", "Noto Sans KR", sans-serif`;
     g.fillText(`🌳 숲속 독서실 ${world.area === 'park' ? '쉼터' : ''}`, padP, H + padP + cap / 2 + padP / 2);
-    g.textAlign = 'right'; g.fillStyle = '#7A6A5A'; g.font = `700 ${Math.round(16 * k)}px "Sunflower", "Noto Sans KR", sans-serif`;
+    g.textAlign = 'right'; g.fillStyle = '#7A6A5A'; g.font = `700 ${Math.round(16 * k)}px "Do Hyeon", "Sunflower", "Noto Sans KR", sans-serif`;
     g.fillText(`${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`, c.width - padP, H + padP + cap / 2 + padP / 2);
     const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
     const name = `forest-photo-${d.getTime()}.png`;
