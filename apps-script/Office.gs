@@ -756,8 +756,12 @@ function bookImport_(b) {
       if (row) {
         sub.getRange(row, 4).setValue(tab);
       } else {
-        sub.appendRow([true, name, String(b.register.room || '').slice(0, 80), tab, '', DEFAULT_GREETING, '', String(b.register.bot || '').slice(0, 20), '']);
-        sub.getRange(sub.getLastRow(), 1).insertCheckboxes().check();
+        // 맨 아래(체크박스만 있는 빈 줄 뒤)가 아니라 B칸이 빈 첫 줄에 넣기
+        let empty = 0;
+        for (let i = 1; i < data.length; i++) if (!String(data[i][1]).trim()) { empty = i + 1; break; }
+        if (!empty) empty = data.length + 1;
+        sub.getRange(empty, 1, 1, 9).setValues([[true, name, String(b.register.room || '').slice(0, 80), tab, '', DEFAULT_GREETING, '', String(b.register.bot || '').slice(0, 20), '']]);
+        sub.getRange(empty, 1).insertCheckboxes().check();
       }
       registered = true;
     }
