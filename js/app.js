@@ -291,10 +291,12 @@ function openSettings() {
       <button class="btn ghost" id="sClose">닫기</button>
       <button class="btn primary" id="sSave">저장</button>
     </div>
-    <p class="hint">조작: 바닥을 눌러 이동 · 책상을 눌러 앉기 · 좌우로 끌어 시점 회전 · PC는 WASD/방향키</p>`);
+    <p class="hint">조작: 바닥을 눌러 이동 · 책상을 눌러 앉기 · 좌우로 끌어 시점 회전 · PC는 WASD/방향키</p>
+    <button class="btn ghost block" id="sLeave" type="button" style="margin-top:6px">🚪 이 기기에서 나가기 <small>(공용 태블릿이면)</small></button>`);
   bindAnimalPicker(m, (a) => (animal = a));
   m.querySelector('#sClose').onclick = closeModal;
   m.querySelector('#sSubjects').onclick = () => openSubjects();
+  m.querySelector('#sLeave').onclick = openLeave;
   m.querySelector('#sTeacher').onclick = () => (Office.isTeacher() ? Office.openInbox() : Office.openTeacherLogin());
   m.querySelector('#sSave').onclick = () => {
     const name = m.querySelector('#sName').value.trim() || p.name || '익명';
@@ -304,6 +306,31 @@ function openSettings() {
     closeModal();
     refreshHud();
     toast('저장했어요');
+  };
+}
+
+// ---------------- 이 기기에서 나가기 (공용 태블릿) ----------------
+// 누르지 않으면 지금처럼 계속 이 기기에 남아 있어요.
+function openLeave() {
+  const m = openModal(`
+    <h2>🚪 이 기기에서 나가기</h2>
+    <p class="desc">닉네임·캐릭터·과목·공부 기록·플래너가 <b>이 기기에서 지워지고</b> 처음 화면으로 돌아가요.<br/>
+      다음 친구가 새로 시작할 수 있어요. 지운 기록은 되돌릴 수 없으니, 오늘 플래너를 먼저 사진으로 저장해 두세요.</p>
+    <button class="btn soft block" id="lvSave" type="button">📸 오늘 플래너 먼저 저장하기</button>
+    <div class="foot">
+      <button class="btn ghost" id="lvCancel">그냥 둘래요</button>
+      <button class="btn primary" id="lvGo" style="background:#D9785B;box-shadow:0 4px 0 #A9553B">나가기</button>
+    </div>`);
+  m.querySelector('#lvCancel').onclick = closeModal;
+  m.querySelector('#lvSave').onclick = () => doSave(S.dayKey());
+  m.querySelector('#lvGo').onclick = async () => {
+    m.querySelector('#lvGo').disabled = true;
+    try { await Room.releaseSeat(); } catch (e) {}
+    if (Office.isTeacher()) Office.logout(true);
+    ['aistudyroom.v1', 'aistudyroom.chatCodes', 'aistudyroom.device', 'aistudyroom.teacher'].forEach((k) => {
+      try { localStorage.removeItem(k); } catch (e) {}
+    });
+    location.replace(location.pathname);
   };
 }
 
