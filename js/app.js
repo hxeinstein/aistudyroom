@@ -408,7 +408,7 @@ function openTeacherSettings() {
     <label class="lbl">관리자</label>
     <button class="btn soft block" id="tsAdmin" type="button">🛠️ 관리자 메뉴 (신고 · 차단 · 선생님)</button>
     <button class="btn soft block" id="tsSuggest" type="button" style="margin-top:8px">📮 건의함 보기</button>
-    <a class="btn soft block" href="book.html" target="_blank" rel="noopener" style="margin-top:8px;text-align:center;text-decoration:none">📚 교과서 넣기 (컴퓨터 추천)</a>` : ''}
+    <button class="btn soft block" id="tsBook" type="button" style="margin-top:8px">📚 교과서 넣기 (컴퓨터 추천)</button>` : ''}
     <div class="foot">
       <button class="btn ghost" id="tsLogout" type="button">로그아웃</button>
       <button class="btn primary" id="tsClose" type="button">닫기</button>
@@ -419,6 +419,7 @@ function openTeacherSettings() {
   if (admin) {
     m.querySelector('#tsAdmin').onclick = () => Office.openAdminMenu();
     m.querySelector('#tsSuggest').onclick = () => Board.openSuggestAdmin();
+    m.querySelector('#tsBook').onclick = () => window.open('book.html', '_blank', 'noopener');
   }
   m.querySelector('#tsLogout').onclick = () => { Office.logout(); closeModal(); toast('로그아웃했어요'); };
 }
