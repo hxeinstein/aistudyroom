@@ -198,7 +198,7 @@ function renderBar() {
                 ? { e: '🔓', t: '문 열기', fn: () => Office.toggleDoor() }
                 : { e: '🔒', t: '문 닫기', fn: () => Office.toggleDoor() },
             ]
-          : [{ e: '👩‍🏫', t: '선생님 로그인', fn: () => Office.openTeacherLogin() }]),
+          : []),   // 선생님 로그인은 ⚙️ 설정에만
         { e: '🚪', t: '나가기', main: !Office.isTeacher() && world.nearDoor === 'exit', fn: () => world.goOutOfOffice() },
       ]
     : seated
