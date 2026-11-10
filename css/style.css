@@ -276,3 +276,22 @@ body.studying .zoom-ctl { display: none; }
 .c-msg .math { font-family: 'Times New Roman', serif; }
 .c-msg .math.display { display: block; text-align: center; margin: 6px 0; overflow-x: auto; }
 .c-msg .katex { font-size: 1.08em; }
+
+/* 응원 게시판 */
+.note-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 14px; padding: 12px; background: #C8955B; border-radius: 16px; max-height: 52vh; overflow-y: auto; }
+.note { position: relative; padding: 14px 12px 10px; min-height: 120px; box-shadow: 0 4px 8px rgba(60,40,20,.25); color: #3B2F26; display: flex; flex-direction: column; }
+.note::before { content: ''; position: absolute; top: -6px; left: 50%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #E2574C; box-shadow: 0 2px 0 rgba(0,0,0,.2); }
+.note-to { font-weight: 800; font-size: 13px; margin-bottom: 4px; }
+.note-text { font-size: 14px; line-height: 1.45; flex: 1; word-break: keep-all; overflow-wrap: anywhere; }
+.note-from { font-size: 11px; color: #7a6a5a; margin-top: 6px; }
+.note-act { text-align: right; margin-top: 4px; }
+.note-act button { border: 0; background: rgba(255,255,255,.6); border-radius: 999px; font-size: 11px; padding: 3px 9px; color: #7a6a5a; }
+/* 건의함 (관리자) */
+.sg-item { background: #fff; border-radius: 14px; padding: 10px 12px; border: 2px solid #EADBC2; }
+.sg-item.new { border-color: #E2574C; }
+.sg-head { font-size: 12px; color: var(--muted); }
+.sg-status { float: right; font-weight: 800; color: var(--brown); }
+.sg-text { margin: 6px 0; font-size: 14px; white-space: pre-wrap; }
+.sg-btns { display: flex; gap: 6px; }
+.sg-btns button { border: 1.5px solid #EADBC2; background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; color: var(--brown); }
+.sg-btns button.on { background: var(--green); border-color: var(--green); color: #fff; }

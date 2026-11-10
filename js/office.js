@@ -44,6 +44,9 @@ async function api(body) {
 }
 
 export const isTeacher = () => !!teacher;
+export const teacherToken = () => (teacher ? teacher.token : '');
+/** 관리자 선생님 (초대코드가 Office.gs ADMIN_CODES에 있는 선생님) */
+export const isAdmin = () => !!(teacher && teacher.me && teacher.me.admin);
 /** 선생님이 아무도 없을 때 문을 누르면 */
 export function confirmClosed() {
   // 교무실에는 질문 챗봇이 있어서 언제나 들어갈 수 있음 (선생님 자리만 '시험 출제 중')
@@ -492,6 +495,7 @@ export function openInbox() {
     <button class="btn soft block" id="ibDoor" type="button">${myDoorClosed() ? '🔓 문 열기 (질문 받기)' : '🔒 문 닫기 (시험 출제 중)'}</button>
     <p class="hint">문을 닫으면 학생에게 “시험 출제 중”으로 보이고 새 질문을 받지 않아요. 하던 대화는 그대로예요.</p>
     <button class="btn soft block" id="ibLook" type="button">✏️ 닉네임 바꾸기</button>
+    ${isAdmin() ? '<button class="btn soft block" id="ibSuggest" type="button" style="margin-top:8px">📮 건의함 보기 (관리자)</button>' : ''}
     <div class="todo-pick" id="inboxList"></div>
     <label class="lbl">다른 선생님께 메시지</label>
     <div class="chips" id="teacherList"></div>
@@ -502,6 +506,7 @@ export function openInbox() {
   m.querySelector('#ibClose').onclick = ctx.closeModal;
   m.querySelector('#ibDoor').onclick = () => toggleDoor();
   m.querySelector('#ibLook').onclick = () => openTeacherProfile();
+  if (m.querySelector('#ibSuggest')) m.querySelector('#ibSuggest').onclick = () => ctx.onOpenSuggestAdmin && ctx.onOpenSuggestAdmin();
   m.querySelector('#ibLogout').onclick = () => { logout(); ctx.closeModal(); ctx.toast('로그아웃했어요'); };
   renderInbox();
   refreshSeats().then(() => {

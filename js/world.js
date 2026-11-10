@@ -548,6 +548,86 @@ export function createWorld(container, opts = {}) {
   let studying = false;
 
 
+  // ---------------- 응원 게시판 · 건의함 (입구 왼쪽) ----------------
+  const BOARD_POS = { x: -5.0, z: 7.15 };
+  const BOX_POS = { x: -2.7, z: 7.2 };
+  const boardCanvas = document.createElement('canvas');
+  boardCanvas.width = 640; boardCanvas.height = 400;
+  const boardTex = new THREE.CanvasTexture(boardCanvas);
+  boardTex.colorSpace = THREE.SRGBColorSpace;
+  boardTex.anisotropy = 4;
+  const boardGroup = new THREE.Group();
+  boardGroup.position.set(BOARD_POS.x, DECK_Y, BOARD_POS.z);
+  boardGroup.add(mesh(new THREE.BoxGeometry(2.5, 1.62, 0.1), '#8A5A33', { y: 1.35 }));                 // 나무 틀
+  const boardFace = new THREE.Mesh(new THREE.PlaneGeometry(2.36, 1.48), new THREE.MeshLambertMaterial({ map: boardTex }));
+  boardFace.position.set(0, 1.35, 0.055);
+  boardGroup.add(boardFace);
+  for (const lx of [-1.05, 1.05]) boardGroup.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.6, 8), '#6B4A2E', { x: lx, y: 0.3 }));
+  boardGroup.traverse((o) => { o.userData.spot = 'board'; });
+  scene.add(boardGroup);
+  addObs(BOARD_POS.x, BOARD_POS.z, 2.6, 0.4);
+  const boxGroup = new THREE.Group();
+  boxGroup.position.set(BOX_POS.x, DECK_Y, BOX_POS.z);
+  boxGroup.add(mesh(new THREE.BoxGeometry(0.12, 0.7, 0.12), '#6B4A2E', { y: 0.35 }));                    // 기둥
+  boxGroup.add(mesh(new THREE.BoxGeometry(0.62, 0.5, 0.46), '#E2574C', { y: 0.95 }));                   // 빨간 함
+  boxGroup.add(mesh(new THREE.BoxGeometry(0.7, 0.06, 0.52), '#B83F36', { y: 1.22 }));                   // 뚜껑
+  boxGroup.add(mesh(new THREE.BoxGeometry(0.36, 0.03, 0.02), '#2B2B2B', { y: 1.08, z: 0.235, cast: false })); // 투입구
+  const boxSign = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.2), new THREE.MeshBasicMaterial({ map: canvasTex(256, 92, (g, w, h) => {
+    g.fillStyle = '#FFF8E3'; g.beginPath(); g.roundRect(3, 3, w - 6, h - 6, 14); g.fill();
+    g.fillStyle = '#B83F36'; g.font = `900 46px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('건의함', w / 2, h / 2 + 2);
+  }), transparent: true }));
+  boxSign.position.set(0, 0.88, 0.235);
+  boxGroup.add(boxSign);
+  boxGroup.traverse((o) => { o.userData.spot = 'suggest'; });
+  scene.add(boxGroup);
+  addObs(BOX_POS.x, BOX_POS.z, 0.8, 0.6);
+
+  function wrapText(g, text, x, y, maxW, lh, maxLines) {
+    let line = '', n = 0;
+    for (const ch of String(text)) {
+      if (g.measureText(line + ch).width > maxW) {
+        g.fillText(line, x, y + n * lh);
+        line = ch;
+        if (++n >= maxLines) return;
+      } else line += ch;
+    }
+    if (line && n < maxLines) g.fillText(n === maxLines - 1 && line.length > 1 ? line : line, x, y + n * lh);
+  }
+  /** 게시판에 포스트잇 그리기 (최근 8장) */
+  function setBoardNotes(notes) {
+    const g = boardCanvas.getContext('2d');
+    const W = boardCanvas.width, H = boardCanvas.height;
+    g.fillStyle = '#C8955B'; g.fillRect(0, 0, W, H);                 // 코르크
+    for (let i = 0; i < 260; i++) { g.fillStyle = i % 2 ? 'rgba(120,70,30,0.12)' : 'rgba(255,230,190,0.12)'; g.fillRect((i * 97) % W, (i * 57) % H, 3, 3); }
+    g.fillStyle = '#FFF8E3'; g.beginPath(); g.roundRect(W / 2 - 150, 10, 300, 52, 16); g.fill();
+    g.fillStyle = '#6B4A2E'; g.font = `900 34px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('📌 응원 게시판', W / 2, 37);
+    const list = (notes || []).slice(0, 8);
+    if (!list.length) {
+      g.fillStyle = 'rgba(255,248,227,0.9)'; g.font = `700 26px ${FONT}`;
+      g.fillText('첫 응원을 붙여 주세요!', W / 2, H / 2 + 20);
+    }
+    list.forEach((n, i) => {
+      const col = i % 4, row = Math.floor(i / 4);
+      const x = 22 + col * 152, y = 80 + row * 156;
+      g.save();
+      g.translate(x + 66, y + 66);
+      g.rotate(((i * 37) % 9 - 4) * 0.02);
+      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(-62, -58, 132, 132);
+      g.fillStyle = n.color || '#FFF3A3'; g.fillRect(-66, -66, 132, 132);
+      g.fillStyle = '#E2574C'; g.beginPath(); g.arc(0, -58, 7, 0, Math.PI * 2); g.fill(); // 압정
+      g.fillStyle = '#3B2F26'; g.textAlign = 'left'; g.textBaseline = 'top';
+      g.font = `800 17px ${FONT}`;
+      if (n.to) g.fillText(('To. ' + n.to).slice(0, 10), -56, -44);
+      g.font = `500 17px ${FONT}`;
+      wrapText(g, n.text, -56, n.to ? -20 : -44, 112, 22, n.to ? 4 : 5);
+      g.restore();
+    });
+    boardTex.needsUpdate = true;
+  }
+  setBoardNotes([]);
+
   // ---------------- 교무실 ----------------
   // 밖: 공부방 오른쪽 잔디 위의 작은 건물 (문 앞에 서거나 건물을 누르면 들어감)
   const officeHouse = new THREE.Group();
@@ -1101,6 +1181,7 @@ export function createWorld(container, opts = {}) {
     for (const h of hits) {
       const ud = h.object.userData;
       if (ud.officeDoor) { goToOffice(); return; }
+      if (ud.spot) { opts.onSpot && opts.onSpot(ud.spot); return; }   // 응원 게시판 · 건의함
       if (ud.officeExit) { goOutOfOffice(); return; }
       if (ud.officeSeat) { tapDesk(ud.officeSeat); return; }
       if (ud.botId) { tapBot(ud.botId); return; }  // 챗봇: 가까우면 바로, 멀면 걸어가서 말 걸기
@@ -1247,7 +1328,10 @@ export function createWorld(container, opts = {}) {
     if (nb !== nearBot) { nearBot = nb; opts.onNearBot && opts.onNearBot(nb); }
     // 교무실 문 근처인지
     const door = area.name === 'main'
-      ? (!player.seat && Math.hypot(p.x - PORTAL.x, p.z - PORTAL.z) < 1.4 ? 'enter' : null)
+      ? (player.seat ? null
+        : Math.hypot(p.x - PORTAL.x, p.z - PORTAL.z) < 1.4 ? 'enter'
+        : Math.hypot(p.x - BOARD_POS.x, p.z - (BOARD_POS.z - 0.6)) < 1.7 ? 'board'
+        : Math.hypot(p.x - BOX_POS.x, p.z - (BOX_POS.z - 0.6)) < 1.2 ? 'suggest' : null)
       : (Math.hypot(p.x - EXIT_SPOT.x, p.z - EXIT_SPOT.z) < 1.3 ? 'exit' : null);
     if (door !== nearDoor) { nearDoor = door; opts.onNearDoor && opts.onNearDoor(door); }
 
@@ -1386,6 +1470,7 @@ export function createWorld(container, opts = {}) {
     },
     get area() { return area.name; },
     get nearDoor() { return nearDoor; },
+    setBoardNotes,
     get nearBot() { return nearBot; },
     get seated() { return player.seat ? player.seat.idx : -1; },
   };

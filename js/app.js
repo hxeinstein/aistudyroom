@@ -6,6 +6,7 @@ import { initChat, openChat, hasSubjectFor } from './chat.js';
 import { CONFIG } from './config.js';
 import * as Office from './office.js';
 import * as Room from './room.js';
+import * as Board from './board.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -28,6 +29,7 @@ function boot() {
       if (!S.activeSession()) openStart();
     },
     onStand: () => { $('seatLabel').textContent = '자리를 골라 앉아보세요'; renderBar(); Room.releaseSeat(); },
+    onSpot: (spot) => (spot === 'board' ? Board.openBoard() : Board.openSuggest()),
     onRemoteTap: (uid, info) => (Office.isTeacher() ? Office.callStudent(uid, info.n, info.a) : openCheer(uid, info)),
     onToast: toast,
     bots: CONFIG.BOTS,
@@ -76,7 +78,8 @@ function boot() {
   $('zOut').onclick = () => world.zoomBy(1.33);
   $('zReset').onclick = () => world.resetView();
   initChat({ onAskTeacher: (q) => Office.askTeacher(q) });
-  Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' }, onTeacherChange: () => { renderBar(); Room.syncNow(); } });
+  Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' }, onTeacherChange: () => { renderBar(); Room.syncNow(); }, onOpenSuggestAdmin: () => Board.openSuggestAdmin() });
+  Board.initBoard({ world, toast, openModal, closeModal, getProfile: () => st.profile || { name: '익명', animal: 'bear' }, teacherToken: () => Office.teacherToken(), isAdmin: () => Office.isAdmin() });
   Room.initRoom({
     world, toast,
     isTeacher: () => Office.isTeacher(),
@@ -185,7 +188,9 @@ function renderBar() {
       ]
     : [
         ...(world.nearDoor === 'enter' ? [{ e: '🏫', t: '교무실 들어가기', main: true, fn: () => world.goToOffice() }] : []),
-        { e: '🪑', t: '빈자리 앉기', main: world.nearDoor !== 'enter', fn: sitNearest },
+        ...(world.nearDoor === 'board' ? [{ e: '📌', t: '응원 게시판', main: true, fn: () => Board.openBoard() }] : []),
+        ...(world.nearDoor === 'suggest' ? [{ e: '📮', t: '건의함', main: true, fn: () => Board.openSuggest() }] : []),
+        { e: '🪑', t: '빈자리 앉기', main: !world.nearDoor, fn: sitNearest },
         { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ];

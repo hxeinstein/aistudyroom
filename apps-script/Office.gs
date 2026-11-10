@@ -173,7 +173,7 @@ function officeLogout_(b) {
   }
   return { ok: true };
 }
-function me_(t) { return { id: tid_(t.code), name: t.name, seat: t.seat, animal: t.animal, color: t.color, glasses: t.glasses, closed: t.closed }; }
+function me_(t) { return { id: tid_(t.code), name: t.name, seat: t.seat, animal: t.animal, color: t.color, glasses: t.glasses, closed: t.closed, admin: isAdmin_(t) }; }
 
 function officeRegister_(b) {
   const code = String(b.code || '').trim().toUpperCase();
@@ -556,4 +556,155 @@ function officeCall_(b) {
     }
   } finally { lock.releaseLock(); }
   return { conv: id, key: key, name: teacher.name, id: me, with: { name: nick + ' 학생', animal: animal, student: true } };
+}
+
+/* ---------- 응원 게시판 · 건의함 ----------
+ * '게시판' 탭: A 번호 | B 시각 | C 쓴 사람 | D 받는 친구 | E 내용 | F 색 | G 기기(암호화) | H 신고 수 | I 숨김
+ * '건의함' 탭: A 시각 | B 쓴 사람 | C 내용 | D 기기(암호화) | E 상태(새 건의/확인함/반영함)
+ * 관리자(ADMIN_CODES의 초대코드로 등록한 선생님)만 독서실 안에서 건의함을 볼 수 있어요. 시트에서도 바로 볼 수 있어요.
+ */
+const ADMIN_CODES = ['T-ADMIN0'];
+const BOARD_KEEP_DAYS = 30;      // 게시판에 보여 줄 기간
+const BOARD_MAX = 60;            // 한 번에 보여 줄 포스트잇 수
+const BAD_WORDS = ['시발', '씨발', 'ㅅㅂ', 'ㅆㅂ', '병신', 'ㅂㅅ', '개새', '좆', '존나', 'ㅈㄴ', '꺼져', '죽어', '닥쳐', '미친놈', '미친년', '애미', '느금', 'fuck', 'shit', 'bitch'];
+const NOTE_COLORS = ['#FFF3A3', '#FFD3E0', '#CDEFD0', '#CFE3FF', '#FFE0B8', '#E6D7FF'];
+
+const isAdmin_ = (t) => !!t && ADMIN_CODES.indexOf(t.code) >= 0;
+const devHash_ = (device) => sha_('dev:' + String(device || '')).slice(0, 16);
+function hasBadWord_(s) {
+  const t = String(s || '').toLowerCase().replace(/[\s.\-_~!?,·]/g, '');
+  return BAD_WORDS.some((w) => t.indexOf(w) >= 0);
+}
+function sheet_(name, header) {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, header.length).setValues([header]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+const boardSheet_ = () => sheet_('게시판', ['번호', '시각', '쓴 사람', '받는 친구', '내용', '색', '기기(암호화)', '신고 수', '숨김']);
+const suggestSheet_ = () => sheet_('건의함', ['시각', '쓴 사람', '내용', '기기(암호화)', '상태']);
+
+function boardHandle_(body) {
+  const a = String(body.action || '');
+  try {
+    if (a === 'board.list') return boardList_(body);
+    if (a === 'board.post') return boardPost_(body);
+    if (a === 'board.report') return boardReport_(body);
+    if (a === 'board.delete') return boardDelete_(body);
+    if (a === 'suggest.post') return suggestPost_(body);
+    if (a === 'suggest.list') return suggestList_(body);
+    if (a === 'suggest.mark') return suggestMark_(body);
+  } catch (e) {
+    console.error(e);
+    return { error: '잠시 문제가 생겼어요. 조금 뒤에 다시 해 주세요.' };
+  }
+  return { error: '알 수 없는 요청이에요.' };
+}
+
+function boardList_(b) {
+  const me = devHash_(b && b.device);
+  const rows = boardSheet_().getDataRange().getValues().slice(1);
+  const since = Date.now() - BOARD_KEEP_DAYS * 86400000;
+  const notes = rows
+    .filter((r) => r[0] && r[8] !== true && new Date(r[1]).getTime() >= since)
+    .map((r) => ({ id: String(r[0]), t: new Date(r[1]).getTime(), from: String(r[2]), to: String(r[3] || ''), text: String(r[4]), color: String(r[5] || NOTE_COLORS[0]), mine: !!(b && b.device) && String(r[6]) === me }))
+    .slice(-BOARD_MAX)
+    .reverse();
+  return { notes: notes };
+}
+
+function boardPost_(b) {
+  const text = String(b.text || '').trim().slice(0, 80);
+  const to = String(b.to || '').trim().slice(0, 12);
+  const from = String(b.nick || '익명').trim().slice(0, 12);
+  if (!text) return { error: '응원 내용을 적어 주세요.' };
+  if (hasBadWord_(text) || hasBadWord_(to) || hasBadWord_(from)) return { error: '친구가 기분 좋아지는 말로 써 줘 🙂' };
+  const dh = devHash_(b.device);
+  if (!countOk_('bpost_' + dh, 5, 3600)) return { error: '포스트잇을 너무 많이 붙였어요. 조금 뒤에 다시 붙여 줘.' };
+  const color = NOTE_COLORS.indexOf(b.color) >= 0 ? b.color : NOTE_COLORS[0];
+  const id = Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+  boardSheet_().appendRow([id, new Date(), from, to, text, color, dh, 0, false]);
+  return { ok: true, id: id };
+}
+
+function findRow_(sh, id) {
+  const ids = sh.getRange(1, 1, sh.getLastRow(), 1).getValues();
+  for (let i = 1; i < ids.length; i++) if (String(ids[i][0]) === String(id)) return i + 1;
+  return 0;
+}
+
+/** 신고: 2번 들어오면 바로 숨김 (관리자가 시트에서 I칸 체크를 풀면 다시 보임) */
+function boardReport_(b) {
+  const dh = devHash_(b.device);
+  if (!countOk_('brep_' + dh + '_' + b.id, 1, 30 * 86400)) return { ok: true }; // 같은 사람이 여러 번 신고해도 한 번
+  const sh = boardSheet_();
+  const row = findRow_(sh, b.id);
+  if (!row) return { ok: true };
+  const n = Number(sh.getRange(row, 8).getValue() || 0) + 1;
+  sh.getRange(row, 8).setValue(n);
+  if (n >= 2) sh.getRange(row, 9).setValue(true);
+  return { ok: true, hidden: n >= 2 };
+}
+
+/** 지우기: 쓴 사람(같은 기기) 또는 선생님 */
+function boardDelete_(b) {
+  const sh = boardSheet_();
+  const row = findRow_(sh, b.id);
+  if (!row) return { ok: true };
+  const teacher = b.token ? teacherByToken_(b.token) : null;
+  const mine = String(sh.getRange(row, 7).getValue()) === devHash_(b.device);
+  if (!teacher && !mine) return { error: '내가 붙인 포스트잇만 뗄 수 있어요.' };
+  sh.getRange(row, 9).setValue(true);   // 시트에는 숨김으로 남겨 둠 (기록용)
+  return { ok: true };
+}
+
+/** 건의함에 넣기 (누구나) → 관리자에게 메일 알림 (1시간에 한 번) */
+function suggestPost_(b) {
+  const text = String(b.text || '').trim().slice(0, 500);
+  const from = String(b.nick || '익명').trim().slice(0, 12);
+  if (text.length < 2) return { error: '건의 내용을 적어 주세요.' };
+  const dh = devHash_(b.device);
+  if (!countOk_('sug_' + dh, 5, 3600)) return { error: '건의를 너무 많이 보냈어요. 조금 뒤에 다시 보내 줘.' };
+  suggestSheet_().appendRow([new Date(), from, text, dh, '새 건의']);
+  const cache = CacheService.getScriptCache();
+  if (!cache.get('sug_mail')) {
+    const admins = teachers_().filter((t) => isAdmin_(t) && t.email);
+    admins.forEach((t) => {
+      try {
+        MailApp.sendEmail(t.email, '📮 숲속 독서실 건의함에 새 의견이 들어왔어요',
+          '건의함에 새 의견이 들어왔어요.\n\n독서실에서 선생님으로 로그인한 뒤 [📥 받은 대화 → 📮 건의함 보기]에서 확인하거나, 구글 시트 \'건의함\' 탭에서 볼 수 있어요.\n' + STUDYROOM_URL);
+      } catch (e) { console.error(e); }
+    });
+    cache.put('sug_mail', '1', 3600);
+  }
+  return { ok: true };
+}
+
+function suggestList_(b) {
+  const t = teacherByToken_(b.token);
+  if (!t) return { error: '다시 로그인해 주세요.', relogin: true };
+  if (!isAdmin_(t)) return { error: '관리자만 볼 수 있어요.' };
+  const rows = suggestSheet_().getDataRange().getValues();
+  const items = [];
+  for (let i = rows.length - 1; i >= 1 && items.length < 80; i--) {
+    const r = rows[i];
+    if (!r[2]) continue;
+    items.push({ row: i + 1, t: new Date(r[0]).getTime(), from: String(r[1]), text: String(r[2]), status: String(r[4] || '새 건의') });
+  }
+  return { items: items, fresh: items.filter((x) => x.status === '새 건의').length };
+}
+
+function suggestMark_(b) {
+  const t = teacherByToken_(b.token);
+  if (!t) return { error: '다시 로그인해 주세요.', relogin: true };
+  if (!isAdmin_(t)) return { error: '관리자만 바꿀 수 있어요.' };
+  const status = ['새 건의', '확인함', '반영함', '보류'].indexOf(b.status) >= 0 ? b.status : '확인함';
+  const row = Number(b.row);
+  if (!(row >= 2)) return { error: '잘못된 요청이에요.' };
+  suggestSheet_().getRange(row, 5).setValue(status);
+  return { ok: true };
 }
