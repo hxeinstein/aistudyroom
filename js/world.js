@@ -811,8 +811,9 @@ export function createWorld(container, opts = {}) {
     scene.add(mesh(fGeo, flowerColors[i % 4], { x: PX + Math.cos(a) * r, y: DECK_Y + 0.08, z: Math.sin(a) * r * 0.78, cast: false }));
   }
   // 가로등 (밤에 켜짐: 공부방 전구와 같은 빛)
-  for (const deg of [10, 65, 115, 170, 230, 320]) {
-    const t = (deg * Math.PI) / 180, x = Math.cos(t) * 7.3, z = Math.sin(t) * 5.45;
+  // 놀이터 쪽(10°, 320°) 가로등은 산책로 바깥으로 빼서 그네·시소를 가리지 않게
+  for (const [deg, k] of [[10, 1.29], [65, 1], [115, 1], [170, 1], [230, 1], [320, 1.29]]) {
+    const t = (deg * Math.PI) / 180, x = Math.cos(t) * 7.3 * k, z = Math.sin(t) * 5.45 * k;
     const g = new THREE.Group(); g.position.set(PX + x, DECK_Y, z);
     g.add(mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.2, 8), '#5E4630', { y: 1.1 }));
     g.add(mesh(new THREE.CylinderGeometry(0.2, 0.12, 0.18, 10), '#5E4630', { y: 2.3 }));
@@ -834,11 +835,11 @@ export function createWorld(container, opts = {}) {
   // 탈 것 (벤치 · 그네 · 시소 · 뺑뺑이): occ = 앉은 캐릭터, approach = 걸어갈 곳
   const rides = [];
   const addRide = (r) => { rides.push(r); return r; };
-  // 벤치: 가운데를 바라봄. 하나는 스트레칭 벤치
+  // 벤치: 숲 쪽을 바라봄. 하나는 스트레칭 벤치
   const benches = [[-7.6, -4.2], [-2.5, -7.4], [3.0, -7.4, true], [9.3, -2.4]];
   benches.forEach(([x, z, stretch], i) => {
     const g = new THREE.Group(); g.position.set(PX + x, DECK_Y, z);
-    const rot = Math.atan2(-x, -z); g.rotation.y = rot;
+    const rot = Math.atan2(x, z); g.rotation.y = rot;   // 숲 쪽을 바라봄 (나무 너머 하늘)
     const wood = stretch ? '#C98A5A' : '#B07A45';
     g.add(mesh(new THREE.BoxGeometry(1.7, 0.08, 0.5), wood, { y: 0.45 }));
     g.add(mesh(new THREE.BoxGeometry(1.7, 0.38, 0.07), wood, { y: 0.78, z: -0.24 }));
@@ -1008,6 +1009,7 @@ export function createWorld(container, opts = {}) {
     if (r.occ && r.occ !== player) { opts.onToast && opts.onToast('방금 친구가 탔어요'); return; }
     if (player.ride) leaveRide(true);
     r.occ = player; player.ride = r; player.mode = 'sit';
+    if (r.type === 'bench') { yaw = yawTarget = 0; pitchTarget = moodName === 'night' ? 0.6 : 0.3; setZoom(ZOOM_MIN); opts.onToast && opts.onToast('화면을 끌면 하늘을 둘러볼 수 있어요 · 확대·축소도 돼요'); }
     opts.onSfx && opts.onSfx(r.type === 'bench' ? 'sit' : 'creak');
     opts.onRide && opts.onRide(r);
   }
@@ -1015,6 +1017,7 @@ export function createWorld(container, opts = {}) {
     const r = player.ride;
     if (!r) return;
     if (r.occ === player) r.occ = null;
+    if (r.type === 'bench') { yawTarget = 0; pitchTarget = 0.65; setZoom(11.9); }
     player.ride = null; player.stretching = false;
     player.obj.position.copy(r.approach); player.obj.position.y = DECK_Y;
     player.obj.rotation.z = 0;
@@ -1900,10 +1903,17 @@ export function createWorld(container, opts = {}) {
     const bench = player.ride && player.ride.type === 'bench' && !observer ? player.ride : null;
     const close = studying && player.seat;
     if (bench) {
-      const f = bench.seat.clone().addScaledVector(bench.dir, 5).add(new THREE.Vector3(0, moodName === 'night' ? 5.5 : 3.6, 0));
-      const want = bench.seat.clone().addScaledVector(bench.dir, -2.4).add(new THREE.Vector3(0, 1.5, 0));
-      camPos.lerp(want, Math.min(1, dt * 1.5));
-      camLook.lerp(f, Math.min(1, dt * 1.5));
+      // 벤치: 끌면 좌우로 둘러보고 위아래로 하늘을 올려다봐요, 확대·축소는 거리
+      const h = bench.rot + yaw;
+      const e = clamp(pitch - 0.05, 0.05, 1.3);            // 올려다보는 각도 (아래로 끌면 하늘 쪽으로)
+      const look = new THREE.Vector3(Math.sin(h) * Math.cos(e), Math.sin(e), Math.cos(h) * Math.cos(e));
+      // 확대하면 내 눈높이(머리 앞)에서, 축소하면 뒤로 물러나 내 캐릭터와 하늘을 같이
+      const ud = player.obj.userData, headY = (ud.height || 1.4) * (ud.scale || 1) * 0.85;
+      const d = clamp((zoom - ZOOM_MIN) * 0.7, 0, 9) - 0.45;
+      const eye = bench.seat.clone().add(new THREE.Vector3(0, headY + Math.max(0, d) * 0.45, 0)).addScaledVector(look, -d);
+      eye.y = Math.max(eye.y, DECK_Y + 0.35);
+      camPos.lerp(eye, Math.min(1, dt * 4));
+      camLook.lerp(eye.clone().addScaledVector(look, 10), Math.min(1, dt * 4));
     } else {
       const sc = player.obj.userData.scale || 1;
       // 가까이 볼수록 캐릭터 얼굴 높이를 바라봄 (작은 동물도 잘 보이게)
