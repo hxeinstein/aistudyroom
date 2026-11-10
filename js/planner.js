@@ -6,7 +6,7 @@ import {
 
 export const W = 800;
 export const H = 1130;
-const FONT = '"Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
+const FONT = '"Poor Story", "Sunflower", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';   // 플래너: 일기장 느낌 손글씨
 const NAVY = '#1E3A8A';
 const SLOT = 10 * 60 * 1000;
 
@@ -20,6 +20,7 @@ export async function ensureFonts() {
         document.fonts.load(f(400, 16), '가나다ABC'),
         document.fonts.load(f(700, 16), '가나다ABC'),
         document.fonts.load(f(900, 16), 'ABC'),
+        document.fonts.load('700 16px "Sunflower"', '가나다'),   // 주간·월간 리포트
       ]),
       new Promise((r) => setTimeout(r, 2500)),
     ]);

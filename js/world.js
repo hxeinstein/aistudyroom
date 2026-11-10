@@ -4,7 +4,8 @@ import * as THREE from '../vendor/three.module.min.js';
 import { makeAnimal, animateAnimal, animalSpeed } from './animals.js';
 export { makeAnimal };
 
-const FONT = '"Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
+const FONT = '"Sunflower", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
+const BANNER_FONT = '"Do Hyeon", "Sunflower", "Noto Sans KR", sans-serif';   // 학교 이름 가랜드
 const DECK_Y = 0.3;
 const BOUNDS = { x0: -9.2, x1: 9.2, z0: -6.4, z1: 7.4 };
 // 교무실 실내는 같은 장면의 먼 곳(x=60)에 만들고, 들어가면 그곳으로 이동
@@ -566,7 +567,9 @@ export function createWorld(container, opts = {}) {
   // ---------------- 학교 이름 가랜드 (안쪽 벽 위, 글자 하나에 깃발 하나) ----------------
   let banner = null;
   const FLAG_COLORS = ['#F7A8B8', '#FFD670', '#9ED8A8', '#9CC8F2', '#D7B8F5', '#FFB98A'];
-  function setBanner(text) {
+  function setBanner(text, again) {
+    // 가랜드 폰트를 아직 못 받았으면 받은 뒤에 한 번 더 그림
+    if (!again && document.fonts && document.fonts.load) document.fonts.load(`66px ${BANNER_FONT}`, '가나다').then(() => setBanner(text, true)).catch(() => {});
     if (banner) { scene.remove(banner.group); banner = null; }
     const chars = [...String(text || '').trim()].slice(0, 20);
     if (!chars.length) return;
@@ -589,7 +592,7 @@ export function createWorld(container, opts = {}) {
         c.fillStyle = FLAG_COLORS[i % FLAG_COLORS.length];
         c.beginPath(); c.moveTo(4, 4); c.lineTo(cw - 4, 4); c.lineTo(cw / 2, ch - 4); c.closePath(); c.fill();
         c.strokeStyle = 'rgba(107,74,46,0.25)'; c.lineWidth = 4; c.stroke();
-        if (f.ch) { c.fillStyle = '#5A3E26'; c.font = `900 64px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(f.ch, cw / 2, 50); }
+        if (f.ch) { c.fillStyle = '#5A3E26'; c.font = `400 66px ${BANNER_FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(f.ch, cw / 2, 50); }
       });
       const size = f.ch ? w : w * 0.72;
       const flag = new THREE.Mesh(new THREE.PlaneGeometry(size, size * 1.09), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));

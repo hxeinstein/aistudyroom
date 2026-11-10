@@ -9,7 +9,7 @@
   --ink: #3B2F26;
   --muted: #8C7B6B;
   --shadow: 0 6px 0 rgba(107, 74, 46, 0.18), 0 10px 24px rgba(60, 40, 20, 0.18);
-  --font: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font: "Sunflower", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #7EC8F2; font-family: var(--font); color: var(--ink); }
