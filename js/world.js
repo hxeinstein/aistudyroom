@@ -571,9 +571,9 @@ export function createWorld(container, opts = {}) {
     const chars = [...String(text || '').trim()].slice(0, 20);
     if (!chars.length) return;
     const group = new THREE.Group();
-    // 두 책상 묶음 사이 통로 위, 양쪽 기둥에 걸어요 (들어오자마자 화면 위쪽에 보이게)
-    const Z = (PAIR_Z[0] + PAIR_Z[1]) / 2, HALF = 9.4;
-    const sagY = (x) => DECK_Y + 3.0 - 0.45 * (1 - (x / HALF) ** 2);   // 가운데가 살짝 처진 줄
+    // 안쪽 벽 책장 바로 앞, 양쪽 모서리 기둥에 걸어요 (지나다닐 때 걸리지 않게)
+    const Z = -6.25, HALF = 9.6;
+    const sagY = (x) => DECK_Y + 2.3 - 0.2 * (1 - (x / HALF) ** 2);   // 책장 윗부분에 살짝 처지게
     // 글자 깃발 간격: 글자가 많으면 좁게
     const gap = Math.min(0.9, 15.5 / chars.length);
     const w = gap * 0.86;
@@ -603,10 +603,7 @@ export function createWorld(container, opts = {}) {
     const pts = [];
     for (let k = 0; k <= 40; k++) { const x = -HALF + (2 * HALF * k) / 40; pts.push(new THREE.Vector3(x, sagY(x) + 0.02, Z)); }
     group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#8A5A33' })));
-    for (const px of [-HALF - 0.05, HALF + 0.05]) {
-      group.add(mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.1, 8), '#8A5A33', { x: px, y: DECK_Y + 1.55, z: Z }));
-      group.add(mesh(new THREE.SphereGeometry(0.13, 10, 10), '#F5C451', { x: px, y: DECK_Y + 3.15, z: Z }));
-    }
+
     scene.add(group);
     banner = { group, flags };
   }
