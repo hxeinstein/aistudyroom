@@ -472,8 +472,10 @@ export function openTeacherLogin() {
   const m = ctx.openModal(`
     <h2>👩‍🏫 선생님 로그인</h2>
     <div class="tabs"><button type="button" class="tab on" data-t="login">로그인</button><button type="button" class="tab" data-t="reg">처음 등록</button></div>
-    <label class="lbl">초대코드</label>
-    <input class="field" id="tCode" maxlength="12" placeholder="예: T-7K2Q9A" autocapitalize="characters" autocomplete="off" />
+    <div id="tCodeBox" class="hidden">
+      <label class="lbl">초대코드 <span style="font-weight:400">(처음 등록할 때 한 번만)</span></label>
+      <input class="field" id="tCode" maxlength="12" placeholder="예: T-7K2Q9A" autocapitalize="characters" autocomplete="off" />
+    </div>
     <label class="lbl">닉네임 (학생에게 보여요)</label>
     <input class="field" id="tName" maxlength="12" placeholder="예: 김민지" />
     <label class="lbl">비밀번호</label>
@@ -492,6 +494,7 @@ export function openTeacherLogin() {
     tab = t;
     m.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
     m.querySelector('#tReg').classList.toggle('hidden', t !== 'reg');
+    m.querySelector('#tCodeBox').classList.toggle('hidden', t !== 'reg');
     m.querySelector('#tGo').textContent = t === 'reg' ? '등록하기' : '로그인';
     m.querySelector('#tMsg').textContent = '';
   };
@@ -499,7 +502,7 @@ export function openTeacherLogin() {
   m.querySelector('#tCancel').onclick = ctx.closeModal;
   m.querySelector('#tGo').onclick = async () => {
     const msg = m.querySelector('#tMsg');
-    const base = { code: m.querySelector('#tCode').value, name: m.querySelector('#tName').value, password: m.querySelector('#tPw').value };
+    const base = { code: tab === 'reg' ? m.querySelector('#tCode').value : '', name: m.querySelector('#tName').value, password: m.querySelector('#tPw').value };
     const body = tab === 'reg'
       ? { action: 'office.register', ...base, email: m.querySelector('#tEmail').value, look }
       : { action: 'office.login', ...base };
@@ -519,7 +522,7 @@ export function openTeacherLogin() {
     startTeacherSync();
     await refreshSeats();
   };
-  setTimeout(() => m.querySelector('#tCode').focus(), 50);
+  setTimeout(() => m.querySelector('#tName').focus(), 50);
 }
 
 /** 선생님 캐릭터·닉네임 바꾸기 */

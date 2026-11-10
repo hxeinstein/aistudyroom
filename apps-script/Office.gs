@@ -8,7 +8,8 @@
  *   초대코드가 더 필요하면 makeTeacherInvite 를 실행하거나, 시트 위쪽 메뉴 [🐾 독서실 → 교사 초대코드 만들기]
  *
  * [교사 탭]  A 사용 | B 초대코드 | C 닉네임 | D 비밀번호(암호화) | E 알림 이메일 | F 자리(1~10) | G 캐릭터 | H 등록일 | I 문 닫음 | J 로그인 기기
- *   - 로그인: 초대코드 + 닉네임 + 비밀번호. 한 번 로그인한 기기는 로그아웃할 때까지 계속 로그인돼 있어요 (J칸에 암호화된 기기 열쇠, 최대 5대)
+ *   - 처음 등록: 초대코드 + 닉네임 + 비밀번호. 그다음 로그인은 닉네임 + 비밀번호만.
+ *   - 초대코드 칸(B)은 바꾸지 마세요 (비밀번호 암호화와 관리자 확인에 쓰여요). 바꾸려면 관리자 메뉴의 '비밀번호 초기화' 뒤 새 코드로 등록. 한 번 로그인한 기기는 로그아웃할 때까지 계속 로그인돼 있어요 (J칸에 암호화된 기기 열쇠, 최대 5대)
  *   - 모든 기기에서 로그아웃시키려면 J칸을 지우세요
  *   - I칸 '문 닫음': 선생님이 독서실에서 [문 닫기]를 누르면 체크돼요. 체크되면 '시험 출제 중'으로 보이고 학생의 새 질문을 받지 않아요.
  *   - 초대코드는 한 번 등록하면 그 선생님 것이 됨(다른 사람이 다시 쓸 수 없음)
@@ -211,13 +212,14 @@ function officeLogin_(b) {
   const code = String(b.code || '').trim().toUpperCase();
   const name = String(b.name || '').trim();
   const cache = CacheService.getScriptCache();
-  const failKey = 'tfail_' + sha_(code + '|' + name).slice(0, 16);
+  // 로그인은 닉네임 + 비밀번호면 돼요 (초대코드는 처음 등록할 때만. 닉네임은 선생님마다 달라요)
+  const failKey = 'tfail_' + sha_('n|' + name).slice(0, 16);
   const fails = Number(cache.get(failKey) || 0);
   if (fails >= 5) return { error: '여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' };
-  const t = teachers_().filter((x) => x.on && x.hash && x.code === code && x.name === name)[0];
+  const t = teachers_().filter((x) => x.on && x.hash && x.name === name && (!code || x.code === code))[0];
   if (!t || t.hash !== pwHash_(t.code, String(b.password || ''))) {
     cache.put(failKey, String(fails + 1), 600);
-    return { error: '초대코드, 닉네임, 비밀번호 중에 맞지 않는 게 있어요.' };
+    return { error: '닉네임이나 비밀번호가 맞지 않아요.' };
   }
   cache.remove(failKey);
   return { token: newSession_(t), me: me_(t) };
