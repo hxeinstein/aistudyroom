@@ -1,16 +1,58 @@
 // 배경 소리 (Web Audio로 직접 합성 — 음원 파일 없음)
 //  'white' : 부드러운 백색소음 (고음을 살짝 깎아 귀가 편한 소리)
 //  'rain'  : 잔잔한 빗소리
+//  'fire'  : 타닥타닥 모닥불
 export const SOUNDS = [
   { id: 'off', icon: '🔇', name: '소리 끄기' },
   { id: 'white', icon: '🌫️', name: '백색소음' },
   { id: 'rain', icon: '🌧️', name: '빗소리' },
+  { id: 'fire', icon: '🔥', name: '모닥불' },
 ];
+const KINDS = ['white', 'rain', 'fire'];
+const VOL = { white: 0.22, rain: 0.35, fire: 0.5 };
 
 let ctx = null;
 const tracks = {};
 
+// 모닥불: 낮게 웅웅거리는 불꽃 + 불규칙한 '타닥' (짧은 소리 묶음) + 가끔 큰 '탁'
+function fireBuffer() {
+  const sr = ctx.sampleRate;
+  const len = sr * 14; // 길게 만들어 반복이 티 나지 않게
+  const buf = ctx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    let last = 0, slow = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      last = (last + 0.02 * w) / 1.02;
+      slow += (Math.random() - 0.5) * 0.0004; slow *= 0.9995; // 불꽃 크기가 천천히 출렁
+      d[i] = last * (1.6 + slow * 40);
+    }
+    // 타닥타닥
+    let t = 0;
+    while (t < len) {
+      const burst = Math.random() < 0.25 ? 2 + ((Math.random() * 4) | 0) : 1; // 가끔 몇 번 연달아
+      for (let b = 0; b < burst; b++) {
+        const at = t + ((Math.random() * sr * 0.06) | 0);
+        const big = Math.random() < 0.07;
+        const amp = (big ? 0.7 : 0.12 + Math.random() * 0.3) * (ch ? 0.8 + Math.random() * 0.4 : 1);
+        const dur = ((big ? 0.02 : 0.002 + Math.random() * 0.006) * sr) | 0;
+        let prev = 0;
+        for (let k = 0; k < dur && at + k < len; k++) {
+          const n = Math.random() * 2 - 1;
+          const env = Math.exp(-k / (dur * 0.25));
+          d[at + k] += (n - prev) * amp * env; // 차분 → 또렷하고 마른 소리
+          prev = n;
+        }
+      }
+      t += ((0.05 + Math.random() * Math.random() * 0.5) * sr) | 0;
+    }
+  }
+  return buf;
+}
+
 function noiseBuffer(kind) {
+  if (kind === 'fire') return fireBuffer();
   const len = ctx.sampleRate * 4;
   const buf = ctx.createBuffer(2, len, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
@@ -36,7 +78,7 @@ function track(kind) {
   src.loop = true;
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.value = kind === 'white' ? 5200 : 1400;
+  lp.frequency.value = kind === 'white' ? 5200 : kind === 'fire' ? 6000 : 1400;
   const g = ctx.createGain();
   g.gain.value = 0;
   src.connect(lp).connect(g).connect(ctx.destination);
@@ -44,7 +86,7 @@ function track(kind) {
   return (tracks[kind] = g);
 }
 
-/** mode: 'off' | 'white' | 'rain' */
+/** mode: 'off' | 'white' | 'rain' | 'fire' */
 export function setSound(mode) {
   try {
     if (!ctx) {
@@ -52,10 +94,9 @@ export function setSound(mode) {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
     }
     if (ctx.state === 'suspended') ctx.resume();
-    for (const k of ['white', 'rain']) {
+    for (const k of KINDS) {
       if (k !== mode && !tracks[k]) continue;
-      const vol = k === 'white' ? 0.22 : 0.35;
-      track(k).gain.setTargetAtTime(k === mode ? vol : 0, ctx.currentTime, 0.4);
+      track(k).gain.setTargetAtTime(k === mode ? VOL[k] : 0, ctx.currentTime, 0.4);
     }
   } catch (e) { /* 오디오 미지원 */ }
 }

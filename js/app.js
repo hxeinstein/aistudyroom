@@ -66,13 +66,7 @@ function boot() {
   setInterval(refreshHud, 1000);
   $('btnPlanner').onclick = () => openPlanner(S.dayKey());
   $('btnSettings').onclick = openSettings;
-  $('btnSound').onclick = () => {
-    const i = SOUNDS.findIndex((x) => x.id === soundMode());
-    const next = SOUNDS[(i + 1) % SOUNDS.length];
-    S.setSound(next.id);
-    applySound();
-    toast(`${next.icon} ${next.name}`);
-  };
+  $('btnSound').onclick = (e) => { e.stopPropagation(); toggleSoundMenu(); };
   $('btnPause').onclick = togglePause;
   $('btnStop').onclick = openStop;
   $('btnAsk').onclick = () => openChat(currentRoomSubject());
@@ -124,6 +118,28 @@ function applySound(play = true) {
   $('btnSound').textContent = SOUNDS.find((x) => x.id === mode).icon;
   $('btnSound').title = SOUNDS.find((x) => x.id === mode).name;
   if (play || mode === 'off') setSound(mode);
+}
+// 소리 고르기: 아이콘 목록
+function toggleSoundMenu() {
+  let menu = $('soundMenu');
+  if (menu) { menu.remove(); return; }
+  menu = document.createElement('div');
+  menu.id = 'soundMenu';
+  menu.className = 'sound-menu';
+  const cur = soundMode();
+  menu.innerHTML = SOUNDS.map((x) => `<button type="button" class="${x.id === cur ? 'on' : ''}" data-s="${x.id}" title="${x.name}"><span>${x.icon}</span><small>${x.name.replace('소리 끄기', '끄기')}</small></button>`).join('');
+  const r = $('btnSound').getBoundingClientRect();
+  menu.style.top = r.bottom + 8 + 'px';
+  menu.style.right = Math.min(Math.max(8, window.innerWidth - r.right - 60), Math.max(8, window.innerWidth - 270)) + 'px';
+  document.body.appendChild(menu);
+  menu.querySelectorAll('button').forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    S.setSound(b.dataset.s);
+    applySound();
+    menu.remove();
+  }));
+  const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); window.removeEventListener('pointerdown', close, true); } };
+  setTimeout(() => window.addEventListener('pointerdown', close, true), 0);
 }
 // 브라우저 정책상 소리는 첫 터치 후에 켤 수 있음
 window.addEventListener('pointerdown', function once() {
