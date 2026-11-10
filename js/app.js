@@ -215,7 +215,7 @@ function renderBar() {
       ]
     : [
         ...(world.nearDoor === 'vend' ? [{ e: '🥤', t: '간식 고르기', main: true, fn: openVend }] : []),
-        ...(world.held ? [{ e: '🫳', t: '내려놓기', fn: () => { world.setHeld(''); renderBar(); } }] : []),
+
         { e: '📸', t: '사진', fn: takePhoto },
         { e: '🏠', t: '독서실로', main: world.nearDoor === 'park-exit', fn: () => world.goOutOfPark() },
       ];
@@ -255,6 +255,11 @@ function renderBar() {
         { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ];
+  // 손에 간식이 있으면 어디서든 먹기 · 내려놓기
+  if (world.held && !studying && !Office.isTeacher()) btns.push(
+    { e: '😋', t: '먹기', fn: eatSnack },
+    { e: '🫳', t: '내려놓기', fn: () => { world.setHeld(''); renderBar(); Room.syncNow(); } },
+  );
   bar.innerHTML = '';
   for (const b of btns) {
     const el = document.createElement('button');
@@ -984,6 +989,12 @@ function checkParkTime() {
   m.querySelector('#pkMore').onclick = () => { parkSince = Date.now() - 15 * 60 * 1000; closeModal(); };
 }
 const SNACKS = [['🥤', '탄산음료'], ['☕', '커피'], ['🧃', '주스'], ['🍵', '녹차'], ['🍦', '아이스크림'], ['🍪', '쿠키'], ['🍫', '초콜릿'], ['🍙', '주먹밥']];
+function eatSnack() {
+  const e = world.held;
+  if (!e) return;
+  sfx('sit');
+  world.eatHeld(() => { renderBar(); Room.syncNow(); toast(`${e} 냠냠, 맛있었다! 😋`); });
+}
 function openVend() {
   const m = openModal(`
     <h2>🥤 간식 자판기</h2>

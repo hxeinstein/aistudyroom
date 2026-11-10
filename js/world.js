@@ -2032,6 +2032,22 @@ export function createWorld(container, opts = {}) {
     setStretch(on) { player.stretching = !!on; },
     setHeld(e) { player.held = e || ''; setHeldFor(player, player.held); },
     get held() { return player.held || ''; },
+    /** 냠냠: 손에 든 간식이 입 쪽으로 오며 작아지다가 사라짐 */
+    eatHeld(done) {
+      const sp = player.heldSprite;
+      if (!sp) { done && done(); return; }
+      const t0 = performance.now(), s0 = sp.scale.x, p0 = sp.position.clone();
+      const ud = player.obj.userData, mouth = new THREE.Vector3(0, (ud.height || 1.4) * 0.62, 0.35);
+      const step = () => {
+        const k = Math.min(1, (performance.now() - t0) / 1800);
+        sp.position.lerpVectors(p0, mouth, Math.min(1, k * 2));
+        const bite = 1 - Math.floor(k * 4) / 4;           // 네 입에 나눠 먹기
+        sp.scale.setScalar(s0 * Math.max(0.05, bite) * (1 + Math.sin(k * 40) * 0.04));
+        if (k < 1) requestAnimationFrame(step);
+        else { player.held = ''; setHeldFor(player, ''); done && done(); }
+      };
+      step();
+    },
     setMeteorRate(k) { meteorRate = k || 1; },
     /** 사진 찍기: 지금 화면을 그린 캔버스 (이름표는 따로 그림) */
     capture() { renderer.render(scene, camera); return renderer.domElement; },
