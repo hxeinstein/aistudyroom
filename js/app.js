@@ -246,26 +246,29 @@ function bindAnimalPicker(root, onPick) {
   }));
 }
 
-const RANDOM_NAMES = ['졸린 연필', '반짝 지우개', '열공 도토리', '느긋한 구름', '새벽 형광펜', '부지런 다람쥐', '조용한 책갈피', '말랑 노트'];
+// 처음 들어오면 닉네임·캐릭터를 무작위로 (닉네임은 바꿀 수 없고, 캐릭터는 설정에서 바꿔요)
+const NAME_A = ['졸린', '반짝', '열공', '느긋한', '새벽', '부지런', '조용한', '말랑', '씩씩한', '꼼꼼', '포근한', '용감한', '차분한', '든든한', '상큼한', '집중'];
+const NAME_B = ['연필', '지우개', '도토리', '구름', '형광펜', '다람쥐', '책갈피', '노트', '솔방울', '단풍잎', '별똥별', '나뭇잎', '샤프', '포스트잇', '모과', '버섯'];
+const pick = (a) => a[(Math.random() * a.length) | 0];
+function randomName() { return `${pick(NAME_A)} ${pick(NAME_B)}`; }
 
 function openOnboarding() {
-  let animal = 'bear';
-  const name = RANDOM_NAMES[(Math.random() * RANDOM_NAMES.length) | 0];
+  const animal = pick(S.ANIMALS).id;
+  const name = randomName();
+  const a = S.animalById(animal);
+  S.setProfile({ name, animal });
+  world.setPlayer({ animal, name });
   const m = openModal(`
     <div class="big-emoji">🌳📚</div>
     <h2 class="center">숲속 독서실에 오신 걸 환영해요</h2>
     <p class="desc center">자리에 앉아 공부를 시작하면<br/>오늘의 스터디플래너가 자동으로 채워져요.</p>
-    <label class="lbl">닉네임</label>
-    <input class="field" id="obName" maxlength="12" value="${esc(name)}" />
-    <label class="lbl">내 캐릭터</label>
-    ${animalPicker(animal)}
+    <div class="ob-me">
+      <div class="ob-emoji">${a.emoji}</div>
+      <div><small>오늘부터 나는</small><strong>${esc(name)}</strong><span>${a.name} · ${a.trait}</span></div>
+    </div>
     <div class="foot"><button class="btn primary" id="obGo">입장하기 🚪</button></div>
-    <p class="hint center">기록은 이 기기에만 저장돼요.</p>`, { dismiss: false });
-  bindAnimalPicker(m, (a) => { animal = a; world.setPlayer({ animal: a }); });
+    <p class="hint center">닉네임은 자동으로 정해지고 바꿀 수 없어요. 캐릭터는 ⚙️ 설정에서 바꿀 수 있어요.<br/>기록은 이 기기에만 저장돼요.</p>`, { dismiss: false });
   m.querySelector('#obGo').onclick = () => {
-    const n = m.querySelector('#obName').value.trim() || name;
-    S.setProfile({ name: n, animal });
-    world.setPlayer({ animal, name: n });
     closeModal();
     toast('빈 책상을 눌러 앉거나 🪑 버튼을 눌러보세요');
   };
@@ -276,8 +279,8 @@ function openSettings() {
   let animal = p.animal;
   const m = openModal(`
     <h2>⚙️ 설정</h2>
-    <label class="lbl">닉네임</label>
-    <input class="field" id="sName" maxlength="12" value="${esc(p.name)}" />
+    <label class="lbl">닉네임 <small style="color:var(--muted)">(바꿀 수 없어요)</small></label>
+    <div class="field" style="background:var(--cream-2)">${esc(p.name)}</div>
     <label class="lbl">내 캐릭터</label>
     ${animalPicker(animal)}
     <label class="lbl">D-day (시험 이름 · 날짜)</label>
@@ -299,7 +302,7 @@ function openSettings() {
   m.querySelector('#sLeave').onclick = openLeave;
   m.querySelector('#sTeacher').onclick = () => (Office.isTeacher() ? Office.openInbox() : Office.openTeacherLogin());
   m.querySelector('#sSave').onclick = () => {
-    const name = m.querySelector('#sName').value.trim() || p.name || '익명';
+    const name = p.name || randomName();
     S.setProfile({ name, animal });
     S.setExam({ name: m.querySelector('#sExam').value.trim() || '시험', date: m.querySelector('#sDate').value });
     world.setPlayer({ animal, name });
