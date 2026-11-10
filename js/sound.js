@@ -59,6 +59,7 @@ function streamBuffer() {
 }
 
 let ctx = null;
+let curMode = 'off';
 const tracks = {};
 
 // 모닥불: 낮게 웅웅거리는 불꽃 + 불규칙한 '타닥' (짧은 소리 묶음) + 가끔 큰 '탁'
@@ -136,6 +137,7 @@ function track(kind) {
 
 /** mode: 'off' | 'white' | 'rain' | 'fire' | 'stream' */
 export function setSound(mode) {
+  curMode = mode;
   try {
     if (!ctx) {
       if (mode === 'off') return;
@@ -147,4 +149,74 @@ export function setSound(mode) {
       track(k).gain.setTargetAtTime(k === mode ? VOL[k] : 0, ctx.currentTime, 0.4);
     }
   } catch (e) { /* 오디오 미지원 */ }
+}
+
+/* ---------- 쉼터 효과음 · 자연 소리 (소리 끄기면 같이 꺼짐) ---------- */
+export function currentSound() { return curMode; }
+function ready() { return ctx && curMode !== 'off'; }
+function env(g, t0, a, d, peak) { g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(peak, t0 + a); g.gain.exponentialRampToValueAtTime(0.0001, t0 + a + d); }
+function noise(sec) {
+  const b = ctx.createBuffer(1, Math.max(1, ctx.sampleRate * sec) | 0, ctx.sampleRate);
+  const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const s = ctx.createBufferSource(); s.buffer = b; return s;
+}
+/** kind: creak(그네·뺑뺑이) | whoosh(미끄럼틀) | thunk(시소) | vend(자판기) | shutter(사진) | sit | step */
+export function sfx(kind) {
+  if (!ready()) return;
+  try {
+    const t0 = ctx.currentTime, out = ctx.destination;
+    if (kind === 'creak') {
+      const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(320, t0); o.frequency.exponentialRampToValueAtTime(190, t0 + 0.28);
+      f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 6;
+      env(g, t0, 0.03, 0.3, 0.025); o.connect(f).connect(g).connect(out); o.start(t0); o.stop(t0 + 0.4);
+    } else if (kind === 'whoosh') {
+      const n = noise(1), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      f.type = 'bandpass'; f.Q.value = 1.2; f.frequency.setValueAtTime(500, t0); f.frequency.exponentialRampToValueAtTime(2200, t0 + 0.8);
+      env(g, t0, 0.15, 0.75, 0.06); n.connect(f).connect(g).connect(out); n.start(t0);
+    } else if (kind === 'thunk') {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(140, t0); o.frequency.exponentialRampToValueAtTime(70, t0 + 0.15);
+      env(g, t0, 0.005, 0.18, 0.08); o.connect(g).connect(out); o.start(t0); o.stop(t0 + 0.25);
+    } else if (kind === 'vend') {
+      [880, 1320].forEach((fr, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = fr; env(g, t0 + i * 0.12, 0.01, 0.12, 0.04); o.connect(g).connect(out); o.start(t0 + i * 0.12); o.stop(t0 + i * 0.12 + 0.2); });
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'square'; o.frequency.value = 90; env(g, t0 + 0.35, 0.005, 0.12, 0.03); o.connect(g).connect(out); o.start(t0 + 0.35); o.stop(t0 + 0.5);
+    } else if (kind === 'shutter') {
+      const n = noise(0.08), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      f.type = 'highpass'; f.frequency.value = 2500; env(g, t0, 0.002, 0.06, 0.08); n.connect(f).connect(g).connect(out); n.start(t0);
+    } else if (kind === 'sit' || kind === 'step') {
+      const n = noise(0.1), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      f.type = 'lowpass'; f.frequency.value = 700; env(g, t0, 0.005, 0.08, 0.04); n.connect(f).connect(g).connect(out); n.start(t0);
+    }
+  } catch (e) { /* 오디오 미지원 */ }
+}
+// 쉼터 자연 소리: 낮엔 새소리, 밤엔 풀벌레 (아주 작게, 띄엄띄엄)
+let ambTimer = null, ambKind = null;
+export function setAmbience(kind) {
+  ambKind = kind;
+  clearTimeout(ambTimer);
+  if (!kind) return;
+  const tickAmb = () => {
+    if (!ambKind) return;
+    if (ready()) {
+      try {
+        const t0 = ctx.currentTime, out = ctx.destination;
+        if (ambKind === 'day') {
+          const n = 2 + ((Math.random() * 3) | 0), base = 2400 + Math.random() * 1400;
+          for (let i = 0; i < n; i++) {
+            const o = ctx.createOscillator(), g = ctx.createGain(), s = t0 + i * 0.13;
+            o.frequency.setValueAtTime(base, s); o.frequency.exponentialRampToValueAtTime(base * (1.25 + Math.random() * 0.3), s + 0.08);
+            env(g, s, 0.01, 0.08, 0.012); o.connect(g).connect(out); o.start(s); o.stop(s + 0.12);
+          }
+        } else {
+          for (let i = 0; i < 6; i++) {
+            const o = ctx.createOscillator(), g = ctx.createGain(), s = t0 + i * 0.07;
+            o.frequency.value = 4300 + Math.random() * 200; env(g, s, 0.005, 0.035, 0.006); o.connect(g).connect(out); o.start(s); o.stop(s + 0.05);
+          }
+        }
+      } catch (e) {}
+    }
+    ambTimer = setTimeout(tickAmb, (ambKind === 'day' ? 2500 : 1400) + Math.random() * 3500);
+  };
+  ambTimer = setTimeout(tickAmb, 800);
 }

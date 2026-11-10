@@ -9,7 +9,7 @@ export function kindFor(code, cloud) {
   return 'clear';
 }
 
-export function initWeather(world) {
+export function initWeather(world, onFirstSnow) {
   // 시험용: 주소 뒤에 ?weather=snow 처럼 붙이면 그 날씨로
   const forced = new URLSearchParams(location.search).get('weather');
   if (forced) { world.setWeather(forced); return; }
@@ -20,7 +20,16 @@ export function initWeather(world) {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${w.lat}&longitude=${w.lon}&current=weather_code,cloud_cover&timezone=auto`;
       const r = await fetch(url).then((x) => x.json());
       const c = r && r.current;
-      if (c) world.setWeather(kindFor(Number(c.weather_code), Number(c.cloud_cover)));
+      if (!c) return;
+      const kind = kindFor(Number(c.weather_code), Number(c.cloud_cover));
+      world.setWeather(kind);
+      // 이번 겨울 첫눈이면 한 번 알려 줌
+      if (kind === 'snow' && onFirstSnow) {
+        const d = new Date(), winter = d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1;
+        let seen = '';
+        try { seen = localStorage.getItem('aistudyroom.firstSnow') || ''; } catch (e) {}
+        if (seen !== String(winter)) { try { localStorage.setItem('aistudyroom.firstSnow', String(winter)); } catch (e) {} onFirstSnow(); }
+      }
     } catch (e) { /* 날씨를 못 받으면 맑은 하늘 그대로 */ }
   };
   load();

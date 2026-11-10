@@ -1,7 +1,7 @@
 import * as S from './store.js';
 import { createWorld, seatName } from './world.js';
 import { drawPlanner, ensureFonts, savePlannerImage } from './planner.js';
-import { setSound, SOUNDS } from './sound.js';
+import { setSound, SOUNDS, sfx, setAmbience } from './sound.js';
 import { initChat, openChat, hasSubjectFor } from './chat.js';
 import { CONFIG } from './config.js';
 import * as Office from './office.js';
@@ -41,16 +41,20 @@ function boot() {
     onNearBot: () => renderBar(),
     onNearDoor: () => renderBar(),
     onArea: (name) => {
-      $('roomName').textContent = name === 'office' ? '교무실' : '숲속 독서실';
-      $('seatLabel').textContent = name === 'office' ? (Office.isTeacher() ? `${Office.teacherName()} 선생님` : '질문 코너의 챗봇에게 먼저 물어봐요') : '자리를 골라 앉아보세요';
+      $('roomName').textContent = name === 'office' ? '교무실' : name === 'park' ? '🌿 쉼터' : '숲속 독서실';
+      $('seatLabel').textContent = name === 'office' ? (Office.isTeacher() ? `${Office.teacherName()} 선생님` : '질문 코너의 챗봇에게 먼저 물어봐요') : name === 'park' ? '벤치에 앉거나 놀이기구를 눌러 봐요' : '자리를 골라 앉아보세요';
       Office.onArea(name);
+      onParkArea(name);
       renderBar();
     },
     onOfficeSeat: (n, t) => Office.tapSeat(n, t),
+    onRide: (r) => { renderBar(); if (r && r.stretch) startStretch(); else if (!r) stopStretch(); },
+    onVend: () => openVend(),
+    onSfx: (k) => sfx(k),
     confirmClosedOffice: () => Office.confirmClosed(),
   });
   initJoystick(world);
-  initWeather(world);
+  initWeather(world, () => toast('❄️ 첫눈이에요! 쉼터에 나가 볼까?', 6000));
   startStats();
   startNotice();
 
@@ -80,6 +84,12 @@ function boot() {
   setInterval(updatePeopleCount, 3000);
   $('btnSound').onclick = (e) => { e.stopPropagation(); toggleSoundMenu(); };
   $('btnPause').onclick = togglePause;
+  $('btnPark').onclick = () => {
+    if (!S.isPaused()) togglePause();
+    world.goToPark();
+  };
+  setInterval(checkParkTime, 30000);
+  checkEvents();
   $('btnStop').onclick = openStop;
   $('btnAsk').onclick = () => openChat(currentRoomSubject());
   $('zIn').onclick = () => world.zoomBy(0.75);
@@ -183,7 +193,7 @@ function renderBar() {
   else if (!Office.isTeacher() && world.area === 'main' && world.seated < 0) $('seatLabel').textContent = '자리를 골라 앉아보세요';
   const seated = world.seated >= 0;
   const studying = !!S.activeSession();
-  bar.classList.toggle('hidden', studying);
+  bar.classList.toggle('hidden', studying && world.area === 'main');
   const inOffice = world.area === 'office';
   const unread = Office.isTeacher() ? Office.unreadCount() : 0;
   const nearBot = inOffice && world.nearBot ? CONFIG.BOTS.find((b) => b.id === world.nearBot) : null;
@@ -196,7 +206,24 @@ function renderBar() {
       ? { e: '🚪', t: '나가기', fn: () => world.goOutOfOffice() }
       : { e: '🏫', t: '교무실 가기', fn: () => world.goToOffice() },
   ];
-  const btns = Office.isTeacher() && !nearBot
+  const inPark = world.area === 'park';
+  const parkBar = world.onRide
+    ? [
+        { e: '🚶', t: world.onRide === 'slide' ? '미끄럼틀 타는 중' : '일어나기', main: true, fn: () => world.standUp() },
+        { e: '📸', t: '사진', fn: takePhoto },
+        { e: '🏠', t: '독서실로', fn: () => world.goOutOfPark() },
+      ]
+    : [
+        ...(world.nearDoor === 'vend' ? [{ e: '🥤', t: '간식 고르기', main: true, fn: openVend }] : []),
+        ...(world.held ? [{ e: '🫳', t: '내려놓기', fn: () => { world.setHeld(''); renderBar(); } }] : []),
+        { e: '📸', t: '사진', fn: takePhoto },
+        { e: '🏠', t: '독서실로', main: world.nearDoor === 'park-exit', fn: () => world.goOutOfPark() },
+      ];
+  if (inPark && Office.isTeacher()) parkBar.splice(0, parkBar.length, { e: '📥', t: unread ? `받은 대화 ${unread}` : '받은 대화', main: true, fn: () => Office.openInbox() }, { e: '🏠', t: '독서실로', fn: () => world.goOutOfPark() });
+  if (!inPark && !inOffice && Office.isTeacher()) teacherBar.push({ e: '🌿', t: '쉼터 보기', fn: () => world.goToPark() });
+  const btns = inPark
+    ? parkBar
+    : Office.isTeacher() && !nearBot
     ? teacherBar
     : inOffice
     ? [
@@ -222,7 +249,9 @@ function renderBar() {
         ...(world.nearDoor === 'enter' ? [{ e: '🏫', t: '교무실 들어가기', main: true, fn: () => world.goToOffice() }] : []),
         ...(world.nearDoor === 'board' ? [{ e: '📌', t: '응원 게시판', main: true, fn: () => Board.openBoard() }] : []),
         ...(world.nearDoor === 'suggest' ? [{ e: '📮', t: '건의함', main: true, fn: () => Board.openSuggest() }] : []),
+        ...(world.nearDoor === 'park' ? [{ e: '🌿', t: '쉼터 가기', main: true, fn: () => world.goToPark() }] : []),
         { e: '🪑', t: '빈자리 앉기', main: !world.nearDoor, fn: sitNearest },
+        ...(world.nearDoor === 'park' ? [] : [{ e: '🌿', t: '쉼터', fn: () => world.goToPark() }]),
         { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ];
@@ -309,6 +338,7 @@ function openOnboarding() {
 function fmtMin(ms) { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`; }
 function studentStatus(x) {
   if (x.ar === 'office') return '🏫 교무실';
+  if (x.ar === 'park') return `🌿 쉼터에서 쉬는 중${x.st && x.sj ? ' (' + x.sj + ')' : ''}`;
   if (x.st && !x.ps) return `📚 ${x.sj || '공부'} 열공 중 · ${fmtMin(x.el || 0)}`;
   if (x.st) return `☕ 쉬는 중${x.sj ? ' (' + x.sj + ')' : ''}`;
   return x.s >= 0 ? '🪑 자리에 앉음' : '🚶 둘러보는 중';
@@ -910,6 +940,137 @@ async function doSave(key) {
   } catch (e) {
     toast('저장에 실패했어요. 이미지를 길게 눌러 저장해 보세요');
     console.error(e);
+  }
+}
+
+// ---------------- 🌿 쉼터 ----------------
+let parkSince = 0;
+function onParkArea(name) {
+  const inPark = name === 'park';
+  document.body.classList.toggle('in-park', inPark);
+  if (inPark) {
+    parkSince = Date.now();
+    const h = new Date().getHours();
+    setAmbience(h >= 19 || h < 6 ? 'night' : 'day');
+    if (S.activeSession() && !S.isPaused()) { S.pauseSession(); updatePauseUI(); Room.syncNow(); }
+    if (S.activeSession()) toast('쉼터에 오면 휴식으로 바뀌어요 ☕ 쉬는 시간은 공부 시간에서 빠져요');
+    return;
+  }
+  if (!parkSince) return;
+  parkSince = 0;
+  setAmbience(null);
+  stopStretch();
+  // 공부하던 중이면 내 자리로 돌아가기
+  const a = S.getState().active;
+  if (name === 'main' && a && !Office.isTeacher()) {
+    setTimeout(() => {
+      if (!world.walkToSeat(a.seat ?? -1)) sitNearest();
+      toast('자리로 돌아가요. ▶ 다시 시작을 누르면 이어서 공부해요');
+    }, 300);
+  }
+}
+function checkParkTime() {
+  if (world.area !== 'park' || !parkSince || Office.isTeacher()) return;
+  if (Date.now() - parkSince < 30 * 60 * 1000 || $('modalWrap') && !$('modalWrap').classList.contains('hidden')) return;
+  const m = openModal(`
+    <div class="big-emoji">🌿</div>
+    <h2 class="center">${S.fmtHM(Date.now() - parkSince)} 동안 쉬었어요</h2>
+    <p class="desc center">충분히 쉬었다면 다시 공부하러 가 볼까?</p>
+    <div class="foot" style="flex-direction:column">
+      <button class="btn primary block" id="pkGo" type="button">📚 공부하러 가기</button>
+      <button class="btn ghost block" id="pkMore" type="button">조금만 더 쉴래요 (15분)</button>
+    </div>`, { dismiss: false });
+  m.querySelector('#pkGo').onclick = () => { closeModal(); world.goOutOfPark(); };
+  m.querySelector('#pkMore').onclick = () => { parkSince = Date.now() - 15 * 60 * 1000; closeModal(); };
+}
+const SNACKS = [['🥤', '탄산음료'], ['☕', '커피'], ['🧃', '주스'], ['🍵', '녹차'], ['🍦', '아이스크림'], ['🍪', '쿠키'], ['🍫', '초콜릿'], ['🍙', '주먹밥']];
+function openVend() {
+  const m = openModal(`
+    <h2>🥤 간식 자판기</h2>
+    <p class="desc">하나 고르면 손에 들고 다녀요. 친구들에게도 보여요.</p>
+    <div class="vend-grid">${SNACKS.map(([e, n]) => `<button type="button" data-e="${e}"><span>${e}</span><small>${n}</small></button>`).join('')}</div>
+    <div class="foot"><button class="btn ghost" id="vdNone" type="button">빈손으로</button><button class="btn primary" id="vdClose" type="button">닫기</button></div>`);
+  m.querySelectorAll('[data-e]').forEach((b) => (b.onclick = () => {
+    world.setHeld(b.dataset.e); sfx('vend'); closeModal(); renderBar(); Room.syncNow();
+    toast(`${b.dataset.e} 맛있게 먹어요!`);
+  }));
+  m.querySelector('#vdNone').onclick = () => { world.setHeld(''); closeModal(); renderBar(); Room.syncNow(); };
+  m.querySelector('#vdClose').onclick = closeModal;
+}
+// 스트레칭 벤치: 30초 안내
+let stretchTimer = null;
+const STRETCH = ['🙆 두 팔을 위로 쭉~ 기지개를 켜요', '🙂 목을 천천히 오른쪽으로… 왼쪽으로…', '🤷 어깨를 으쓱 올렸다가 툭 내려요', '✋ 손목을 빙글빙글 돌려요', '😮‍💨 숨을 크게 들이쉬고… 후~'];
+function startStretch() {
+  stopStretch();
+  world.setStretch(true);
+  const box = document.createElement('div');
+  box.id = 'stretchBox'; box.className = 'stretch-box';
+  document.body.appendChild(box);
+  let i = 0;
+  const show = () => {
+    if (i >= STRETCH.length) { stopStretch(); toast('개운해졌어요! ✨'); return; }
+    box.innerHTML = `<b>${STRETCH[i]}</b><small>${i + 1} / ${STRETCH.length}</small>`;
+    i++;
+    stretchTimer = setTimeout(show, 6500);
+  };
+  show();
+}
+function stopStretch() {
+  clearTimeout(stretchTimer); stretchTimer = null;
+  $('stretchBox')?.remove();
+  world.setStretch(false);
+}
+// 사진 찍기: 화면 + 이름표 + 예쁜 틀
+async function takePhoto() {
+  try {
+    sfx('shutter');
+    const src = world.capture();
+    const W = src.width, H = src.height, k = W / $('world').clientWidth;
+    const padP = Math.round(28 * k), cap = Math.round(64 * k);
+    const c = document.createElement('canvas');
+    c.width = W + padP * 2; c.height = H + padP * 2 + cap;
+    const g = c.getContext('2d');
+    g.fillStyle = '#FFF8E9'; g.fillRect(0, 0, c.width, c.height);
+    g.save(); g.beginPath(); g.roundRect(padP, padP, W, H, 18 * k); g.clip(); g.drawImage(src, padP, padP); g.restore();
+    const box = $('world').getBoundingClientRect();
+    g.font = `700 ${Math.round(13 * k)}px "Noto Sans KR", sans-serif`; g.textBaseline = 'middle';
+    document.querySelectorAll('.name-tag').forEach((el) => {
+      if (el.style.display === 'none' || el.classList.contains('hidden')) return;
+      const r = el.getBoundingClientRect();
+      if (!r.width || r.bottom < box.top || r.top > box.bottom) return;
+      const x = padP + (r.left - box.left) * k, y = padP + (r.top - box.top) * k, w = r.width * k, h = r.height * k;
+      g.fillStyle = 'rgba(255,248,233,0.94)'; g.beginPath(); g.roundRect(x, y, w, h, h / 2); g.fill();
+      g.fillStyle = '#3B2F25'; g.textAlign = 'center'; g.fillText(el.textContent.replace(/^나/, '나 ').slice(0, 40), x + w / 2, y + h / 2 + 1);
+    });
+    const d = new Date();
+    g.fillStyle = '#6B4A2E'; g.textAlign = 'left'; g.font = `900 ${Math.round(22 * k)}px "Noto Sans KR", sans-serif`;
+    g.fillText(`🌳 숲속 독서실 ${world.area === 'park' ? '쉼터' : ''}`, padP, H + padP + cap / 2 + padP / 2);
+    g.textAlign = 'right'; g.fillStyle = '#7A6A5A'; g.font = `700 ${Math.round(16 * k)}px "Noto Sans KR", sans-serif`;
+    g.fillText(`${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`, c.width - padP, H + padP + cap / 2 + padP / 2);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    const name = `forest-photo-${d.getTime()}.png`;
+    const file = new File([blob], name, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] }) && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      try { await navigator.share({ files: [file], title: '숲속 독서실 사진' }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('사진을 저장했어요 📸');
+  } catch (e) { console.error(e); toast('사진을 찍지 못했어요'); }
+}
+// 특별한 날: 수능 날엔 별똥별이 많이
+function checkEvents() {
+  const today = S.dayKey();
+  const ev = (CONFIG.EVENTS && CONFIG.EVENTS.suneung) || [];
+  if (ev.includes(today)) {
+    world.setMeteorRate(4);
+    let seen = '';
+    try { seen = localStorage.getItem('aistudyroom.event') || ''; } catch (e) {}
+    if (seen !== 'suneung:' + today) {
+      try { localStorage.setItem('aistudyroom.event', 'suneung:' + today); } catch (e) {}
+      setTimeout(() => toast('🌠 수능 대박! 오늘 밤 쉼터에는 별똥별이 많이 떨어져요', 6000), 2500);
+    }
   }
 }
 

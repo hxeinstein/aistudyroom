@@ -341,7 +341,18 @@ export function animateAnimal(a, mode, t, dt) {
     u.head.position.y = hy + bob * 1.3;
     u.head.rotation.x = 0;
     u.body.rotation.z = u.head.rotation.z = u.waddle ? Math.sin(p) * 0.18 : 0; // 펭귄 뒤뚱
-  } else if (mode === 'sit' || mode === 'study') {
+  } else if (mode === 'stretch') {
+    // 앉아서 기지개: 두 팔을 위로 쭉, 목을 좌우로 천천히
+    u.legL.rotation.x = u.legR.rotation.x = -1.4;
+    u.armL.rotation.x = u.armR.rotation.x = -2.9 + Math.sin(t * 1.1) * 0.12;
+    u.armL.rotation.z = 0.25 + Math.sin(t * 0.8) * 0.1;
+    u.armR.rotation.z = -0.25 - Math.sin(t * 0.8) * 0.1;
+    u.body.position.y = by + 0.01;
+    u.body.rotation.z = Math.sin(t * 0.8) * 0.08;
+    u.head.position.y = hy;
+    u.head.rotation.x = -0.15;
+    u.head.rotation.z = Math.sin(t * 0.8) * 0.28;
+    } else if (mode === 'sit' || mode === 'study') {
     u.legL.rotation.x = u.legR.rotation.x = -1.4;
     const write = mode === 'study';
     u.armL.rotation.x = write ? -1.1 : -0.3;

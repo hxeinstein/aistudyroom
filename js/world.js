@@ -781,6 +781,384 @@ export function createWorld(container, opts = {}) {
   const officeSitters = new Map();
   let myTeacherId = null;
 
+  // ---------------- 🌿 쉼터: 산책로 + 놀이터 (x = PX 근처의 다른 구역) ----------------
+  const PX = -60;
+  areas.park = { name: 'park', bounds: { x0: PX - 12.5, x1: PX + 12.5, z0: -9.5, z1: 9.3 }, obs: [] };
+  const pObs = (x, z, w, d) => areas.park.obs.push({ x0: PX + x - w / 2, x1: PX + x + w / 2, z0: z - d / 2, z1: z + d / 2 });
+  const P = (x, y, z) => new THREE.Vector3(PX + x, y, z);
+  const PARK_ENTRY = P(0, DECK_Y, 7.9);
+  const PARK_EXIT = P(0, DECK_Y, 8.8);
+  const MAIN_PARK_PORTAL = new THREE.Vector3(0, DECK_Y, 7.25);
+  // 땅 · 산책로
+  const parkGround = mesh(new THREE.CylinderGeometry(21, 21.5, 0.3, 48), '#9BD67A', { x: PX, y: DECK_Y - 0.15, cast: false, receive: true });
+  scene.add(parkGround);
+  const pathRing = new THREE.Mesh(new THREE.RingGeometry(7.65, 8.95, 72), mat('#E8D2A4'));
+  pathRing.rotation.x = -Math.PI / 2; pathRing.scale.y = 0.75; pathRing.position.set(PX, DECK_Y + 0.012, 0); pathRing.receiveShadow = true;
+  scene.add(pathRing);
+  const entryPath = mesh(new THREE.BoxGeometry(1.3, 0.02, 3.2), '#E8D2A4', { x: PX, y: DECK_Y + 0.011, z: 7.6, cast: false, receive: true });
+  scene.add(entryPath);
+  // 나무 · 꽃
+  const prnd = mulberry(21);
+  for (let i = 0; i < 40; i++) {
+    const a = prnd() * Math.PI * 2, r = 12.5 + prnd() * 7;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r * 0.85;
+    if (z > 2.5 && Math.abs(x) < 14) continue;   // 화면 앞쪽은 비워서 시야 확보
+    const g = new THREE.Group();
+    tree(PX + x, z, 0.9 + prnd() * 0.7, prnd() < 0.4);
+  }
+  for (let i = 0; i < 140; i++) {
+    const a = prnd() * Math.PI * 2, r = 9.6 + prnd() * 3;
+    scene.add(mesh(fGeo, flowerColors[i % 4], { x: PX + Math.cos(a) * r, y: DECK_Y + 0.08, z: Math.sin(a) * r * 0.78, cast: false }));
+  }
+  // 가로등 (밤에 켜짐: 공부방 전구와 같은 빛)
+  for (const deg of [10, 65, 115, 170, 230, 320]) {
+    const t = (deg * Math.PI) / 180, x = Math.cos(t) * 7.3, z = Math.sin(t) * 5.45;
+    const g = new THREE.Group(); g.position.set(PX + x, DECK_Y, z);
+    g.add(mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.2, 8), '#5E4630', { y: 1.1 }));
+    g.add(mesh(new THREE.CylinderGeometry(0.2, 0.12, 0.18, 10), '#5E4630', { y: 2.3 }));
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 10), bulbMat); bulb.position.y = 2.15; g.add(bulb);
+    scene.add(g); pObs(x, z, 0.3, 0.3);
+  }
+  // 연못
+  const pond = mesh(new THREE.CircleGeometry(2.2, 40), new THREE.MeshLambertMaterial({ color: '#7CC4E8', emissive: '#2E6E99', emissiveIntensity: 0.15 }), { x: PX - 4, y: DECK_Y + 0.02, z: 0.4, cast: false });
+  pond.rotation.x = -Math.PI / 2; pond.scale.y = 0.68; scene.add(pond);
+  const pondEdge = mesh(new THREE.TorusGeometry(2.2, 0.12, 6, 40), '#B8AE9C', { x: PX - 4, y: DECK_Y + 0.04, z: 0.4 });
+  pondEdge.rotation.x = -Math.PI / 2; pondEdge.scale.y = 0.68; scene.add(pondEdge);
+  const ripple = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.26, 32), new THREE.MeshBasicMaterial({ color: '#E8F7FF', transparent: true, opacity: 0.6 }));
+  ripple.rotation.x = -Math.PI / 2; ripple.position.set(PX - 4.6, DECK_Y + 0.03, 0.2); scene.add(ripple);
+  for (const [x, z] of [[-3.1, 0.9], [-5.1, -0.1], [-4.3, 1.2]]) {
+    const pad = mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.02, 14), '#6CBF5A', { x: PX + x, y: DECK_Y + 0.035, z, cast: false }); scene.add(pad);
+  }
+  pObs(-4, 0.4, 4.6, 3.2);
+
+  // 탈 것 (벤치 · 그네 · 시소 · 뺑뺑이): occ = 앉은 캐릭터, approach = 걸어갈 곳
+  const rides = [];
+  const addRide = (r) => { rides.push(r); return r; };
+  // 벤치: 가운데를 바라봄. 하나는 스트레칭 벤치
+  const benches = [[-7.6, -4.2], [-2.5, -7.4], [3.0, -7.4, true], [9.3, -2.4]];
+  benches.forEach(([x, z, stretch], i) => {
+    const g = new THREE.Group(); g.position.set(PX + x, DECK_Y, z);
+    const rot = Math.atan2(-x, -z); g.rotation.y = rot;
+    const wood = stretch ? '#C98A5A' : '#B07A45';
+    g.add(mesh(new THREE.BoxGeometry(1.7, 0.08, 0.5), wood, { y: 0.45 }));
+    g.add(mesh(new THREE.BoxGeometry(1.7, 0.38, 0.07), wood, { y: 0.78, z: -0.24 }));
+    for (const lx of [-0.72, 0.72]) g.add(mesh(new THREE.BoxGeometry(0.08, 0.45, 0.45), '#5E4630', { x: lx, y: 0.22 }));
+    if (stretch) {
+      const tag = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.22), new THREE.MeshBasicMaterial({ map: canvasTex(256, 64, (c, w, h) => {
+        c.fillStyle = '#FFF8E3'; c.beginPath(); c.roundRect(2, 2, w - 4, h - 4, 14); c.fill();
+        c.fillStyle = '#6B4A2E'; c.font = `800 30px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🧘 스트레칭', w / 2, h / 2 + 2);
+      }), transparent: true }));
+      tag.position.set(0, 1.1, -0.2); g.add(tag);
+    }
+    scene.add(g);
+    const dir = new THREE.Vector3(Math.sin(rot), 0, Math.cos(rot));
+    pObs(x, z, 1.9, 1.9);
+    [-0.4, 0.4].forEach((sx, k) => {
+      const side = new THREE.Vector3(Math.cos(rot), 0, -Math.sin(rot)).multiplyScalar(sx);
+      const seat = P(x, DECK_Y + 0.43, z).add(side).addScaledVector(dir, 0.04);
+      const r = addRide({ id: `bench${i}${'ab'[k]}`, type: 'bench', group: 'bench' + i, stretch: !!stretch, rot, dir, seat, approach: P(x, DECK_Y, z).add(side).addScaledVector(dir, 1.25), occ: null });
+      g.traverse((o) => { o.userData.ride = 'bench' + i; });
+      return r;
+    });
+  });
+  // 놀이터 바닥 (모래)
+  const sand = mesh(new THREE.CylinderGeometry(3.6, 3.6, 0.03, 40), '#EAD9B0', { x: PX + 3.6, y: DECK_Y + 0.015, z: -1, cast: false, receive: true });
+  scene.add(sand);
+  // 그네
+  const swingG = new THREE.Group(); swingG.position.set(PX + 5.0, DECK_Y, -3.3);
+  for (const sx of [-1.35, 1.35]) for (const sz of [-0.5, 0.5]) {
+    const post = mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.3, 8), '#E2574C', { x: sx, y: 1.1, z: sz * 0.6 });
+    post.rotation.x = sz * 0.45; swingG.add(post);
+  }
+  const topBar = mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.9, 8), '#E2574C', { y: 2.15 }); topBar.rotation.z = Math.PI / 2; swingG.add(topBar);
+  const swingPivots = [-0.6, 0.6].map((sx, k) => {
+    const pv = new THREE.Group(); pv.position.set(sx, 2.12, 0);
+    for (const cx of [-0.22, 0.22]) pv.add(mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.6, 4), '#9A9A9A', { x: cx, y: -0.8 }));
+    pv.add(mesh(new THREE.BoxGeometry(0.55, 0.05, 0.28), '#4D8FD1', { y: -1.6 }));
+    swingG.add(pv);
+    addRide({ id: 'swing' + k, type: 'swing', group: 'swing', pivot: pv, angle: 0, approach: P(5.0 + sx, DECK_Y, -3.3 + 1.3), occ: null });
+    return pv;
+  });
+  swingG.traverse((o) => { o.userData.ride = 'swing'; });
+  scene.add(swingG); pObs(5.0, -3.3, 3.0, 1.4);
+  // 미끄럼틀 (+z 쪽으로 내려옴)
+  const SL = { x: 2.0, z: -3.6 };
+  const slideG = new THREE.Group(); slideG.position.set(PX + SL.x, DECK_Y, SL.z);
+  for (const sx of [-0.35, 0.35]) slideG.add(mesh(new THREE.BoxGeometry(0.07, 1.45, 0.07), '#F5C451', { x: sx, y: 0.72, z: -1.0 }));
+  for (let k = 0; k < 4; k++) slideG.add(mesh(new THREE.BoxGeometry(0.7, 0.05, 0.08), '#F5C451', { y: 0.3 + k * 0.32, z: -1.0 }));
+  slideG.add(mesh(new THREE.BoxGeometry(0.9, 0.1, 0.7), '#F5C451', { y: 1.35, z: -0.6 }));
+  for (const sx of [-0.4, 0.4]) for (const sz of [-0.9, -0.3]) slideG.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.35, 6), '#E2574C', { x: sx, y: 0.67, z: sz }));
+  const chute = mesh(new THREE.BoxGeometry(0.7, 0.06, 2.5), '#4D8FD1', { y: 0.82, z: 0.65 }); chute.rotation.x = 0.42; slideG.add(chute);
+  for (const sx of [-0.36, 0.36]) { const rail = mesh(new THREE.BoxGeometry(0.05, 0.14, 2.5), '#3B79B8', { x: sx, y: 0.9, z: 0.65 }); rail.rotation.x = 0.42; slideG.add(rail); }
+  slideG.traverse((o) => { o.userData.ride = 'slide'; });
+  scene.add(slideG); pObs(SL.x, SL.z + 0.3, 1.0, 2.9);
+  const slideRide = addRide({ id: 'slide', type: 'slide', group: 'slide', approach: P(SL.x, DECK_Y, SL.z - 1.6), occ: null });
+  // 시소
+  const seesawG = new THREE.Group(); seesawG.position.set(PX + 5.4, DECK_Y, 0.9);
+  seesawG.add(mesh(new THREE.CylinderGeometry(0.16, 0.25, 0.4, 10), '#8A5A33', { y: 0.2 }));
+  const beam = new THREE.Group(); beam.position.y = 0.4; seesawG.add(beam);
+  beam.add(mesh(new THREE.BoxGeometry(3.2, 0.08, 0.32), '#81C784'));
+  for (const sx of [-1.4, 1.4]) beam.add(mesh(new THREE.BoxGeometry(0.06, 0.32, 0.06), '#E2574C', { x: sx * 0.85, y: 0.18 }));
+  seesawG.traverse((o) => { o.userData.ride = 'seesaw'; });
+  scene.add(seesawG); pObs(5.4, 0.9, 3.4, 0.6);
+  const seesaw = { beam, tilt: 0 };
+  [-1, 1].forEach((sd, k) => addRide({ id: 'seesaw' + 'LR'[k], type: 'seesaw', group: 'seesaw', side: sd, approach: P(5.4 + sd * 1.4, DECK_Y, 0.9 + 0.85), occ: null }));
+  // 뺑뺑이
+  const merryG = new THREE.Group(); merryG.position.set(PX + 2.0, DECK_Y, 1.5);
+  const disc = new THREE.Group(); merryG.add(disc);
+  disc.add(mesh(new THREE.CylinderGeometry(1.15, 1.15, 0.12, 28), '#FF8A65', { y: 0.16 }));
+  disc.add(mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.0, 8), '#9A9A9A', { y: 0.65 }));
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI * 2;
+    const bar = mesh(new THREE.BoxGeometry(0.05, 0.05, 1.0), '#9A9A9A', { x: Math.sin(a) * 0.5, y: 1.05, z: Math.cos(a) * 0.5 }); bar.rotation.y = a; disc.add(bar);
+  }
+  merryG.traverse((o) => { o.userData.ride = 'merry'; });
+  scene.add(merryG); pObs(2.0, 1.5, 2.4, 2.4);
+  const merry = { disc, w: 0 };
+  [0, 1, 2].forEach((k) => {
+    const a = (k / 3) * Math.PI * 2 + Math.PI / 3;
+    addRide({ id: 'merry' + k, type: 'merry', group: 'merry', a, approach: P(2.0 + Math.sin(a) * 1.75, DECK_Y, 1.5 + Math.cos(a) * 1.75), occ: null });
+  });
+  // 자판기
+  const vend = new THREE.Group(); vend.position.set(PX + 3.4, DECK_Y, 7.2);
+  vend.add(mesh(new THREE.BoxGeometry(1.0, 1.8, 0.7), '#E2574C', { y: 0.9 }));
+  vend.add(mesh(new THREE.BoxGeometry(0.75, 0.9, 0.04), mat('#CFEFFF', { emissive: '#7FC8F0', emissiveIntensity: 0.35 }), { y: 1.2, z: 0.36 }));
+  ['🥤', '☕', '🧃', '🍵', '🍦', '🍪'].forEach((e, k) => {
+    const sp = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.2), new THREE.MeshBasicMaterial({ map: emojiTex(e), transparent: true }));
+    sp.position.set(-0.24 + (k % 3) * 0.24, 1.42 - Math.floor(k / 3) * 0.34, 0.385); vend.add(sp);
+  });
+  vend.add(mesh(new THREE.BoxGeometry(0.5, 0.15, 0.06), '#2B2B2B', { y: 0.42, z: 0.36 }));
+  vend.traverse((o) => { o.userData.vend = true; });
+  scene.add(vend); pObs(3.4, 7.2, 1.1, 0.8);
+  const VEND_SPOT = P(3.4, DECK_Y, 8.0);
+  // 나가는 길 표지판
+  const parkExitSign = new THREE.Group(); parkExitSign.position.set(PX - 1.3, DECK_Y, 8.6);
+  parkExitSign.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 8), '#8A5A33', { y: 0.7 }));
+  const pes = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.36), new THREE.MeshBasicMaterial({ map: canvasTex(320, 96, (c, w, h) => {
+    c.fillStyle = '#FFF8E3'; c.beginPath(); c.roundRect(3, 3, w - 6, h - 6, 18); c.fill();
+    c.fillStyle = '#6B4A2E'; c.font = `900 40px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🏠 독서실로', w / 2, h / 2 + 2);
+  }), transparent: true }));
+  pes.position.set(0, 1.35, 0.05); parkExitSign.add(pes);
+  parkExitSign.traverse((o) => { o.userData.parkExit = true; });
+  scene.add(parkExitSign);
+  // 공부방 입구의 '쉼터' 표지판
+  const toPark = new THREE.Group(); toPark.position.set(1.7, DECK_Y, 7.65);
+  toPark.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 8), '#8A5A33', { y: 0.6 }));
+  const tp = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.3), new THREE.MeshBasicMaterial({ map: canvasTex(320, 96, (c, w, h) => {
+    c.fillStyle = '#E8F5E1'; c.beginPath(); c.roundRect(3, 3, w - 6, h - 6, 18); c.fill();
+    c.fillStyle = '#3F7F3B'; c.font = `900 40px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🌿 쉼터 →', w / 2, h / 2 + 2);
+  }), transparent: true }));
+  tp.position.set(0, 1.15, 0.04); toPark.add(tp);
+  toPark.traverse((o) => { o.userData.toPark = true; });
+  scene.add(toPark);
+
+  // 흩날리는 나뭇잎 (계절 색) · 반딧불 · 별 · 별똥별
+  const month = new Date().getMonth() + 1;
+  const leafColor = month >= 3 && month <= 5 ? '#FFC2D6' : month >= 9 && month <= 11 ? '#F2994A' : month >= 6 ? '#7FCF63' : null;
+  const LEAVES = 70;
+  const leaves = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.18, 0.11), new THREE.MeshLambertMaterial({ color: leafColor || '#FFFFFF', side: THREE.DoubleSide }), LEAVES);
+  const leafData = Array.from({ length: LEAVES }, () => ({ x: (Math.random() - 0.5) * 24, y: Math.random() * 7, z: (Math.random() - 0.5) * 18, s: 0.4 + Math.random() * 0.6, p: Math.random() * 10 }));
+  leaves.frustumCulled = false; scene.add(leaves);
+  const FLIES = 46;
+  const flyPos = new Float32Array(FLIES * 3);
+  const flyData = Array.from({ length: FLIES }, () => ({ x: (Math.random() - 0.5) * 20, y: 0.4 + Math.random() * 1.8, z: (Math.random() - 0.5) * 15, p: Math.random() * 10 }));
+  const flyGeo = new THREE.BufferGeometry(); flyGeo.setAttribute('position', new THREE.BufferAttribute(flyPos, 3));
+  const flies = new THREE.Points(flyGeo, new THREE.PointsMaterial({ color: '#FFF59A', size: 0.16, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  flies.frustumCulled = false; scene.add(flies);
+  const pstarGeo = new THREE.BufferGeometry();
+  const psp = [];
+  for (let i = 0; i < 320; i++) psp.push(PX + (rnd() - 0.5) * 120, 16 + rnd() * 36, -20 - rnd() * 50);
+  pstarGeo.setAttribute('position', new THREE.Float32BufferAttribute(psp, 3));
+  const parkStars = new THREE.Points(pstarGeo, new THREE.PointsMaterial({ color: '#FFFFFF', size: 0.32 }));
+  scene.add(parkStars);
+  const meteorGeo = new THREE.BufferGeometry(); meteorGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const meteor = new THREE.Line(meteorGeo, new THREE.LineBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: 0 }));
+  meteor.frustumCulled = false; scene.add(meteor);
+  let meteorT = -1, meteorWait = 4, meteorFrom = new THREE.Vector3(), meteorDir = new THREE.Vector3();
+  let meteorRate = 1;   // 수능 날 밤처럼 특별한 날엔 더 자주
+  const dummy = new THREE.Object3D();
+
+  function emojiTex(e) {
+    return canvasTex(96, 96, (c, w, h) => { c.font = `72px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(e, w / 2, h / 2 + 4); });
+  }
+  // 손에 든 간식 (머리 옆에 작은 그림)
+  function setHeldFor(a, e) {
+    if (a.heldSprite) { a.obj.remove(a.heldSprite); a.heldSprite = null; }
+    a.held = e || '';
+    if (!e) return;
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTex(e), transparent: true, depthWrite: false }));
+    const sc = a.obj.userData.scale || 1;
+    s.scale.set(0.34, 0.34, 0.34); s.position.set(0.38, 0.62 * sc + 0.1, 0.18);
+    a.obj.add(s); a.heldSprite = s;
+  }
+
+  // 탈 것에 앉기 / 내리기
+  let pendingRideGroup = null;
+  function freeRide(group) { return rides.find((r) => r.group === group && !r.occ) || null; }
+  function tapRide(group) {
+    if (studying || observer) return;
+    if (group === 'slide') { walkTo(slideRide.approach); pendingOffice = { type: 'slide' }; return; }
+    if (player.ride && player.ride.group === group) return;
+    const r = freeRide(group);
+    if (!r) { opts.onToast && opts.onToast('친구들이 다 타고 있어요. 조금 기다려 줘!'); return; }
+    walkTo(r.approach);
+    pendingOffice = { type: 'ride', ride: r };
+  }
+  function mountRide(r) {
+    if (r.occ && r.occ !== player) { opts.onToast && opts.onToast('방금 친구가 탔어요'); return; }
+    if (player.ride) leaveRide(true);
+    r.occ = player; player.ride = r; player.mode = 'sit';
+    opts.onSfx && opts.onSfx(r.type === 'bench' ? 'sit' : 'creak');
+    opts.onRide && opts.onRide(r);
+  }
+  function leaveRide(silent) {
+    const r = player.ride;
+    if (!r) return;
+    if (r.occ === player) r.occ = null;
+    player.ride = null; player.stretching = false;
+    player.obj.position.copy(r.approach); player.obj.position.y = DECK_Y;
+    player.obj.rotation.z = 0;
+    player.mode = 'idle';
+    if (!silent) opts.onRide && opts.onRide(null);
+  }
+  function startSlide() {
+    if (player.ride) leaveRide(true);
+    player.slide = { t: 0, sfx: false };
+    opts.onRide && opts.onRide(slideRide);
+  }
+  const slidePt = (lz, y) => P(SL.x, DECK_Y + y, SL.z + lz);
+  function stepSlide(dt) {
+    const s = player.slide;
+    if (!s) return;
+    s.t += dt;
+    const p = player.obj.position;
+    player.obj.rotation.y = 0;
+    const lerp = (a, b, k) => a.clone().lerp(b, Math.min(1, Math.max(0, k)));
+    if (s.t < 0.9) { p.copy(lerp(slidePt(-1.6, 0), slidePt(-0.6, 1.4), s.t / 0.9)); player.mode = 'walk'; }
+    else if (s.t < 1.2) { p.copy(slidePt(-0.6, 1.4)); player.mode = 'sit'; }
+    else if (s.t < 2.1) {
+      if (!s.sfx) { s.sfx = true; opts.onSfx && opts.onSfx('whoosh'); }
+      const k = (s.t - 1.2) / 0.9; p.copy(lerp(slidePt(-0.5, 1.3), slidePt(1.8, 0.32), k * k)); player.mode = 'sit';
+    } else if (s.t < 2.4) { p.copy(lerp(slidePt(1.8, 0.32), slidePt(2.3, 0), (s.t - 2.1) / 0.3)); player.mode = 'idle'; }
+    else { p.copy(slidePt(2.3, 0)); player.slide = null; player.mode = 'idle'; opts.onRide && opts.onRide(null); }
+  }
+  // 탈 것 움직이기 + 앉은 캐릭터 붙이기 (나와 친구 모두)
+  let creakT = 0, thunkSide = 0;
+  function placeRider(a, pos, rotY, mode) {
+    a.obj.position.copy(pos);
+    a.obj.position.y = pos.y - 0.2 * (a.obj.userData.scale || 1);
+    a.obj.rotation.y = rotY;
+    a.mode = mode;
+  }
+  function stepPark(dt, t) {
+    // 친구가 탄 것
+    for (const r of rides) if (r.occ && r.occ !== player && !(r.occ.remoteRef && r.occ.remoteRef.rd === r.id && remotes.has(r.occ.remoteRef.uid))) r.occ = null;
+    for (const r of remotes.values()) {
+      const want = r.a.area === 'park' && r.rd ? rides.find((x) => x.id === r.rd && x.type !== 'slide') : null;
+      if (r.onRide && r.onRide !== want) { if (r.onRide.occ === r.a) r.onRide.occ = null; r.onRide = null; }
+      if (want && (!want.occ || want.occ === r.a)) { want.occ = r.a; r.a.remoteRef = r; r.onRide = want; }
+    }
+    // 그네
+    for (const r of rides.filter((x) => x.type === 'swing')) {
+      const target = r.occ ? Math.sin(t * 2.3 + (r.id === 'swing1' ? 1.4 : 0)) * 0.55 : 0;
+      r.angle += (target - r.angle) * Math.min(1, dt * (r.occ ? 3 : 1.5));
+      r.pivot.rotation.x = r.angle;
+      if (r.occ) {
+        const w = new THREE.Vector3(0, -1.6, 0.02).applyAxisAngle(new THREE.Vector3(1, 0, 0), r.angle);
+        const base = new THREE.Vector3(); r.pivot.getWorldPosition(base);
+        placeRider(r.occ, base.add(w).add(new THREE.Vector3(0, 0.03, 0)), 0, 'sit');
+        r.occ.obj.rotation.x = r.angle * 0.6;
+      }
+    }
+    // 시소
+    const L = rides.find((x) => x.id === 'seesawL').occ, R = rides.find((x) => x.id === 'seesawR').occ;
+    const tilt = L && R ? Math.sin(t * 1.7) * 0.26 : L ? 0.26 : R ? -0.26 : 0;
+    seesaw.tilt += (tilt - seesaw.tilt) * Math.min(1, dt * 3);
+    seesaw.beam.rotation.z = seesaw.tilt;
+    if (L && R) { const side = Math.sign(Math.sin(t * 1.7)); if (side !== thunkSide && Math.abs(Math.sin(t * 1.7)) > 0.95) { thunkSide = side; if (L === player || R === player) opts.onSfx && opts.onSfx('thunk'); } }
+    for (const r of rides.filter((x) => x.type === 'seesaw' && x.occ)) {
+      const end = new THREE.Vector3(r.side * 1.32, 0.1, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), seesaw.tilt);
+      placeRider(r.occ, P(5.4 + end.x, DECK_Y + 0.4 + end.y, 0.9), r.side > 0 ? -Math.PI / 2 : Math.PI / 2, 'sit');
+    }
+    // 뺑뺑이
+    const riders = rides.filter((x) => x.type === 'merry' && x.occ);
+    merry.w += ((riders.length ? 1.3 : 0) - merry.w) * Math.min(1, dt * 0.8);
+    merry.disc.rotation.y += merry.w * dt;
+    for (const r of riders) {
+      const a = r.a + merry.disc.rotation.y;
+      placeRider(r.occ, P(2.0 + Math.sin(a) * 0.75, DECK_Y + 0.22, 1.5 + Math.cos(a) * 0.75), a + Math.PI / 2, 'sit');
+    }
+    // 벤치
+    for (const r of rides.filter((x) => x.type === 'bench' && x.occ)) placeRider(r.occ, r.seat, r.rot, r.occ === player && player.stretching ? 'stretch' : 'sit');
+    // 삐걱 소리 (내가 탔을 때만, 작게)
+    creakT -= dt;
+    if (player.ride && (player.ride.type === 'swing' || player.ride.type === 'merry') && creakT <= 0) { creakT = player.ride.type === 'swing' ? 1.37 : 2.2; opts.onSfx && opts.onSfx('creak'); }
+    stepSlide(dt);
+    if (area.name !== 'park') return;
+    // 연못 물결
+    const rk = (t * 0.5) % 1;
+    ripple.scale.setScalar(1 + rk * 5); ripple.material.opacity = 0.55 * (1 - rk);
+    // 나뭇잎 (낮·노을, 비·눈이 아닐 때)
+    leaves.visible = !!leafColor && moodName !== 'night' && weather !== 'rain' && weather !== 'snow';
+    if (leaves.visible) {
+      leafData.forEach((d, i) => {
+        d.y -= dt * d.s * 0.6; d.x += Math.sin(t * 0.9 + d.p) * dt * 0.6 + dt * 0.25;
+        if (d.y < 0.05) { d.y = 5 + Math.random() * 3; d.x = (Math.random() - 0.5) * 24; d.z = (Math.random() - 0.5) * 18; }
+        dummy.position.set(PX + d.x, DECK_Y + d.y, d.z);
+        dummy.rotation.set(t * d.s * 2 + d.p, t * 1.3 + d.p, Math.sin(t + d.p));
+        dummy.updateMatrix(); leaves.setMatrixAt(i, dummy.matrix);
+      });
+      leaves.instanceMatrix.needsUpdate = true;
+    }
+    // 반딧불 (밤)
+    flies.visible = moodName === 'night' && weather !== 'rain' && weather !== 'snow';
+    if (flies.visible) {
+      flyData.forEach((d, i) => {
+        d.x += Math.sin(t * 0.6 + d.p) * dt * 0.4; d.z += Math.cos(t * 0.5 + d.p * 1.3) * dt * 0.4; d.y = 0.4 + (Math.sin(t * 0.7 + d.p) + 1) * 0.9;
+        flyPos.set([PX + d.x, DECK_Y + d.y, d.z], i * 3);
+      });
+      flyGeo.attributes.position.needsUpdate = true;
+      flies.material.opacity = 0.55 + Math.sin(t * 3) * 0.35;
+    }
+    // 별똥별 (맑은 밤)
+    if (moodName === 'night' && weather === 'clear') {
+      if (meteorT < 0) {
+        meteorWait -= dt * meteorRate;
+        if (meteorWait <= 0) {
+          meteorT = 0; meteorWait = 5 + Math.random() * 9;
+          meteorFrom.set(PX + (Math.random() - 0.5) * 50, 22 + Math.random() * 14, -25 - Math.random() * 20);
+          meteorDir.set(-0.8 - Math.random() * 0.4, -0.45, 0.1).normalize();
+        }
+      } else {
+        meteorT += dt;
+        const k = meteorT / 0.9;
+        const head = meteorFrom.clone().addScaledVector(meteorDir, k * 16);
+        const tail = head.clone().addScaledVector(meteorDir, -3.2);
+        meteorGeo.attributes.position.array.set([tail.x, tail.y, tail.z, head.x, head.y, head.z]);
+        meteorGeo.attributes.position.needsUpdate = true;
+        meteor.material.opacity = Math.sin(Math.min(1, k) * Math.PI) * 0.95;
+        if (k >= 1) { meteorT = -1; meteor.material.opacity = 0; }
+      }
+    } else meteor.material.opacity = 0;
+  }
+  function enterPark() { switchArea('park', PARK_ENTRY.clone(), Math.PI); opts.onSfx && opts.onSfx('step'); }
+  function exitPark() { if (player.ride) leaveRide(true); player.slide = null; switchArea('main', new THREE.Vector3(0, DECK_Y, 6.7), Math.PI); }
+  function goToPark() {
+    if (area.name === 'park') return;
+    if (area.name === 'office') { exitOffice(); }
+    if (player.seat) standUp();
+    if (observer || Math.hypot(player.obj.position.x - MAIN_PARK_PORTAL.x, player.obj.position.z - MAIN_PARK_PORTAL.z) < 0.6) return enterPark();
+    walkTo(MAIN_PARK_PORTAL);
+    pendingOffice = { type: 'park' };
+  }
+  function goOutOfPark() {
+    if (area.name !== 'park') return;
+    if (observer) return exitPark();
+    if (player.ride) leaveRide(true);
+    walkTo(PARK_EXIT);
+    pendingOffice = { type: 'park-exit' };
+  }
+
   // ---------------- 길찾기 (격자 A*) ----------------
   const GS = 0.25;
   const R = 0.28;
@@ -894,7 +1272,7 @@ export function createWorld(container, opts = {}) {
 
   function walkTo(target) {
     if (studying) return;
-    if (player.seat || player.officeDesk) standUp();
+    if (player.seat || player.officeDesk || player.ride) standUp();
     path = findPath(player.obj.position, target);
   }
   // ---------------- 다른 학생들 (실시간, Firebase) ----------------
@@ -974,7 +1352,10 @@ export function createWorld(container, opts = {}) {
       }
       r.info = x;
       r.at = now;
-      r.a.area = x.ar === 'office' ? 'office' : 'main';
+      r.a.area = x.ar === 'office' || x.ar === 'park' ? x.ar : 'main';
+      r.rd = typeof x.rd === 'string' ? x.rd.slice(0, 12) : '';
+      r.uid = x.uid;
+      if ((x.it || '') !== (r.a.held || '')) setHeldFor(r.a, typeof x.it === 'string' ? x.it.slice(0, 4) : '');
       r.a.obj.traverse((o) => { o.userData.remoteNick = x.n; });
       const wantSeat = r.a.area === 'main' && x.s >= 0 && seats[x.s] ? x.s : -1;
       if (wantSeat !== r.seatIdx) {
@@ -1010,7 +1391,7 @@ export function createWorld(container, opts = {}) {
   function stepRemotes(dt) {
     for (const r of remotes.values()) {
       r.a.obj.visible = r.a.area === area.name;
-      if (r.seatIdx >= 0) continue;
+      if (r.seatIdx >= 0 || r.onRide) continue;
       const p = r.a.obj.position;
       const d = Math.hypot(r.target.x - p.x, r.target.z - p.z);
       if (d > 0.04) {
@@ -1042,12 +1423,13 @@ export function createWorld(container, opts = {}) {
   /** 실시간으로 나눌 내 상태 */
   function getPlayerState() {
     const p = player.obj.position;
-    return { x: Math.round(p.x * 100) / 100, z: Math.round(p.z * 100) / 100, ry: Math.round(player.obj.rotation.y * 100) / 100, ar: area.name, s: area.name === 'main' && player.seat ? player.seat.idx : -1 };
+    return { x: Math.round(p.x * 100) / 100, z: Math.round(p.z * 100) / 100, ry: Math.round(player.obj.rotation.y * 100) / 100, ar: area.name, s: area.name === 'main' && player.seat ? player.seat.idx : -1,
+      rd: player.ride ? player.ride.id : player.slide ? 'slide' : '', it: player.held || '' };
   }
   /** 선생님: 캐릭터 없이 구경 (화면은 보이지 않는 시점을 따라 움직임) */
   function setObserver(on) {
     observer = !!on;
-    if (observer && (player.seat || player.officeDesk)) standUp();
+    if (observer && (player.seat || player.officeDesk || player.ride)) standUp();
     player.obj.visible = !observer;
     player.el.classList.toggle('hidden', observer);
     document.body.classList.toggle('observer', observer);
@@ -1092,6 +1474,7 @@ export function createWorld(container, opts = {}) {
     return best ? best.idx : -1;
   }
   function standUp() {
+    if (player.ride) { leaveRide(); return; }
     if (player.officeDesk) {
       const d = player.officeDesk;
       player.officeDesk = null;
@@ -1130,7 +1513,7 @@ export function createWorld(container, opts = {}) {
   const PORTAL = new THREE.Vector3(OFFICE_PORTAL.x, DECK_Y, OFFICE_PORTAL.z);
   const EXIT_SPOT = new THREE.Vector3(OX, DECK_Y, 4.0);
   function switchArea(name, pos, rotY) {
-    if (player.seat || player.officeDesk) standUp();
+    if (player.seat || player.officeDesk || player.ride) standUp();
     area = areas[name];
     path = [];
     pendingSeat = null; pendingBot = null; pendingOffice = null;
@@ -1260,6 +1643,10 @@ export function createWorld(container, opts = {}) {
       const ud = h.object.userData;
       if (ud.officeDoor) { goToOffice(); return; }
       if (ud.spot) { opts.onSpot && opts.onSpot(ud.spot); return; }   // 응원 게시판 · 건의함
+      if (ud.ride) { tapRide(ud.ride); return; }                       // 쉼터: 벤치 · 그네 · 시소 · 뺑뺑이 · 미끄럼틀
+      if (ud.vend) { if (Math.hypot(player.obj.position.x - VEND_SPOT.x, player.obj.position.z - VEND_SPOT.z) < 0.6) { opts.onVend && opts.onVend(); } else { walkTo(VEND_SPOT); pendingOffice = { type: 'vend' }; } return; }
+      if (ud.parkExit) { goOutOfPark(); return; }
+      if (ud.toPark) { goToPark(); return; }
       if (ud.officeExit) { goOutOfOffice(); return; }
       if (ud.officeSeat) { tapDesk(ud.officeSeat); return; }
       if (ud.botId) { tapBot(ud.botId); return; }  // 챗봇: 가까우면 바로, 멀면 걸어가서 말 걸기
@@ -1279,7 +1666,7 @@ export function createWorld(container, opts = {}) {
         walkToSeat(s);
         return;
       }
-      if (h.object === deck || h.object === grass || h.object === rug || h.object === rug2 || h.object === officeFloor) {
+      if (h.object === deck || h.object === grass || h.object === rug || h.object === rug2 || h.object === officeFloor || h.object === parkGround || h.object === pathRing || h.object === sand || h.object === entryPath) {
         const p = h.point;
         const B = area.bounds;
         const t = new THREE.Vector3(clamp(p.x, B.x0, B.x1), DECK_Y, clamp(p.z, B.z0, B.z1));
@@ -1378,7 +1765,7 @@ export function createWorld(container, opts = {}) {
     snow.visible = weather === 'snow';
     hemi.groundColor.set(md.ground);
     bulbMat.emissiveIntensity = md.bulbs;
-    stars.visible = name === 'night';
+    stars.visible = parkStars.visible = name === 'night' && weather === 'clear';
     clouds.forEach((c) => (c.visible = name !== 'night'));
     grass.material.color.set(name === 'night' ? '#5E8A6A' : '#9BD67A');
   }
@@ -1408,9 +1795,9 @@ export function createWorld(container, opts = {}) {
     if (!kx && !kz && (stick.x || stick.y)) { kx = stick.x; kz = stick.y; mag = Math.min(1, Math.hypot(kx, kz)); }
     const p = player.obj.position;
     let moving = false;
-    if ((kx || kz) && !studying) {
+    if ((kx || kz) && !studying && !player.slide) {
       if (follow) stopFollow();
-      if (player.seat || player.officeDesk) standUp();
+      if (player.seat || player.officeDesk || player.ride) standUp();
       path = [];
       pendingSeat = null;
       pendingBot = null;
@@ -1420,7 +1807,7 @@ export function createWorld(container, opts = {}) {
       const len = Math.hypot(dx, dz);
       moveStep(dx / len, dz / len, dt * (mag < 0.35 ? 0.45 : mag));
       moving = true;
-    } else if (path.length) {
+    } else if (path.length && !player.slide) {
       const target = path[0];
       v.subVectors(target, p);
       v.y = 0;
@@ -1440,6 +1827,11 @@ export function createWorld(container, opts = {}) {
           pendingOffice = null;
           if (po.type === 'enter') enterOffice();
           else if (po.type === 'exit') exitOffice();
+          else if (po.type === 'park') enterPark();
+          else if (po.type === 'park-exit') exitPark();
+          else if (po.type === 'ride') mountRide(po.ride);
+          else if (po.type === 'slide') startSlide();
+          else if (po.type === 'vend') { faceDir(0, -1, 1); opts.onVend && opts.onVend(); }
           else if (po.type === 'sit') sitAtDesk(po.desk);
           else if (po.type === 'desk') {
             faceDir(0, -1, 1);
@@ -1472,7 +1864,7 @@ export function createWorld(container, opts = {}) {
         faceDir(v.x, v.z, dt);
       }
     }
-    if (!player.seat && !player.officeDesk) {
+    if (!player.seat && !player.officeDesk && !player.ride && !player.slide) {
       player.mode = moving ? 'walk' : 'idle';
       p.y = DECK_Y;
     }
@@ -1485,11 +1877,17 @@ export function createWorld(container, opts = {}) {
       ? (player.seat ? null
         : Math.hypot(p.x - PORTAL.x, p.z - PORTAL.z) < 1.4 ? 'enter'
         : Math.hypot(p.x - BOARD_POS.x, p.z - (BOARD_POS.z + 0.7)) < 1.7 ? 'board'
-        : Math.hypot(p.x - BOX_POS.x, p.z - (BOX_POS.z + 0.7)) < 1.2 ? 'suggest' : null)
+        : Math.hypot(p.x - BOX_POS.x, p.z - (BOX_POS.z + 0.7)) < 1.2 ? 'suggest'
+        : Math.hypot(p.x - MAIN_PARK_PORTAL.x, p.z - MAIN_PARK_PORTAL.z) < 1.2 ? 'park' : null)
+      : area.name === 'park'
+      ? (player.ride || player.slide ? null
+        : Math.hypot(p.x - PARK_EXIT.x, p.z - PARK_EXIT.z) < 1.4 ? 'park-exit'
+        : Math.hypot(p.x - VEND_SPOT.x, p.z - VEND_SPOT.z) < 1.2 ? 'vend' : null)
       : (Math.hypot(p.x - EXIT_SPOT.x, p.z - EXIT_SPOT.z) < 1.3 ? 'exit' : null);
     if (door !== nearDoor) { nearDoor = door; opts.onNearDoor && opts.onNearDoor(door); }
 
     stepRemotes(dt);
+    stepPark(dt, t);
     for (const a of actors) if (!a.fixed) animateAnimal(a.obj, a.mode, t + a.obj.userData.phase, dt);
     for (const av of officeSitters.values()) animateAnimal(av, 'study', t + av.userData.phase, dt);
     clouds.forEach((c, i) => { c.position.x += dt * (0.3 + i * 0.05); if (c.position.x > 40) c.position.x = -40; });
@@ -1498,18 +1896,27 @@ export function createWorld(container, opts = {}) {
     yaw += (yawTarget - yaw) * Math.min(1, dt * 6);
     pitch += (pitchTarget - pitch) * Math.min(1, dt * 6);
     zoom += (zoomTarget - zoom) * Math.min(1, dt * 6);
+    // 벤치에 앉으면 하늘을 올려다보는 '멍 때리기' 시점
+    const bench = player.ride && player.ride.type === 'bench' && !observer ? player.ride : null;
     const close = studying && player.seat;
-    const sc = player.obj.userData.scale || 1;
-    // 가까이 볼수록 캐릭터 얼굴 높이를 바라봄 (작은 동물도 잘 보이게)
-    const zt = clamp((zoom - ZOOM_MIN) / (6 - ZOOM_MIN), 0, 1);
-    const lookY = (0.15 + 0.55 * sc) * (1 - zt) + 0.8 * zt;
-    const focus = close ? v.set(player.seat.chairPos.x, DECK_Y + 0.8, player.seat.chairPos.z + player.seat.f * 0.5) : v.set(p.x, p.y + lookY, p.z);
-    const cy = close ? (player.seat.f > 0 ? Math.PI : 0) : yaw;
-    const dist = close ? 2.2 : Math.cos(pitch) * zoom;
-    const hgt = close ? 2.9 : Math.sin(pitch) * zoom;
-    const desired = new THREE.Vector3(focus.x + Math.sin(cy) * dist, focus.y + hgt, focus.z + Math.cos(cy) * dist);
-    camPos.lerp(desired, Math.min(1, dt * (observer ? 9 : 3)));
-    camLook.lerp(focus, Math.min(1, dt * (observer ? 10 : 4)));
+    if (bench) {
+      const f = bench.seat.clone().addScaledVector(bench.dir, 5).add(new THREE.Vector3(0, moodName === 'night' ? 5.5 : 3.6, 0));
+      const want = bench.seat.clone().addScaledVector(bench.dir, -2.4).add(new THREE.Vector3(0, 1.5, 0));
+      camPos.lerp(want, Math.min(1, dt * 1.5));
+      camLook.lerp(f, Math.min(1, dt * 1.5));
+    } else {
+      const sc = player.obj.userData.scale || 1;
+      // 가까이 볼수록 캐릭터 얼굴 높이를 바라봄 (작은 동물도 잘 보이게)
+      const zt = clamp((zoom - ZOOM_MIN) / (6 - ZOOM_MIN), 0, 1);
+      const lookY = (0.15 + 0.55 * sc) * (1 - zt) + 0.8 * zt;
+      const focus = close ? v.set(player.seat.chairPos.x, DECK_Y + 0.8, player.seat.chairPos.z + player.seat.f * 0.5) : v.set(p.x, p.y + lookY, p.z);
+      const cy = close ? (player.seat.f > 0 ? Math.PI : 0) : yaw;
+      const dist = close ? 2.2 : Math.cos(pitch) * zoom;
+      const hgt = close ? 2.9 : Math.sin(pitch) * zoom;
+      const desired = new THREE.Vector3(focus.x + Math.sin(cy) * dist, focus.y + hgt, focus.z + Math.cos(cy) * dist);
+      camPos.lerp(desired, Math.min(1, dt * (observer ? 9 : 3)));
+      camLook.lerp(focus, Math.min(1, dt * (observer ? 10 : 4)));
+    }
     camera.position.copy(camPos);
     camera.lookAt(camLook);
 
@@ -1606,6 +2013,18 @@ export function createWorld(container, opts = {}) {
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus, goal: look ? '' : baseGoal });
     },
     walkToBot: tapBot,
+    // 쉼터
+    goToPark,
+    tapRide,
+    goOutOfPark,
+    get onRide() { return player.ride ? player.ride.type : player.slide ? 'slide' : null; },
+    get rideIsStretch() { return !!(player.ride && player.ride.stretch); },
+    setStretch(on) { player.stretching = !!on; },
+    setHeld(e) { player.held = e || ''; setHeldFor(player, player.held); },
+    get held() { return player.held || ''; },
+    setMeteorRate(k) { meteorRate = k || 1; },
+    /** 사진 찍기: 지금 화면을 그린 캔버스 (이름표는 따로 그림) */
+    capture() { renderer.render(scene, camera); return renderer.domElement; },
     setWeather,
     get weather() { return weather; },
     startFollow,

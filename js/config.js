@@ -13,6 +13,9 @@ export const CONFIG = {
 // 위도·경도는 학교 근처로 바꿔 주세요 (지도 앱에서 학교를 길게 누르면 나와요)
 CONFIG.WEATHER = { name: '우리 지역', lat: 0, lon: 0 };
 
+// 특별한 날 (쉼터 이벤트): 수능 날엔 밤하늘에 별똥별이 많이
+CONFIG.EVENTS = { suneung: ['2026-11-19', '2027-11-18'] };
+
 // 예전 이름 호환
 CONFIG.MASCOT_NAME = CONFIG.BOTS[0].name;
 
