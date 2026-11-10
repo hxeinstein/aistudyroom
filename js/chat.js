@@ -1,7 +1,7 @@
 // 뭉치 박사 질문 챗봇 창 — 선생님의 Apps Script(힌트 코치)를 불러서 사용
 // 대화는 이 화면(메모리)에만 있고, 새로고침하거나 '새 문제'를 누르면 사라짐.
 import { CONFIG } from './config.js';
-import { schoolCode } from './school.js';
+import { schoolCode, isGuest, school } from './school.js';
 
 const DEFAULT_GREETING = '어떤 문제를 풀어 볼까? 문제를 글로 쓰거나 사진으로 올려 줘!';
 const $ = (id) => document.getElementById(id);
@@ -14,6 +14,7 @@ let subjects = [];      // 선생님이 '과목' 탭에서 사용 체크한 교�
 let current = null;     // 지금 고른 교과
 let bot = null;         // 지금 말하고 있는 챗봇 (CONFIG.BOTS 중 하나)
 let onAskTeacher = null;
+let onNeedSchool = null;   // 학교 코드 없이 들어온 학생: 챗봇 대신 학교 코드 넣기
 
 /** 교과를 맡은 챗봇 ('과목' 탭 H칸, 비어 있으면 첫 번째 챗봇) */
 const botOf = (x) => CONFIG.BOTS.find((b) => b.name === (x && x.bot)) || CONFIG.BOTS[0];
@@ -230,6 +231,7 @@ function scrollDown() { const l = $('cLog'); l.scrollTop = l.scrollHeight; }
 // ---------- 열기/닫기 ----------
 export function initChat(o = {}) {
   onAskTeacher = o.onAskTeacher || null;
+  onNeedSchool = o.onNeedSchool || null;
   $('cName').textContent = CONFIG.BOTS[0].name;
   $('cAskTeacher').onclick = () => {
     // 챗봇으로 해결이 안 될 때만 선생님께 (이때 선생님께 알림이 감)
@@ -270,6 +272,16 @@ export async function openChat(roomName, botId) {
     return;
   }
   setComposer(false);
+  if (isGuest() || !school()) {
+    setBot(CONFIG.BOTS.find((b) => b.id === botId) || CONFIG.BOTS[0]);
+    $('cSubjects').classList.add('hidden');
+    const div = document.createElement('div');
+    div.className = 'c-note c-code-hint';
+    div.innerHTML = '🔒 챗봇 선생님은 <b>학교 코드</b>를 넣은 학생만 이야기할 수 있어요. <button type="button" class="c-ghost">🏫 학교 코드 넣기</button>';
+    div.querySelector('button').onclick = () => { closeChat(); onNeedSchool && onNeedSchool(); };
+    $('cLog').appendChild(div);
+    return;
+  }
   try {
     await loadConfig();
   } catch (e) {

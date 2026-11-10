@@ -103,7 +103,7 @@ function loadSubjects_(school) {
   if (!sh) return null;
   // J칸(학교 코드): 비우면 기본 학교만, '*'면 모든 학교, 코드를 적으면 그 학교만
   const sc = schoolCode_(school);
-  // 학교 코드 없이 들어온 학생(둘러보기): 기본 학교 교과와 *교과를 쓰되 교과서 쪽수는 빼요
+  // 학교 코드 없이 들어온 학생(둘러보기)은 doPost에서 챗봇을 막아요. (여기 오면 기본 학교 교과를 쪽수 없이)
   const guest = sc === GUEST_SCHOOL, def = defaultSchool_();
   const forSchool = (r) => { const j = String(r[9] || '').trim().toUpperCase(); if (j === '*') return true; const list = j ? j.split(/[,\s]+/) : [def]; return list.indexOf(guest ? def : sc) >= 0; };
   return sh.getDataRange().getValues().slice(1)
@@ -265,6 +265,9 @@ function doPost(e) {
     out = roomPeek_();
   } else if (String(body.action || '').indexOf('office.') === 0) {
     out = officeHandle_(body);   // 교무실 (Office.gs)
+  } else if (body.school === GUEST_SCHOOL && (body.action === 'config' || body.action === 'chat' || body.action === 'checkCode')) {
+    // 학교 코드 없이 들어온 학생(둘러보기)은 챗봇을 쓸 수 없어요 (무료 한도 보호)
+    out = body.action === 'config' ? { name: MASCOT_NAME, subjects: [], needSchool: true } : { error: '챗봇 선생님은 학교 코드를 넣은 학생만 이야기할 수 있어요.', needSchool: true };
   } else if (body.action === 'config') {
     const list = loadSubjects_(body.school) || [findSubject_('')];
     out = {

@@ -96,7 +96,7 @@ function boot(skipOnboarding = false) {
   $('zIn').onclick = () => world.zoomBy(0.75);
   $('zOut').onclick = () => world.zoomBy(1.33);
   $('zReset').onclick = () => world.resetView();
-  initChat({ onAskTeacher: (q) => Office.askTeacher(q) });
+  initChat({ onAskTeacher: (q) => Office.askTeacher(q), onNeedSchool: () => openSchoolGate(true) });
   Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' }, onTeacherChange: () => { renderBar(); Room.syncNow(); }, onOpenSuggestAdmin: () => Board.openSuggestAdmin() });
   Board.initBoard({ world, toast, openModal, closeModal, getProfile: () => st.profile || { name: '익명', animal: 'bear' }, teacherToken: () => Office.teacherToken(), isAdmin: () => Office.isAdmin() });
   Room.initRoom({
@@ -598,7 +598,7 @@ function openSettings() {
     <input class="field" id="sGoal" maxlength="24" placeholder="예: 수학 3시간, 영단어 100개" value="${esc(S.getGoal())}" />
     <label class="glasses-tg" style="margin:10px 0 0"><input type="checkbox" id="sRank" ${S.showInRank() ? 'checked' : ''} /> 🏆 오늘 순위에 내 이름 보이기</label>
     <button class="btn soft block" id="sSubjects" type="button" style="margin-top:14px">📚 내 과목 관리</button>
-    ${CONFIG.CHATBOT_URL ? `<button class="btn ghost block" id="sSchool" type="button" style="margin-top:6px">${Sch.isGuest() || !Sch.school() ? '🏫 학교 코드 넣기 <small>(교과서 쪽수 · 교무실)</small>' : `🏫 ${esc(Sch.schoolName())} · 학교 바꾸기`}</button>` : ''}
+    ${CONFIG.CHATBOT_URL ? `<button class="btn ghost block" id="sSchool" type="button" style="margin-top:6px">${Sch.isGuest() || !Sch.school() ? '🏫 학교 코드 넣기 <small>(챗봇 · 교무실)</small>' : `🏫 ${esc(Sch.schoolName())} · 학교 바꾸기`}</button>` : ''}
     <button class="btn soft block" id="sTeacher" type="button" style="margin-top:8px">${Office.isTeacher() ? `📥 ${esc(Office.teacherName())} 선생님 · 받은 대화` : '👩‍🏫 선생님 로그인'}</button>
     <div class="foot">
       <button class="btn ghost" id="sClose">닫기</button>
@@ -1170,7 +1170,7 @@ function openSchoolGate(canCancel) {
     <input class="field" id="scCode" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="학교 코드" style="text-align:center;font-size:20px;letter-spacing:2px" />
     <p class="c-gate-msg" id="scMsg"></p>
     <div class="foot">${canCancel ? '<button class="btn ghost" id="scCancel" type="button">그대로 둘래요</button>' : '<button class="btn ghost" id="scGuest" type="button">코드 없이 들어가기</button>'}<button class="btn primary" id="scGo" type="button">들어가기</button></div>
-    ${canCancel ? '' : '<p class="hint center">코드 없이 들어가면 공개 공부방에서 공부하고, 챗봇은 교과서 쪽수 없이 힌트만 줘요. 교무실 선생님은 학교 코드를 넣어야 만날 수 있어요. ⚙️ 설정에서 나중에 넣어도 돼요.</p>'}
+    ${canCancel ? '' : '<p class="hint center">코드 없이 들어가면 공개 공부방에서 타이머·플래너·쉼터를 쓸 수 있어요. 챗봇 선생님과 교무실은 학교 코드를 넣어야 써요. ⚙️ 설정에서 나중에 넣어도 돼요.</p>'}
     ${canCancel ? '<p class="hint center">다른 학교로 바꾸면 이 기기의 공부 기록은 새로 시작해요.</p>' : ''}`, { dismiss: !!canCancel });
   const go = async () => {
     const code = m.querySelector('#scCode').value.trim().toUpperCase();
