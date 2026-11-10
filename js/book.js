@@ -58,12 +58,16 @@ function refreshButtons() {
   el.upload.disabled = busy || !rows || !rows.length || !isAdmin;
 }
 
+let lastSizes = [];   // 마지막으로 읽은 쪽의 [글자 크기, 글자] (단원 제목 찾기용)
 async function pageText(n) {
   const page = await doc.getPage(n);
   const tc = await page.getTextContent();
   let out = '';
+  lastSizes = [];
   for (const it of tc.items) {
     if (typeof it.str !== 'string') continue;
+    const h = Math.abs((it.transform && it.transform[3]) || it.height || 0);
+    if (it.str.trim()) lastSizes.push([h, it.str]);
     out += it.str;
     out += it.hasEOL ? '\n' : (it.str && !/\s$/.test(it.str) ? ' ' : '');
   }
@@ -105,6 +109,12 @@ function tocKey(t) {
 function resolveToc(toc, pages) {
   const keys = toc.map(tocKey).filter((k) => k.length >= 2);
   const normed = pages.map((p) => norm(p.text));
+  // 큰 글씨(본문 글자 크기의 1.4배 이상)만 모은 글: 단원 제목은 크게 쓰여 있음
+  const all = [];
+  pages.forEach((p) => (p.sizes || []).forEach(([h, t]) => { for (let i = 0; i < Math.min(t.length, 40); i++) all.push(h); }));
+  all.sort((a, b) => a - b);
+  const body = all.length ? all[Math.floor(all.length / 2)] : 0;
+  const bigs = pages.map((p) => norm((p.sizes || []).filter(([h]) => body && h >= body * 1.4).map(([, t]) => t).join('')));
   // 여러 제목이 한꺼번에 나오는 쪽(성취기준 표·차례)은 소단원 시작으로 보지 않음
   const overview = normed.map((t) => keys.filter((k) => t.includes(k)).length >= 3);
   let prev = 0;
@@ -114,7 +124,9 @@ function resolveToc(toc, pages) {
     const k = tocKey(t);
     const intro = !t.section || /단원\s*도입/.test(t.section);
     const ok = (i) => pages[i].page >= prev && (intro || !overview[i]);
-    let i = k.length >= 2 ? pages.findIndex((p, j) => ok(j) && normed[j].slice(0, 160).includes(k)) : -1;
+    // 1) 큰 글씨 제목으로 나오는 첫 쪽 → 2) 쪽 맨 앞에 나오는 첫 쪽 → 3) 어디든 나오는 첫 쪽
+    let i = k.length >= 2 ? pages.findIndex((p, j) => ok(j) && bigs[j].includes(k)) : -1;
+    if (i < 0 && k.length >= 2) i = pages.findIndex((p, j) => ok(j) && normed[j].slice(0, 160).includes(k));
     if (i < 0 && k.length >= 2) i = pages.findIndex((p, j) => ok(j) && normed[j].includes(k));
     if (i >= 0) { t.start = pages[i].page; prev = t.start; t.found = true; } else missing.push(t);
   });
@@ -184,7 +196,7 @@ el.extract.addEventListener('click', async () => {
       if (page >= 1) {
         const text = await pageText(n);
         if (text.length < 20) empty++;
-        else pages.push({ page, text });
+        else pages.push({ page, text, sizes: lastSizes });
       }
       if (n % 5 === 0 || n === doc.numPages) { setProgress(n, doc.numPages); status(`글자 뽑는 중… ${n} / ${doc.numPages}장`); }
     }
@@ -206,7 +218,16 @@ el.extract.addEventListener('click', async () => {
   if (missing.length) w.push(`목차에서 시작 쪽을 못 찾은 줄이 ${missing.length}개 있어요 (?로 남음): ${missing.map((t) => (t.unit + " " + t.section).trim()).join(', ')} — 쪽 번호를 직접 적고 ①을 다시 눌러 주세요.`);
   warn(w.join(' '));
   if (sorted.length && out.length) {
-    el.preview.textContent = sorted.map((t) => `${t.start}쪽 ${t.found ? '(찾음) ' : ''}· ${t.unit} · ${t.section}`).join('\n');
+    // 찾은 쪽의 큰 글씨(제목)를 같이 보여 줘서 교과서를 펴 보지 않고도 맞는지 확인
+    const head = (pg) => {
+      const p = pages.find((x) => x.page === pg);
+      if (!p) return '';
+      const hs = (p.sizes || []).map(([h]) => h).sort((a, b) => b - a);
+      const big = (p.sizes || []).filter(([h]) => h >= (hs[0] || 0) * 0.8).map(([, t]) => t).join(' ').replace(/\s+/g, ' ').trim();
+      return (big || p.text).slice(0, 30);
+    };
+    el.preview.textContent = '찾은 시작 쪽 (그 쪽에서 가장 큰 글씨) — 맞는지 확인해 주세요\n\n' +
+      sorted.map((t) => `${t.start}쪽 ${t.found ? '(찾음)' : '(직접 적음)'} · ${t.section || t.unit}\n      ▸ "${head(t.start)}"`).join('\n');
   }
   refreshButtons();
 });
