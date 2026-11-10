@@ -68,12 +68,18 @@ async function pageText(n) {
     out += it.hasEOL ? '\n' : (it.str && !/\s$/.test(it.str) ? ' ' : '');
   }
   page.cleanup();
-  return out
-    .replace(/[ \t ]+/g, ' ')
-    .replace(/ *\n */g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-    .slice(0, MAX_TEXT);
+  // 줄바꿈을 이어 붙여 문단처럼 (역학과 에너지 탭과 같은 모양)
+  // 세로로 쓴 글자("포/트/폴/리 오")처럼 한두 글자짜리 줄이 이어지면 띄어쓰기 없이 붙임
+  const lines = out.split('\n').map((l) => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter(Boolean);
+  let text = '';
+  let prevShort = false;
+  for (const l of lines) {
+    const short = l.replace(/ /g, '').length <= 2 && /[가-힣]/.test(l);
+    text += text && !(short && prevShort) ? ' ' : '';
+    text += short ? l.replace(/ /g, '') : l;
+    prevShort = short;
+  }
+  return text.replace(/ {2,}/g, ' ').trim().slice(0, MAX_TEXT);
 }
 
 /** 목차: "시작 쪽 | 대단원 | 소단원" */
