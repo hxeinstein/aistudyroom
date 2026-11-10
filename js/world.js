@@ -995,12 +995,19 @@ export function createWorld(container, opts = {}) {
 
   // 탈 것에 앉기 / 내리기
   let pendingRideGroup = null;
-  function freeRide(group) { return rides.find((r) => r.group === group && !r.occ) || null; }
-  function tapRide(group) {
+  // 누른 곳에서 가장 가까운 빈자리 (그네 오른쪽을 누르면 오른쪽 그네)
+  function freeRide(group, at) {
+    const list = rides.filter((r) => r.group === group && !r.occ);
+    if (!at) return list[0] || null;
+    const pos = (r) => (r.pivot ? new THREE.Vector3().setFromMatrixPosition(r.pivot.matrixWorld) : r.seat || r.approach);
+    list.sort((a, b) => pos(a).distanceTo(at) - pos(b).distanceTo(at));
+    return list[0] || null;
+  }
+  function tapRide(group, at) {
     if (studying || observer) return;
     if (group === 'slide') { walkTo(slideRide.approach); pendingOffice = { type: 'slide' }; return; }
     if (player.ride && player.ride.group === group) return;
-    const r = freeRide(group);
+    const r = freeRide(group, at);
     if (!r) { opts.onToast && opts.onToast('친구들이 다 타고 있어요. 조금 기다려 줘!'); return; }
     walkTo(r.approach);
     pendingOffice = { type: 'ride', ride: r };
@@ -1646,7 +1653,7 @@ export function createWorld(container, opts = {}) {
       const ud = h.object.userData;
       if (ud.officeDoor) { goToOffice(); return; }
       if (ud.spot) { opts.onSpot && opts.onSpot(ud.spot); return; }   // 응원 게시판 · 건의함
-      if (ud.ride) { tapRide(ud.ride); return; }                       // 쉼터: 벤치 · 그네 · 시소 · 뺑뺑이 · 미끄럼틀
+      if (ud.ride) { tapRide(ud.ride, h.point); return; }                       // 쉼터: 벤치 · 그네 · 시소 · 뺑뺑이 · 미끄럼틀
       if (ud.vend) { if (Math.hypot(player.obj.position.x - VEND_SPOT.x, player.obj.position.z - VEND_SPOT.z) < 0.6) { opts.onVend && opts.onVend(); } else { walkTo(VEND_SPOT); pendingOffice = { type: 'vend' }; } return; }
       if (ud.parkExit) { goOutOfPark(); return; }
       if (ud.toPark) { goToPark(); return; }
