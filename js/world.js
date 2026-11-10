@@ -13,8 +13,9 @@ const OFFICE_DESKS = [];
 for (let r = 0; r < 2; r++) for (let c = 0; c < 5; c++) OFFICE_DESKS.push({ x: OX - 5 + c * 2.5, z: r === 0 ? -2.0 : 1.0 });
 const OFFICE_ENTRY = { x: OX, z: 3.5 };
 const OFFICE_PORTAL = { x: 9.0, z: -0.2 }; // 공부방 쪽 교무실 문 앞
-const COLS = [-6, -2, 2, 6];
-const ROWS = [-3.6, -0.4, 2.8];
+// 공부방 자리 20개: 5칸 × 4줄 (한 줄 사이 통로, 오른쪽 끝은 교무실 가는 길)
+const COLS = [-7.2, -3.6, 0, 3.6, 7.2];
+const ROWS = [-4.3, -1.4, 1.5, 4.4];
 
 const mat = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
 const M = {}; // 공용 재질 캐시
@@ -324,7 +325,7 @@ export function createWorld(container, opts = {}) {
     scene.add(g);
     addObs(x, z, 0.6 * s, 0.6 * s);
   };
-  pot(-9, -5.6); pot(9, -5.6); pot(-9, 6.8, 0.9); pot(9, 6.8, 0.9); pot(-9, 0.6, 0.8); pot(9, 0.6, 0.8);
+  pot(-9, -5.6); pot(9, -5.6); pot(-9, 6.8, 0.9); pot(9, 6.8, 0.9);
 
   // 기둥 + 전구줄
   const bulbs = [];
@@ -1391,8 +1392,8 @@ export function createWorld(container, opts = {}) {
 }
 
 export function seatName(i) {
-  const row = 'ABC'[i % 3];
-  return `${row}-${String(Math.floor(i / 3) + 1).padStart(2, '0')}`;
+  const row = 'ABCD'[i % ROWS.length];
+  return `${row}-${String(Math.floor(i / ROWS.length) + 1).padStart(2, '0')}`;
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }

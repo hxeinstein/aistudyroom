@@ -461,7 +461,7 @@ function officeProfile_(b) {
  * 다른 사람 화면에 '누가 어느 자리에서 무엇을 공부 중인지'가 보여요. (걸어다니는 모습은 나누지 않음)
  * 시트에는 아무것도 남기지 않고 임시 저장소(캐시)에만 둬요. 2분 넘게 신호가 없으면 자리에서 사라져요.
  */
-const ROOM_SEATS = 12;
+const ROOM_SEATS = 20;
 const ROOM_GONE_MS = 2 * 60 * 1000;
 
 function roomState_() {
