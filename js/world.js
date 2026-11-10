@@ -15,8 +15,14 @@ for (let r = 0; r < 2; r++) for (let c = 0; c < 5; c++) OFFICE_DESKS.push({ x: O
 const OFFICE_ENTRY = { x: OX, z: 3.5 };
 const OFFICE_PORTAL = { x: 9.0, z: -0.2 }; // 공부방 쪽 교무실 문 앞
 // 공부방 자리 20개: 5칸 × 4줄 (한 줄 사이 통로, 오른쪽 끝은 교무실 가는 길)
-const COLS = [-7.2, -3.6, 0, 3.6, 7.2];
-const ROWS = [-4.3, -1.4, 1.5, 4.4];
+// 독서실 책상: 한 줄에 5자리씩 길게 이어진 4줄. 두 줄씩 칸막이를 사이에 두고 마주봄
+// f: 앉은 사람이 보는 방향 (-1 = 책장 쪽(-z)을 봄, +1 = 입구 쪽(+z)을 봄)
+const COLS = [-4, -2, 0, 2, 4];
+const PAIR_Z = [-2.3, 2.8];
+const ROWS = [
+  { z: PAIR_Z[0] - 0.48, f: 1 }, { z: PAIR_Z[0] + 0.48, f: -1 },
+  { z: PAIR_Z[1] - 0.48, f: 1 }, { z: PAIR_Z[1] + 0.48, f: -1 },
+];
 
 const mat = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
 const M = {}; // 공용 재질 캐시
@@ -297,6 +303,7 @@ export function createWorld(container, opts = {}) {
   // 책장 (뒤쪽)
   const bookColors = ['#E57373', '#64B5F6', '#81C784', '#FFD54F', '#BA68C8', '#4DB6AC', '#FF8A65', '#F06292'];
   for (let i = 0; i < 6; i++) {
+    if (i === 2 || i === 3) continue;   // 가운데 두 칸은 비워서 응원 게시판 · 건의함 자리
     const x = -7.5 + i * 3;
     const shelf = new THREE.Group();
     shelf.position.set(x, DECK_Y, -6.6);
@@ -362,9 +369,11 @@ export function createWorld(container, opts = {}) {
   // 책상들
   const seats = [];
   const deskWood = m('#E6B77E');
-  COLS.forEach((x) => ROWS.forEach((z) => {
+  COLS.forEach((x) => ROWS.forEach(({ z, f }) => {
     const g = new THREE.Group();
     g.position.set(x, DECK_Y, z);
+    if (f > 0) g.rotation.y = Math.PI;   // 입구 쪽을 보는 줄은 책상을 돌려 놓음
+    const b = -f;                        // 의자가 있는 쪽 (z 방향)
     const top = mesh(new THREE.BoxGeometry(1.8, 0.08, 0.95), deskWood, { y: 0.62, receive: true });
     g.add(top);
     for (const [lx, lz] of [[-0.8, -0.4], [0.8, -0.4], [-0.8, 0.4], [0.8, 0.4]]) g.add(mesh(new THREE.BoxGeometry(0.08, 0.6, 0.08), '#B07A45', { x: lx, y: 0.3, z: lz }));
@@ -406,9 +415,9 @@ export function createWorld(container, opts = {}) {
     const idx = seats.length;
     g.traverse((o) => { o.userData.seat = idx; });
     scene.add(g);
-    seats.push({ idx, group: g, bulb, chairPos: new THREE.Vector3(x, DECK_Y, z + 0.82), approach: new THREE.Vector3(x, DECK_Y, z + 1.45), occupant: null });
+    seats.push({ idx, group: g, bulb, f, chairPos: new THREE.Vector3(x, DECK_Y, z + b * 0.82), approach: new THREE.Vector3(x, DECK_Y, z + b * 1.45), occupant: null });
     addObs(x, z, 1.9, 1.05);
-    addObs(x, z + 0.82, 0.6, 0.55);
+    addObs(x, z + b * 0.82, 0.6, 0.55);
   }));
 
   // 나무, 꽃, 구름
@@ -520,8 +529,8 @@ export function createWorld(container, opts = {}) {
     a.obj.position.copy(seat.chairPos);
     a.obj.position.y = DECK_Y + 0.395 + lift - 0.2 * sc;
     // 덩치가 크면 뒤로 물러앉아서 엉덩이가 의자 밖으로 튀어나옴
-    a.obj.position.z += -0.05 + Math.max(0, sc - 1) * 0.3;
-    a.obj.rotation.y = Math.PI;
+    a.obj.position.z += -seat.f * (-0.05 + Math.max(0, sc - 1) * 0.3);
+    a.obj.rotation.y = seat.f > 0 ? 0 : Math.PI;
     a.mode = 'sit';
   }
   function clearCushions(seat) {
@@ -554,9 +563,9 @@ export function createWorld(container, opts = {}) {
   let studying = false;
 
 
-  // ---------------- 응원 게시판 · 건의함 (입구 왼쪽) ----------------
-  const BOARD_POS = { x: -5.0, z: 7.15 };
-  const BOX_POS = { x: -2.7, z: 7.2 };
+  // ---------------- 응원 게시판 · 건의함 (안쪽 벽, 책장 사이) ----------------
+  const BOARD_POS = { x: -0.7, z: -6.55 };
+  const BOX_POS = { x: 1.75, z: -6.5 };
   const boardCanvas = document.createElement('canvas');
   boardCanvas.width = 640; boardCanvas.height = 400;
   const boardTex = new THREE.CanvasTexture(boardCanvas);
@@ -1113,7 +1122,7 @@ export function createWorld(container, opts = {}) {
     if (!player.seat) return;
     player.mode = on ? 'study' : 'sit';
     player.seat.bulb.material.emissiveIntensity = on ? 1.6 : 0;
-    deskLight.position.set(player.seat.chairPos.x + 0.3, DECK_Y + 1.2, player.seat.chairPos.z - 0.9);
+    deskLight.position.set(player.seat.chairPos.x + 0.3, DECK_Y + 1.2, player.seat.chairPos.z + player.seat.f * 0.9);
     deskLight.intensity = on ? 2.2 : 0;
   }
 
@@ -1416,8 +1425,8 @@ export function createWorld(container, opts = {}) {
     const door = area.name === 'main'
       ? (player.seat ? null
         : Math.hypot(p.x - PORTAL.x, p.z - PORTAL.z) < 1.4 ? 'enter'
-        : Math.hypot(p.x - BOARD_POS.x, p.z - (BOARD_POS.z - 0.6)) < 1.7 ? 'board'
-        : Math.hypot(p.x - BOX_POS.x, p.z - (BOX_POS.z - 0.6)) < 1.2 ? 'suggest' : null)
+        : Math.hypot(p.x - BOARD_POS.x, p.z - (BOARD_POS.z + 0.7)) < 1.7 ? 'board'
+        : Math.hypot(p.x - BOX_POS.x, p.z - (BOX_POS.z + 0.7)) < 1.2 ? 'suggest' : null)
       : (Math.hypot(p.x - EXIT_SPOT.x, p.z - EXIT_SPOT.z) < 1.3 ? 'exit' : null);
     if (door !== nearDoor) { nearDoor = door; opts.onNearDoor && opts.onNearDoor(door); }
 
@@ -1435,8 +1444,8 @@ export function createWorld(container, opts = {}) {
     // 가까이 볼수록 캐릭터 얼굴 높이를 바라봄 (작은 동물도 잘 보이게)
     const zt = clamp((zoom - ZOOM_MIN) / (6 - ZOOM_MIN), 0, 1);
     const lookY = (0.15 + 0.55 * sc) * (1 - zt) + 0.8 * zt;
-    const focus = close ? v.set(player.seat.chairPos.x, DECK_Y + 0.8, player.seat.chairPos.z - 0.5) : v.set(p.x, p.y + lookY, p.z);
-    const cy = close ? 0 : yaw;
+    const focus = close ? v.set(player.seat.chairPos.x, DECK_Y + 0.8, player.seat.chairPos.z + player.seat.f * 0.5) : v.set(p.x, p.y + lookY, p.z);
+    const cy = close ? (player.seat.f > 0 ? Math.PI : 0) : yaw;
     const dist = close ? 2.2 : Math.cos(pitch) * zoom;
     const hgt = close ? 2.9 : Math.sin(pitch) * zoom;
     const desired = new THREE.Vector3(focus.x + Math.sin(cy) * dist, focus.y + hgt, focus.z + Math.cos(cy) * dist);
@@ -1497,7 +1506,7 @@ export function createWorld(container, opts = {}) {
       const seat = seats[idx];
       if (!seat || seat.occupant) return false;
       sitDown(seat);
-      camPos.set(seat.chairPos.x, 3, seat.chairPos.z + 3);
+      camPos.set(seat.chairPos.x, 3, seat.chairPos.z - seat.f * 3);
       return true;
     },
     /** 선생님 로그인: { animal, color, glasses, name } / 로그아웃: null */
