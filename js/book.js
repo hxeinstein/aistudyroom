@@ -82,20 +82,47 @@ async function pageText(n) {
   return text.replace(/ {2,}/g, ' ').trim().slice(0, MAX_TEXT);
 }
 
-/** 목차: "시작 쪽 | 대단원 | 소단원" */
+/** 목차: "시작 쪽 | 대단원 | 소단원" — 시작 쪽을 ?로 두면 PDF에서 제목을 찾아 채움 (적은 순서대로) */
 function parseToc() {
   const list = [];
   el.toc.value.split('\n').forEach((line) => {
+    if (!line.includes('|')) return;
     const p = line.split('|').map((s) => s.trim());
-    const start = parseInt(p[0], 10);
-    if (!start) return;
+    const start = parseInt(p[0], 10) || null;
+    if (!p[1] && !p[2]) return;
     list.push({ start, unit: p[1] || '', section: p[2] || '' });
   });
-  return list.sort((a, b) => a.start - b.start);
+  return list;
+}
+const norm = (t) => String(t).replace(/[^가-힣A-Za-z0-9]/g, '');
+// 찾을 제목: 소단원의 마지막 부분(번호 빼고), 소단원이 '단원 도입'이거나 비면 대단원 이름
+function tocKey(t) {
+  const sec = t.section.split('›').pop().replace(/^\s*[\dⅠ-Ⅻ]+[.)]?\s*/, '');
+  const useUnit = !sec || /단원\s*도입/.test(sec);
+  return norm(useUnit ? t.unit.replace(/^\s*[Ⅰ-Ⅻ\d]+[.)]?\s*/, '') : sec);
+}
+/** 시작 쪽이 빈 줄을 찾아 채우기: pages = [{ page, text }] */
+function resolveToc(toc, pages) {
+  const keys = toc.map(tocKey).filter((k) => k.length >= 2);
+  const normed = pages.map((p) => norm(p.text));
+  // 여러 제목이 한꺼번에 나오는 쪽(성취기준 표·차례)은 소단원 시작으로 보지 않음
+  const overview = normed.map((t) => keys.filter((k) => t.includes(k)).length >= 3);
+  let prev = 0;
+  const missing = [];
+  toc.forEach((t) => {
+    if (t.start) { prev = t.start; return; }
+    const k = tocKey(t);
+    const intro = !t.section || /단원\s*도입/.test(t.section);
+    const ok = (i) => pages[i].page >= prev && (intro || !overview[i]);
+    let i = k.length >= 2 ? pages.findIndex((p, j) => ok(j) && normed[j].slice(0, 160).includes(k)) : -1;
+    if (i < 0 && k.length >= 2) i = pages.findIndex((p, j) => ok(j) && normed[j].includes(k));
+    if (i >= 0) { t.start = pages[i].page; prev = t.start; t.found = true; } else missing.push(t);
+  });
+  return missing;
 }
 function tocFor(toc, page) {
   let hit = { unit: '', section: '' };
-  for (const t of toc) { if (t.start <= page) hit = t; else break; }
+  for (const t of toc) { if (t.start && t.start <= page) hit = t; }
   return hit;
 }
 
@@ -149,7 +176,7 @@ el.extract.addEventListener('click', async () => {
   busy = true; rows = null; refreshButtons(); warn(''); el.done.textContent = '';
   const off = offset();
   const toc = parseToc();
-  const out = [];
+  const pages = [];
   let empty = 0;
   try {
     for (let n = 1; n <= doc.numPages; n++) {
@@ -157,25 +184,29 @@ el.extract.addEventListener('click', async () => {
       if (page >= 1) {
         const text = await pageText(n);
         if (text.length < 20) empty++;
-        else {
-          const t = tocFor(toc, page);
-          out.push([page, t.unit, t.section, text]);
-        }
+        else pages.push({ page, text });
       }
       if (n % 5 === 0 || n === doc.numPages) { setProgress(n, doc.numPages); status(`글자 뽑는 중… ${n} / ${doc.numPages}장`); }
     }
   } catch (e) {
     warn('글자를 뽑다가 멈췄어요: ' + (e && e.message));
   }
+  // 시작 쪽이 비어 있는 목차는 PDF에서 제목을 찾아 채우고, 찾은 쪽을 목차 칸에 다시 적어 줌 (틀리면 고쳐서 다시 ①)
+  const missing = resolveToc(toc, pages);
+  if (toc.some((t) => t.found)) el.toc.value = toc.map((t) => `${t.start || '?'} | ${t.unit} | ${t.section}`).join('\n');
+  const sorted = toc.filter((t) => t.start).sort((x, y) => x.start - y.start);
+  const out = pages.map((p) => { const t = tocFor(sorted, p.page); return [p.page, t.unit, t.section, p.text]; });
   busy = false;
   rows = out;
   const chars = out.reduce((s, r) => s + r[3].length, 0);
-  status(`${out.length}쪽을 뽑았어요 (글자 ${chars.toLocaleString()}자). 이제 ② 시트에 넣기를 눌러 주세요.`);
-  if (!out.length) warn('글자가 하나도 없어요. 스캔한(사진으로 된) PDF라서 글자를 뽑을 수 없어요. 글자가 들어 있는 PDF를 골라 주세요.');
-  else if (empty > doc.numPages * 0.4) warn(`글자가 없는 장이 ${empty}장이나 돼요. 일부가 스캔본이면 그 쪽은 챗봇이 찾지 못해요.`);
-  if (toc.length && out.length) {
-    const s = out.find((r) => r[0] >= toc[0].start) || out[0];
-    el.preview.textContent = `[교과서 ${s[0]}쪽 · ${s[1]} ${s[2]}]\n` + s[3];
+  status(`${out.length}쪽을 뽑았어요 (글자 ${chars.toLocaleString()}자). 목차의 시작 쪽을 확인하고 ② 시트에 넣기를 눌러 주세요.`);
+  const w = [];
+  if (!out.length) w.push('글자가 하나도 없어요. 스캔한(사진으로 된) PDF라서 글자를 뽑을 수 없어요. 글자가 들어 있는 PDF를 골라 주세요.');
+  else if (empty > doc.numPages * 0.4) w.push(`글자가 없는 장이 ${empty}장이나 돼요. 일부가 스캔본이면 그 쪽은 챗봇이 찾지 못해요.`);
+  if (missing.length) w.push(`목차에서 시작 쪽을 못 찾은 줄이 ${missing.length}개 있어요 (?로 남음): ${missing.map((t) => (t.unit + " " + t.section).trim()).join(', ')} — 쪽 번호를 직접 적고 ①을 다시 눌러 주세요.`);
+  warn(w.join(' '));
+  if (sorted.length && out.length) {
+    el.preview.textContent = sorted.map((t) => `${t.start}쪽 ${t.found ? '(찾음) ' : ''}· ${t.unit} · ${t.section}`).join('\n');
   }
   refreshButtons();
 });
