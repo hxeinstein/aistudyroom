@@ -1309,15 +1309,73 @@ export function createWorld(container, opts = {}) {
   resize();
 
   let moodName = '';
+  // ---------------- 날씨 (실제 날씨에 맞춰: clear | cloudy | rain | snow) ----------------
+  let weather = 'clear';
+  const grey = (hex, k) => '#' + new THREE.Color(hex).lerp(new THREE.Color('#8E99A6'), k).getHexString();
+  const PRECIP_N = 1400;
+  const precipPos = new Float32Array(PRECIP_N * 6);   // 빗줄기는 선 두 점, 눈은 첫 점만 씀
+  const precipSeed = new Float32Array(PRECIP_N);
+  for (let i = 0; i < PRECIP_N; i++) {
+    precipSeed[i] = Math.random();
+    const x = (Math.random() - 0.5) * 34, y = Math.random() * 14, z = (Math.random() - 0.5) * 28 + 1;
+    precipPos.set([x, y, z, x, y + 0.45, z], i * 6);
+  }
+  const rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(precipPos, 3));
+  const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: '#BFD8F2', transparent: true, opacity: 0.55 }));
+  rain.frustumCulled = false; rain.visible = false;
+  scene.add(rain);
+  const snowPos = new Float32Array(PRECIP_N * 3);
+  for (let i = 0; i < PRECIP_N; i++) snowPos.set([precipPos[i * 6], precipPos[i * 6 + 1], precipPos[i * 6 + 2]], i * 3);
+  const snowGeo = new THREE.BufferGeometry();
+  snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+  const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({ color: '#FFFFFF', size: 0.13, transparent: true, opacity: 0.95, depthWrite: false }));
+  snow.frustumCulled = false; snow.visible = false;
+  scene.add(snow);
+  let wTime = 0;
+  function stepWeather(dt) {
+    wTime += dt;
+    if (rain.visible) {
+      const a = rainGeo.attributes.position.array;
+      for (let i = 0; i < PRECIP_N; i++) {
+        const o = i * 6;
+        let y = a[o + 1] - dt * (14 + precipSeed[i] * 6);
+        if (y < 0) y += 14;
+        a[o + 1] = y; a[o + 4] = y + 0.45;
+      }
+      rainGeo.attributes.position.needsUpdate = true;
+    }
+    if (snow.visible) {
+      const a = snowGeo.attributes.position.array;
+      for (let i = 0; i < PRECIP_N; i++) {
+        const o = i * 3;
+        let y = a[o + 1] - dt * (0.7 + precipSeed[i] * 0.6);
+        if (y < 0) y += 14;
+        a[o + 1] = y;
+        a[o] += Math.sin(wTime * 0.8 + precipSeed[i] * 20) * dt * 0.25;   // 살랑살랑
+      }
+      snowGeo.attributes.position.needsUpdate = true;
+    }
+  }
+  function setWeather(kind) {
+    kind = ['clear', 'cloudy', 'rain', 'snow'].includes(kind) ? kind : 'clear';
+    if (kind === weather) return;
+    weather = kind;
+    const m0 = moodName; moodName = null; applyMood(m0);   // 하늘·빛을 날씨에 맞게 다시
+  }
+
   function applyMood(name) {
     if (name === moodName) return;
     moodName = name;
     const md = MOODS[name];
-    scene.background = skyTexture(md.top, md.bottom);
-    scene.fog = new THREE.Fog(md.fog, 28, 70);
+    const k = weather === 'clear' ? 0 : weather === 'cloudy' ? 0.55 : 0.7;   // 흐릴수록 하늘이 회색으로
+    scene.background = skyTexture(grey(md.top, k), grey(md.bottom, k * 0.8));
+    scene.fog = new THREE.Fog(grey(md.fog, k), weather === 'clear' ? 28 : 20, 70);
     sun.color.set(md.sun);
-    sun.intensity = md.sunI;
-    hemi.intensity = md.hemi;
+    sun.intensity = md.sunI * (weather === 'clear' ? 1 : weather === 'cloudy' ? 0.55 : 0.45);
+    hemi.intensity = md.hemi * (weather === 'clear' ? 1 : 0.9);
+    rain.visible = weather === 'rain';
+    snow.visible = weather === 'snow';
     hemi.groundColor.set(md.ground);
     bulbMat.emissiveIntensity = md.bulbs;
     stars.visible = name === 'night';
@@ -1339,6 +1397,7 @@ export function createWorld(container, opts = {}) {
     if (moodCheck > 30) { moodCheck = 0; applyMood(moodFor(new Date().getHours())); }
 
     stepFollow(dt);
+    stepWeather(dt);
     // 키보드 이동
     let kx = 0, kz = 0;
     if (keys.has('w') || keys.has('arrowup')) kz -= 1;
@@ -1547,6 +1606,8 @@ export function createWorld(container, opts = {}) {
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus, goal: look ? '' : baseGoal });
     },
     walkToBot: tapBot,
+    setWeather,
+    get weather() { return weather; },
     startFollow,
     stopFollow: () => stopFollow(),
     get following() { return follow ? follow.uid : null; },

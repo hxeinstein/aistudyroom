@@ -9,6 +9,10 @@ export const CONFIG = {
     { id: 'dodeokhu', name: '도덕후', img: 'assets/dodeokhu.png', desc: '도덕 질문' },
   ],
 };
+// 실제 날씨 연동: 이 위치의 지금 날씨에 맞춰 비·눈·흐림·맑음 (off: true면 끄기)
+// 위도·경도는 학교 근처로 바꿔 주세요 (지도 앱에서 학교를 길게 누르면 나와요)
+CONFIG.WEATHER = { name: '서울', lat: 37.5665, lon: 126.978 };
+
 // 예전 이름 호환
 CONFIG.MASCOT_NAME = CONFIG.BOTS[0].name;
 
