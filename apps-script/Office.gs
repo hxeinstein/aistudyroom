@@ -81,6 +81,7 @@ function onOpen() {
       .addItem('교사 초대코드 만들기', 'makeTeacherInvite')
       .addItem('교무실 설정(처음 한 번)', 'setupOffice')
       .addItem('과목 탭 만들기/머리글 갱신', 'setupSubjects')
+      .addItem('빈 학교 칸을 기본 학교 코드로 채우기', 'fillSchoolCodes')
       .addToUi();
   } catch (e) { /* 편집기에서 실행 시 무시 */ }
 }
@@ -642,7 +643,7 @@ function boardPost_(b) {
   if (!countOk_('bpost_' + dh, 5, 3600)) return { error: '포스트잇을 너무 많이 붙였어요. 조금 뒤에 다시 붙여 줘.' };
   const color = NOTE_COLORS.indexOf(b.color) >= 0 ? b.color : NOTE_COLORS[0];
   const id = Utilities.getUuid().replace(/-/g, '').slice(0, 10);
-  boardSheet_().appendRow([id, new Date(), from, to, text, color, dh, 0, false, b.school === DEFAULT_SCHOOL ? '' : b.school]);
+  boardSheet_().appendRow([id, new Date(), from, to, text, color, dh, 0, false, b.school]);
   return { ok: true, id: id };
 }
 
@@ -684,7 +685,7 @@ function suggestPost_(b) {
   if (text.length < 2) return { error: '건의 내용을 적어 주세요.' };
   const dh = devHash_(b.device);
   if (!countOk_('sug_' + dh, 5, 3600)) return { error: '건의를 너무 많이 보냈어요. 조금 뒤에 다시 보내 줘.' };
-  suggestSheet_().appendRow([new Date(), from, text, dh, '새 건의', b.school === DEFAULT_SCHOOL ? '' : b.school]);
+  suggestSheet_().appendRow([new Date(), from, text, dh, '새 건의', b.school]);
   const cache = CacheService.getScriptCache();
   if (!cache.get('sug_mail')) {
     const admins = teachers_().filter((t) => isAdmin_(t) && t.email);
@@ -798,7 +799,7 @@ function officeReport_(b) {
   if (!countOk_('rep_' + tid_(teacher.code), 10, 3600)) return { error: '잠시 뒤에 다시 해 주세요.' };
   const reason = String(b.reason || '').trim().slice(0, 200) || '(이유 없음)';
   const msgs = c.msgs.filter((m) => m.from === 'a').slice(-5).map((m) => m.text.slice(0, 200)).join('\n');
-  reportSheet_().appendRow([new Date(), teacher.name, c.a.nick, reason, msgs, '새 신고', c.a.device, teacher.school === DEFAULT_SCHOOL ? '' : teacher.school]);
+  reportSheet_().appendRow([new Date(), teacher.name, c.a.nick, reason, msgs, '새 신고', c.a.device, teacher.school]);
   const cache = CacheService.getScriptCache();
   if (!cache.get('rep_mail')) {
     teachers_().filter((t) => isAdmin_(t) && t.email).forEach((t) => {
@@ -944,7 +945,7 @@ function statDay_(b) {
         if (d < day && i < vals.length - 300) break;   // 오래된 줄까지는 보지 않음
       }
     }
-    const data = [["'" + day, dh, min, JSON.stringify(subj), new Date(), b.school === DEFAULT_SCHOOL ? '' : b.school]];
+    const data = [["'" + day, dh, min, JSON.stringify(subj), new Date(), b.school]];
     if (row) sh.getRange(row, 1, 1, 6).setValues(data);
     else { sh.appendRow(data[0]); row = sh.getLastRow(); }
     cache.put(ck, String(row), 21600);
@@ -978,7 +979,7 @@ function recordQuestion_(subject, top, school) {
       }
     }
     if (row) sh.getRange(row, 5).setValue(Number(sh.getRange(row, 5).getValue() || 0) + 1);
-    else { sh.appendRow(["'" + day, subject, page, unit, 1, sc === DEFAULT_SCHOOL ? '' : sc]); row = sh.getLastRow(); }
+    else { sh.appendRow(["'" + day, subject, page, unit, 1, sc]); row = sh.getLastRow(); }
     cache.put(ck, String(row), 21600);
   } finally { lock.releaseLock(); }
 }
@@ -1095,4 +1096,19 @@ function addSchool_(b) {
   sh.getRange(sh.getLastRow(), 3).insertCheckboxes().check();
   CacheService.getScriptCache().remove('schools');
   return { ok: true, code: code, name: name };
+}
+
+
+/** 예전 기록의 빈 '학교' 칸을 기본 학교 코드로 채우기 (필터로 학교별 보기 편하게). 시트 메뉴 [🐾 독서실]에서 실행 */
+function fillSchoolCodes() {
+  const ss = SpreadsheetApp.getActive();
+  [['게시판', 10, 1], ['건의함', 6, 3], ['신고', 8, 3], ['공부통계', 6, 1], ['질문통계', 6, 1]].forEach(([name, col, need]) => {
+    const sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return;
+    const n = sh.getLastRow() - 1;
+    const vals = sh.getRange(2, 1, n, col).getValues();
+    const out = vals.map((r) => [r[need - 1] !== '' && r[need - 1] !== null && !String(r[col - 1]).trim() ? DEFAULT_SCHOOL : r[col - 1]]);
+    sh.getRange(2, col, n, 1).setValues(out);
+  });
+  try { SpreadsheetApp.getUi().alert('빈 학교 칸을 ' + DEFAULT_SCHOOL + '로 채웠어요. 각 탭에서 [데이터 → 필터 만들기]로 학교별로 볼 수 있어요.'); } catch (e) {}
 }
