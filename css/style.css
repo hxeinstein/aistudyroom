@@ -344,3 +344,5 @@ body.studying .joy, body.observer .joy { display: none !important; }
 .adm-act { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; justify-content: flex-end; }
 .adm-mini { padding: 6px 10px; font-size: 13px; min-height: 0; }
 .adm-top .adm-mini { margin-left: auto; }
+.c-code-hint { color: var(--brown); }
+.c-code-hint button { margin-left: 4px; }

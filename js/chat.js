@@ -82,22 +82,31 @@ function switchSubject(x, ask = true) {
   enterSubject(x);
 }
 
-/** 교과로 들어가기: 수업 코드가 필요한 교과면 코드부터 */
+/** 교과로 들어가기: 누구나 질문할 수 있고, 수업 코드를 넣은 학생만 교과서 쪽수까지 안내 */
 function enterSubject(x) {
   current = x;
   history = [];
   $('cLog').innerHTML = '';
   clearImage();
   renderSubjects();
-  if (x.needCode && !codes()[x.name]) return showGate();
   $('cGate').classList.add('hidden');
   setComposer(true);
   addBubble('model', greeting());
+  if (x.needCode && !codes()[x.name]) addCodeHint();
+}
+
+// 코드 안내: 우리 학교 학생이면 수업 코드를 넣어 교과서 연동
+function addCodeHint(text) {
+  const div = document.createElement('div');
+  div.className = 'c-note c-code-hint';
+  div.innerHTML = `${escapeHtml(text || '우리 학교 학생이면 수업 코드를 넣어 줘. 우리 교과서 몇 쪽을 보면 되는지까지 알려 줄게 📖')} <button type="button" class="c-ghost">🔑 수업 코드 넣기</button>`;
+  div.querySelector('button').onclick = () => showGate();
+  $('cLog').appendChild(div);
+  scrollDown();
 }
 
 function showGate(msg) {
-  setComposer(false);
-  $('cGateText').innerHTML = `<b>${escapeHtml(current.name || '이 교과')}</b>는 우리 학교 학생용이야. 선생님이 알려준 <b>수업 코드</b>를 넣어 줘.`;
+  $('cGateText').innerHTML = `<b>${escapeHtml(current.name || '이 교과')}</b> 수업 코드 (선생님이 알려 준 코드). 넣으면 교과서 쪽수까지 안내해 줘.`;
   $('cGateMsg').textContent = msg || '';
   $('cCodeInput').value = '';
   $('cGate').classList.remove('hidden');
@@ -234,6 +243,7 @@ export function initChat(o = {}) {
   $('cFile').onchange = onFile;
   $('cRemoveImg').onclick = clearImage;
   $('cCodeBtn').onclick = tryCode;
+  $('cCodeLater').onclick = () => $('cGate').classList.add('hidden');
   $('cCodeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) tryCode(); });
   const input = $('cInput');
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
@@ -281,7 +291,7 @@ export async function openChat(roomName, botId) {
   // 같은 챗봇: 공부 중인 과목과 맞는 교과가 있고 아직 대화를 안 했으면 그 교과로
   if (match && botOf(match) === bot && match !== current && !history.length) enterSubject(match);
   else if (!current && subjectsOf(bot).length) enterSubject(subjectsOf(bot)[0]);
-  else setComposer(!!current && $('cGate').classList.contains('hidden'));
+  else setComposer(!!current);
 }
 
 function setBot(b) {
@@ -304,7 +314,9 @@ async function tryCode() {
   const ok = await call({ action: 'checkCode', subject: current.name, code }).then((r) => r.ok).catch(() => false);
   if (ok) {
     setCode(current.name, code);
-    enterSubject(current);
+    $('cGate').classList.add('hidden');
+    $('cLog').querySelectorAll('.c-code-hint').forEach((d) => d.remove());
+    addNote('🔑 수업 코드 확인! 이제 우리 교과서 쪽수까지 알려 줄게.');
   } else {
     $('cGateMsg').textContent = '코드가 맞지 않아요. 다시 확인해 줘.';
   }
@@ -317,7 +329,7 @@ function setComposer(on) {
 }
 
 function reset() {
-  if (busy || !current || !$('cGate').classList.contains('hidden')) return;
+  if (busy || !current) return;
   if (history.length && !confirm('지금 대화를 지우고 새 문제를 시작할까?')) return;
   history = [];
   $('cLog').innerHTML = '';
@@ -378,12 +390,11 @@ async function send() {
     if (res && res.text) {
       history.push({ role: 'model', text: res.text });
       addBubble('model', res.text);
-    } else if (res && res.codeError) {
-      // 선생님이 수업 코드를 바꿈 → 다시 입력받기
-      history.pop();
-      setCode(current.name, null);
-      setBusy(false);
-      return showGate('수업 코드가 바뀌었어. 새 코드를 넣어 줘.');
+      if (res.codeWrong) {
+        // 선생님이 수업 코드를 바꿈 → 교과서 안내 없이 답하고, 새 코드 안내
+        setCode(current.name, null);
+        addCodeHint('수업 코드가 바뀌어서 이번엔 교과서 쪽수 없이 답했어. 새 코드를 넣으면 다시 교과서까지 안내할게.');
+      }
     } else {
       fail(res && res.error, msg);
     }

@@ -19,7 +19,7 @@
  *   - 새 교과서 탭은 기존 '교과서' 탭과 같은 열(쪽, 대단원, 소단원, 내용)로 만들어 주세요.
  *   - '사용'에 체크하고, D칸에 적은 탭이 실제로 있어야만 독서실·웹앱에서 쓸 수 있어요.
  *   - D칸을 비우면 '교과서 없는 교과': 쪽수 안내 없이 개념으로만 힌트 (출판사가 달라도 괜찮음)
- *   - G칸(수업 코드)을 적으면 그 코드를 아는 학생만 사용. 비우면 누구나. 시험 기간마다 바꿔도 돼요.
+ *   - G칸(수업 코드)을 적으면 누구나 질문은 되고, 그 코드를 넣은 학생만 교과서 쪽수까지 안내. 시험 기간마다 바꿔도 돼요.
  *     (G칸이 생기면서 스크립트 속성 ACCESS_CODE는 '과목' 탭이 없을 때만 쓰여요)
  *   - E칸(프롬프트)이 비어 있으면 '프롬프트' 탭 A1을 씁니다. F칸이 비어 있으면 기본 첫 인사를 씁니다.
  *   - 고친 내용은 다시 배포하지 않아도 바로 반영돼요.
@@ -95,7 +95,7 @@ function studyroomPersona_(botName) {
  * 사용 체크된 교과만 돌려줌. '과목' 탭이 없으면 null(예전 방식)
  * - D칸(교과서 탭)이 비어 있으면 '교과서 없는 교과' (쪽수 안내 없이 개념으로 힌트)
  * - D칸에 적은 탭이 없으면 그 교과는 쓸 수 없음
- * - G칸(수업 코드)이 있으면 그 코드를 넣은 학생만 사용
+ * - G칸(수업 코드)이 있으면 그 코드를 넣은 학생만 교과서 연동 (없으면 교과서 없이 힌트)
  */
 function loadSubjects_() {
   const ss = SpreadsheetApp.getActive();
@@ -132,7 +132,7 @@ function findSubject_(name) {
   return list.filter(x => x.name === name)[0] || null;
 }
 
-const SUBJECT_HEADER = ['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름 (비우면 교과서 없이)', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)', '수업 코드 (비우면 누구나)', '챗봇 (비우면 뭉치 박사)', '담당 선생님 (닉네임, 비우면 목록에서 고르기)'];
+const SUBJECT_HEADER = ['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름 (비우면 교과서 없이)', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)', '수업 코드 (넣은 학생만 교과서 쪽수 안내, 비우면 누구나)', '챗봇 (비우면 뭉치 박사)', '담당 선생님 (닉네임, 비우면 목록에서 고르기)'];
 
 /** 처음 한 번 편집기에서 실행: '과목' 탭을 만들고 지금의 역학과 에너지를 첫 줄로 등록 (이미 있으면 머리글만 최신으로) */
 function setupSubjects() {
@@ -178,10 +178,16 @@ function checkCode(code, subjectName) {
  * payload = { code, history: [{ role:'user'|'model', text, image?:{mimeType, data} }] }
  */
 function chat(payload, extraSystem, saveLog) {
-  const subject = findSubject_(payload && payload.subject);
+  let subject = findSubject_(payload && payload.subject);
   if (!subject) return { error: '이 교과는 아직 연결되지 않았어요. 선생님께 알려 주세요.' };
-  if (subject.code && String((payload && payload.code) || '').trim() !== subject.code) {
-    return { error: '수업 코드가 맞지 않아요. 선생님께 코드를 다시 확인해 주세요.', codeError: true };
+  // 수업 코드가 있는 교과: 코드가 없거나 틀려도 질문은 되고, 교과서 쪽수 안내만 빠짐 (우리 학교 학생만 교과서 연동)
+  let codeWrong = false;
+  if (subject.code) {
+    const given = String((payload && payload.code) || '').trim();
+    if (given !== subject.code) {
+      codeWrong = !!given;
+      subject = Object.assign({}, subject, { tab: '' });
+    }
   }
   const key = getProp_('GEMINI_API_KEY');
   if (!key) return { error: '선생님이 아직 API 키를 설정하지 않았어요.' };
@@ -226,7 +232,7 @@ function chat(payload, extraSystem, saveLog) {
       ]);
     } catch (e) { /* 기록 실패는 무시 */ }
   }
-  return { text: result.text };
+  return codeWrong ? { text: result.text, codeWrong: true } : { text: result.text };
 }
 
 /* ---------- 숲속 독서실에서 부르는 입구 ---------- */
