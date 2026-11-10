@@ -130,7 +130,7 @@ function toggleSoundMenu() {
   menu.innerHTML = SOUNDS.map((x) => `<button type="button" class="${x.id === cur ? 'on' : ''}" data-s="${x.id}" title="${x.name}"><span>${x.icon}</span><small>${x.name.replace('소리 끄기', '끄기')}</small></button>`).join('');
   const r = $('btnSound').getBoundingClientRect();
   menu.style.top = r.bottom + 8 + 'px';
-  menu.style.right = Math.min(Math.max(8, window.innerWidth - r.right - 60), Math.max(8, window.innerWidth - 270)) + 'px';
+  menu.style.right = Math.min(Math.max(8, window.innerWidth - r.right - 60), Math.max(8, window.innerWidth - 336)) + 'px';
   document.body.appendChild(menu);
   menu.querySelectorAll('button').forEach((b) => (b.onclick = (e) => {
     e.stopPropagation();

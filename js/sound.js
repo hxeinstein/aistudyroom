@@ -2,14 +2,61 @@
 //  'white' : 부드러운 백색소음 (고음을 살짝 깎아 귀가 편한 소리)
 //  'rain'  : 잔잔한 빗소리
 //  'fire'  : 타닥타닥 모닥불
+//  'stream': 졸졸 시냇물 + 가끔 똑 물방울
 export const SOUNDS = [
   { id: 'off', icon: '🔇', name: '소리 끄기' },
   { id: 'white', icon: '🌫️', name: '백색소음' },
   { id: 'rain', icon: '🌧️', name: '빗소리' },
   { id: 'fire', icon: '🔥', name: '모닥불' },
+  { id: 'stream', icon: '🏞️', name: '시냇물' },
 ];
-const KINDS = ['white', 'rain', 'fire'];
-const VOL = { white: 0.22, rain: 0.35, fire: 0.5 };
+const KINDS = ['white', 'rain', 'fire', 'stream'];
+const VOL = { white: 0.22, rain: 0.35, fire: 0.5, stream: 0.45 };
+
+// 시냇물: 잔잔한 물살 + 작은 물방울(올라가는 짧은 음)이 잔뜩 = 졸졸, 가끔 크고 맑은 '똑'
+function streamBuffer() {
+  const sr = ctx.sampleRate;
+  const len = sr * 16;
+  const buf = ctx.createBuffer(2, len, sr);
+  const bubble = (d, at, f0, rise, dur, amp) => {
+    let ph = 0;
+    for (let k = 0; k < dur && at + k < len; k++) {
+      const t = k / dur;
+      ph += (2 * Math.PI * f0 * (1 + rise * t)) / sr;
+      const env = Math.min(1, k / (sr * 0.002)) * Math.exp(-t * 5);
+      d[at + k] += Math.sin(ph) * amp * env;
+    }
+  };
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    // 물살: 핑크 비슷한 소음, 천천히 출렁
+    let b0 = 0, b1 = 0, b2 = 0, wob = 0, wv = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.997 * b0 + w * 0.029; b1 = 0.985 * b1 + w * 0.032; b2 = 0.95 * b2 + w * 0.048;
+      wv += (Math.random() - 0.5) * 0.002; wv *= 0.999; wob += wv; wob *= 0.9995;
+      d[i] = (b0 + b1 + b2 + w * 0.02) * 0.35 * (1 + Math.max(-0.6, Math.min(0.6, wob * 0.05)));
+    }
+    // 졸졸: 작은 물방울 소리를 무리 지어
+    let t = 0;
+    while (t < len) {
+      const n = 1 + ((Math.random() * 4) | 0);
+      for (let b = 0; b < n; b++) {
+        const at = t + ((Math.random() * sr * 0.05) | 0);
+        bubble(d, at, 500 + Math.random() * 1300, 0.3 + Math.random() * 0.6, ((0.012 + Math.random() * 0.03) * sr) | 0, 0.03 + Math.random() * 0.05);
+      }
+      t += ((0.02 + Math.random() * 0.09) * sr) | 0;
+    }
+    // 가끔 '똑' (두 귀에 조금 다르게)
+    let drop = (sr * (1 + Math.random() * 2)) | 0;
+    const seed = ch ? 0.6 : 1;
+    while (drop < len) {
+      bubble(d, drop, 900 + Math.random() * 700, 1.2 + Math.random() * 0.8, ((0.05 + Math.random() * 0.04) * sr) | 0, 0.22 * seed);
+      drop += ((2.5 + Math.random() * 5) * sr) | 0;
+    }
+  }
+  return buf;
+}
 
 let ctx = null;
 const tracks = {};
@@ -53,6 +100,7 @@ function fireBuffer() {
 
 function noiseBuffer(kind) {
   if (kind === 'fire') return fireBuffer();
+  if (kind === 'stream') return streamBuffer();
   const len = ctx.sampleRate * 4;
   const buf = ctx.createBuffer(2, len, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
@@ -78,7 +126,7 @@ function track(kind) {
   src.loop = true;
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.value = kind === 'white' ? 5200 : kind === 'fire' ? 6000 : 1400;
+  lp.frequency.value = kind === 'white' ? 5200 : kind === 'fire' ? 6000 : kind === 'stream' ? 4500 : 1400;
   const g = ctx.createGain();
   g.gain.value = 0;
   src.connect(lp).connect(g).connect(ctx.destination);
@@ -86,7 +134,7 @@ function track(kind) {
   return (tracks[kind] = g);
 }
 
-/** mode: 'off' | 'white' | 'rain' | 'fire' */
+/** mode: 'off' | 'white' | 'rain' | 'fire' | 'stream' */
 export function setSound(mode) {
   try {
     if (!ctx) {
