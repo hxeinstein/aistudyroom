@@ -532,6 +532,7 @@ export function createWorld(container, opts = {}) {
   player.obj.position.set(0, DECK_Y, 6.2);
   player.obj.rotation.y = Math.PI;
   let path = [];
+  let waitT = 0;
   let pendingSeat = null;
   let pendingBot = null;   // 걸어간 뒤 말 걸 챗봇 id
   let nearBot = null;      // 가까이 있는 챗봇 id
@@ -770,16 +771,55 @@ export function createWorld(container, opts = {}) {
   const GS = 0.25;
   const R = 0.28;
   const blocked = (x, z, ignore) => area.obs.some((o) => o !== ignore && x > o.x0 - R && x < o.x1 + R && z > o.z0 - R && z < o.z1 + R);
+  // 서 있는 다른 친구들: 몸이 겹치지 않을 만큼만 (너무 넓으면 책상 사이 지나가기 불편)
+  const FR = 0.5;
+  const standingOthers = () => actors.filter((a) => a !== player && !a.seat && a.obj.visible && !(a.el && a.el.classList.contains('hidden'))
+    && (a.area || 'main') === area.name);
+  const nearFriend = (x, z, list) => (list || standingOthers()).some((a) => Math.hypot(a.obj.position.x - x, a.obj.position.z - z) < FR);
+  // 친구에게 더 가까워지는 걸음만 막음 (이미 겹쳐 있으면 빠져나올 수 있게)
+  const friendStops = (x0, z0, x1, z1) => standingOthers().some((a) => {
+    const ax = a.obj.position.x, az = a.obj.position.z;
+    const d1 = Math.hypot(ax - x1, az - z1);
+    return d1 < FR && d1 < Math.hypot(ax - x0, az - z0);
+  });
   function findPath(from, to) {
     const B = area.bounds;
     const GW = Math.round((B.x1 - B.x0) / GS) + 1;
     const GH = Math.round((B.z1 - B.z0) / GS) + 1;
     const ci = (x, z) => [Math.round((x - B.x0) / GS), Math.round((z - B.z0) / GS)];
-    const [sx, sz] = ci(from.x, from.z);
-    const [tx, tz] = ci(to.x, to.z);
+    let [sx, sz] = ci(from.x, from.z);
+    let [tx, tz] = ci(to.x, to.z);
     const key = (x, z) => z * GW + x;
-    const free = (x, z) => x >= 0 && z >= 0 && x < GW && z < GH && !blocked(B.x0 + x * GS, B.z0 + z * GS);
-    if (!free(tx, tz)) return [to.clone()];
+    const others = standingOthers();
+    const free = (x, z) => x >= 0 && z >= 0 && x < GW && z < GH && !blocked(B.x0 + x * GS, B.z0 + z * GS) && !nearFriend(B.x0 + x * GS, B.z0 + z * GS, others);
+    // 책상·책장 위를 눌렀으면 그 옆 빈 곳까지만 걸어감 (물건을 뚫고 가지 않음)
+    const nearestFree = (cx, cz) => {
+      for (let r = 1; r <= 10; r++) {
+        let best = null, bd = Infinity;
+        for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r || !free(cx + dx, cz + dz)) continue;
+          const d = Math.hypot(dx, dz);
+          if (d < bd) { bd = d; best = [cx + dx, cz + dz]; }
+        }
+        if (best) return best;
+      }
+      return null;
+    };
+    let goal = to.clone();
+    if (!free(tx, tz)) {
+      const nf = nearestFree(tx, tz);
+      if (!nf) return [];
+      [tx, tz] = nf;
+      goal = new THREE.Vector3(B.x0 + tx * GS, DECK_Y, B.z0 + tz * GS);
+    }
+    // 물건에 끼어 있는 곳에서 출발하면 가장 가까운 빈 곳부터
+    let lead = null;
+    if (!free(sx, sz)) {
+      const nf = nearestFree(sx, sz);
+      if (!nf) return [];
+      [sx, sz] = nf;
+      lead = new THREE.Vector3(B.x0 + sx * GS, DECK_Y, B.z0 + sz * GS);
+    }
     const open = [[sx, sz]];
     const g = new Map([[key(sx, sz), 0]]);
     const came = new Map();
@@ -796,8 +836,8 @@ export function createWorld(container, opts = {}) {
           pts.unshift(new THREE.Vector3(B.x0 + (k % GW) * GS, DECK_Y, B.z0 + Math.floor(k / GW) * GS));
           k = came.get(k);
         }
-        pts.push(to.clone());
-        return smooth(from, pts);
+        pts.push(goal);
+        return lead ? [lead].concat(smooth(lead, pts)) : smooth(from, pts);
       }
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
         const nx = cx + dx, nz = cz + dz;
@@ -813,13 +853,14 @@ export function createWorld(container, opts = {}) {
         }
       }
     }
-    return [to.clone()];
+    return [];
   }
   function lineFree(a, b) {
     const n = Math.ceil(a.distanceTo(b) / 0.1);
     for (let i = 1; i <= n; i++) {
       const t = i / n;
-      if (blocked(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t)) return false;
+      const x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t;
+      if (blocked(x, z) || nearFriend(x, z)) return false;
     }
     return true;
   }
@@ -1312,10 +1353,23 @@ export function createWorld(container, opts = {}) {
         }
       } else {
         const step = Math.min(d, 3 * playerSpeed() * dt);
-        p.x += (v.x / d) * step;
-        p.z += (v.z / d) * step;
+        const nx = p.x + (v.x / d) * step, nz = p.z + (v.z / d) * step;
+        if (friendStops(p.x, p.z, nx, nz)) {
+          // 친구가 길을 막으면 잠깐 기다렸다가 돌아가는 길을 다시 찾음
+          waitT += dt;
+          if (waitT > 0.6) {
+            waitT = 0;
+            const goal = path[path.length - 1];
+            const np = findPath(p, goal);
+            if (np.length) path = np; else { path = []; pendingSeat = null; pendingBot = null; pendingOffice = null; }
+          }
+        } else {
+          waitT = 0;
+          p.x = nx;
+          p.z = nz;
+          moving = true;
+        }
         faceDir(v.x, v.z, dt);
-        moving = true;
       }
     }
     if (!player.seat && !player.officeDesk) {
@@ -1386,9 +1440,9 @@ export function createWorld(container, opts = {}) {
     const sp = 3 * playerSpeed() * dt;
     const B = area.bounds;
     const nx = clamp(p.x + dx * sp, B.x0, B.x1);
-    if (!blocked(nx, p.z)) p.x = nx;
+    if (!blocked(nx, p.z) && !friendStops(p.x, p.z, nx, p.z)) p.x = nx;
     const nz = clamp(p.z + dz * sp, B.z0, B.z1);
-    if (!blocked(p.x, nz)) p.z = nz;
+    if (!blocked(p.x, nz) && !friendStops(p.x, p.z, p.x, nz)) p.z = nz;
     faceDir(dx, dz, dt);
   }
   function faceDir(dx, dz, dt) {
@@ -1451,6 +1505,7 @@ export function createWorld(container, opts = {}) {
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus });
     },
     walkToBot: tapBot,
+    walkTo: (x, z) => walkTo(new THREE.Vector3(x, DECK_Y, z)),
     // 교무실
     goToOffice,
     goOutOfOffice,
