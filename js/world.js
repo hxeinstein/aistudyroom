@@ -440,6 +440,7 @@ export function createWorld(container, opts = {}) {
     const r = 14 + rnd() * 12;
     const x = Math.cos(a) * r, z = Math.sin(a) * r * 0.9;
     if (z > 9 && Math.abs(x) < 6) continue; // 앞쪽 시야 확보
+    if (x < -12) continue;                   // 왼쪽은 쉼터 숲
     tree(x, z, 0.9 + rnd() * 0.6, rnd() < 0.35);
   }
   const flowerColors = ['#FFFFFF', '#FF9EB5', '#FFE066', '#B39DFF'];
@@ -447,6 +448,7 @@ export function createWorld(container, opts = {}) {
   for (let i = 0; i < 160; i++) {
     const x = (rnd() - 0.5) * 50, z = (rnd() - 0.5) * 44;
     if (Math.abs(x) < 10.5 && z > -7.5 && z < 9) continue;
+    if (x < -12) continue;
     scene.add(mesh(fGeo, flowerColors[i % 4], { x, y: 0.08, z, cast: false }));
   }
   const clouds = [];
@@ -852,13 +854,13 @@ export function createWorld(container, opts = {}) {
   let myTeacherId = null;
 
   // ---------------- 🌿 쉼터: 산책로 + 놀이터 (x = PX 근처의 다른 구역) ----------------
-  const PX = -60;
+  const PX = -36;   // 공부방 왼쪽 숲속 (교무실 반대쪽), 오솔길로 이어짐
   areas.park = { name: 'park', bounds: { x0: PX - 12.5, x1: PX + 12.5, z0: -9.5, z1: 9.3 }, obs: [] };
   const pObs = (x, z, w, d) => areas.park.obs.push({ x0: PX + x - w / 2, x1: PX + x + w / 2, z0: z - d / 2, z1: z + d / 2 });
   const P = (x, y, z) => new THREE.Vector3(PX + x, y, z);
   const PARK_ENTRY = P(0, DECK_Y, 7.9);
   const PARK_EXIT = P(0, DECK_Y, 8.8);
-  const MAIN_PARK_PORTAL = new THREE.Vector3(0, DECK_Y, 7.25);
+  const MAIN_PARK_PORTAL = new THREE.Vector3(-9.0, DECK_Y, -0.2);   // 공부방 왼쪽 끝 (교무실 문과 반대쪽)
   // 땅 · 산책로
   const parkGround = mesh(new THREE.CylinderGeometry(21, 21.5, 0.3, 48), '#9BD67A', { x: PX, y: DECK_Y - 0.15, cast: false, receive: true });
   scene.add(parkGround);
@@ -1013,7 +1015,7 @@ export function createWorld(container, opts = {}) {
   parkExitSign.traverse((o) => { o.userData.parkExit = true; });
   scene.add(parkExitSign);
   // 공부방 입구의 '쉼터' 표지판
-  const toPark = new THREE.Group(); toPark.position.set(1.7, DECK_Y, 7.65);
+  const toPark = new THREE.Group(); toPark.position.set(-9.55, DECK_Y, 1.0);
   for (const sx of [-0.47, 0.47]) toPark.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.3, 8), '#8A5A33', { x: sx, y: 0.65, z: -0.03 }));
   const tp = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.3), new THREE.MeshBasicMaterial({ map: canvasTex(320, 96, (c, w, h) => {
     c.fillStyle = '#E8F5E1'; c.beginPath(); c.roundRect(3, 3, w - 6, h - 6, 18); c.fill();
@@ -1022,6 +1024,48 @@ export function createWorld(container, opts = {}) {
   tp.position.set(0, 1.15, 0.04); toPark.add(tp);
   toPark.traverse((o) => { o.userData.toPark = true; });
   scene.add(toPark);
+  // 오솔길: 공부방 왼쪽 끝에서 숲을 지나 쉼터 입구까지 (구불구불, 길가에 돌·꽃·작은 등)
+  scene.add(mesh(new THREE.BoxGeometry(0.5, 0.15, 1.6), '#C48D52', { x: -10.05, y: 0.075, z: -0.2, receive: true }));   // 계단
+  const trail = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-10.2, 0, -0.2), new THREE.Vector3(-13, 0, 0.6), new THREE.Vector3(-16, 0, 2.6),
+    new THREE.Vector3(-19.5, 0, 5.4), new THREE.Vector3(-24, 0, 8.6), new THREE.Vector3(-29, 0, 10.6),
+    new THREE.Vector3(-33.5, 0, 11.2), new THREE.Vector3(PX, 0, 10.4), new THREE.Vector3(PX, 0, 9.2),
+  ]);
+  {
+    const N = 90, pos = [], idx = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, p = trail.getPointAt(t), tg = trail.getTangentAt(t);
+      const side = new THREE.Vector3(-tg.z, 0, tg.x).normalize().multiplyScalar(0.62 + Math.sin(i * 0.9) * 0.06);
+      const y = 0.02 + (DECK_Y - 0.01) * Math.max(0, (t - 0.82) / 0.18);   // 쉼터 땅 높이로 살짝 올라감
+      pos.push(p.x + side.x, y, p.z + side.z, p.x - side.x, y, p.z - side.z);
+      if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+    const path = new THREE.Mesh(geo, mat('#E2C995', { side: THREE.DoubleSide })); path.receiveShadow = true;
+    scene.add(path);
+    const trnd = mulberry(33);
+    for (let i = 0; i < 46; i++) {
+      const t = 0.03 + trnd() * 0.8, p = trail.getPointAt(t), tg = trail.getTangentAt(t);
+      const sd = (trnd() < 0.5 ? -1 : 1) * (0.95 + trnd() * 0.9);
+      const x = p.x - tg.z * sd, z = p.z + tg.x * sd;
+      if (i % 3 === 0) scene.add(mesh(new THREE.DodecahedronGeometry(0.12 + trnd() * 0.1, 0), '#B8AE9C', { x, y: 0.08, z }));
+      else scene.add(mesh(fGeo, flowerColors[i % 4], { x, y: 0.1, z, cast: false }));
+    }
+    // 길가 나무 (양옆으로 숲 느낌) · 작은 등
+    for (let i = 0; i < 14; i++) {
+      const t = 0.08 + (i / 14) * 0.72, p = trail.getPointAt(t), tg = trail.getTangentAt(t);
+      const sd = (i % 2 ? 1 : -1) * (2.6 + trnd() * 1.8);
+      tree(p.x - tg.z * sd, p.z + tg.x * sd, 0.8 + trnd() * 0.5, trnd() < 0.4);
+    }
+    for (const t of [0.15, 0.4, 0.65]) {
+      const p = trail.getPointAt(t), tg = trail.getTangentAt(t);
+      const g = new THREE.Group(); g.position.set(p.x - tg.z * 0.95, 0, p.z + tg.x * 0.95);
+      g.add(mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.1, 6), '#5E4630', { y: 0.55 }));
+      const lb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), bulbMat); lb.position.y = 1.12; g.add(lb);
+      scene.add(g);
+    }
+  }
 
   // 흩날리는 나뭇잎 (계절 색) · 반딧불 · 별 · 별똥별
   const month = new Date().getMonth() + 1;
@@ -1222,7 +1266,7 @@ export function createWorld(container, opts = {}) {
     } else meteor.material.opacity = 0;
   }
   function enterPark() { switchArea('park', PARK_ENTRY.clone(), Math.PI); opts.onSfx && opts.onSfx('step'); }
-  function exitPark() { if (player.ride) leaveRide(true); player.slide = null; switchArea('main', new THREE.Vector3(0, DECK_Y, 6.7), Math.PI); }
+  function exitPark() { if (player.ride) leaveRide(true); player.slide = null; switchArea('main', new THREE.Vector3(-8.4, DECK_Y, -0.2), Math.PI / 2); }
   function goToPark() {
     if (area.name === 'park') return;
     if (area.name === 'office') { exitOffice(); }

@@ -255,7 +255,6 @@ function renderBar() {
         ...(world.nearDoor === 'suggest' ? [{ e: '📮', t: '건의함', main: true, fn: () => Board.openSuggest() }] : []),
         ...(world.nearDoor === 'park' ? [{ e: '🌿', t: '쉼터 가기', main: true, fn: () => world.goToPark() }] : []),
         { e: '🪑', t: '빈자리 앉기', main: !world.nearDoor, fn: sitNearest },
-        ...(world.nearDoor === 'park' ? [] : [{ e: '🌿', t: '쉼터', fn: () => world.goToPark() }]),
         { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ];
