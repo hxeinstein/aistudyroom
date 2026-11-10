@@ -70,6 +70,8 @@ function boot() {
   window.addEventListener('pagehide', () => { if (document.visibilityState === 'visible') S.touchAlive(); });
   $('btnPlanner').onclick = () => openPlanner(S.dayKey());
   $('btnSettings').onclick = openSettings;
+  $('btnPeople').onclick = (e) => { e.stopPropagation(); togglePeople(); };
+  setInterval(updatePeopleCount, 3000);
   $('btnSound').onclick = (e) => { e.stopPropagation(); toggleSoundMenu(); };
   $('btnPause').onclick = togglePause;
   $('btnStop').onclick = openStop;
@@ -294,7 +296,97 @@ function openOnboarding() {
   };
 }
 
+// ---------------- 지금 접속 중 (오른쪽 위 👥) ----------------
+function fmtMin(ms) { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`; }
+function studentStatus(x) {
+  if (x.ar === 'office') return '🏫 교무실';
+  if (x.st && !x.ps) return `📚 ${x.sj || '공부'} 열공 중 · ${fmtMin(x.el || 0)}`;
+  if (x.st) return `☕ 쉬는 중${x.sj ? ' (' + x.sj + ')' : ''}`;
+  return x.s >= 0 ? '🪑 자리에 앉음' : '🚶 둘러보는 중';
+}
+function updatePeopleCount() {
+  const teachers = Office.teacherSeats().filter((t) => t.online).length;
+  const students = Room.onlinePlayers().length + (Office.isTeacher() ? 0 : 1);
+  $('peopleCount').textContent = students + teachers;
+  if ($('peoplePanel')) renderPeople();
+}
+function togglePeople() {
+  let panel = $('peoplePanel');
+  if (panel) { panel.remove(); return; }
+  panel = document.createElement('div');
+  panel.id = 'peoplePanel';
+  panel.className = 'people-panel';
+  document.body.appendChild(panel);
+  renderPeople();
+  const close = (e) => { if (!panel.contains(e.target) && e.target !== $('btnPeople')) { panel.remove(); window.removeEventListener('pointerdown', close, true); } };
+  setTimeout(() => window.addEventListener('pointerdown', close, true), 0);
+}
+function renderPeople() {
+  const panel = $('peoplePanel');
+  if (!panel) return;
+  const me = Office.isTeacher() ? null : { n: st.profile?.name || '나', a: st.profile?.animal || 'bear', ...world.getPlayerState(), sj: S.activeSession() ? S.subjectById(S.activeSession().subject).name : '', st: !!S.activeSession(), ps: S.isPaused(), el: S.activeSession() ? Math.floor(S.activeElapsed() / 60000) * 60000 : 0 };
+  const list = Room.onlinePlayers().slice().sort((x, y) => (y.st && !y.ps) - (x.st && !x.ps) || String(x.n).localeCompare(String(y.n)));
+  const teachers = Office.teacherSeats().filter((t) => t.online);
+  const row = (x, mine) => `
+    <div class="pp-row">
+      <span class="pp-ava">${S.animalById(x.a).emoji}</span>
+      <span class="pp-main"><b>${esc(x.n)}${mine ? ' <i class="pp-me">나</i>' : ''}</b><small>${studentStatus(x)}${x.s >= 0 && x.ar !== 'office' ? ' · ' + seatName(x.s) : ''}</small></span>
+      ${mine ? '' : `<button type="button" class="pp-btn" data-go="${esc(x.uid)}" title="찾아가기">📍</button>
+      <button type="button" class="pp-btn" data-act="${esc(x.uid)}" title="${Office.isTeacher() ? '말 걸기' : '응원 보내기'}">${Office.isTeacher() ? '💬' : '📣'}</button>`}
+    </div>`;
+  const html = `
+    <div class="pp-head">👥 지금 접속 중 <span>학생 ${list.length + (me ? 1 : 0)} · 선생님 ${teachers.length}</span></div>
+    ${teachers.length ? `<div class="pp-sec">선생님</div>` + teachers.map((t) => `
+      <div class="pp-row"><span class="pp-ava">👩‍🏫</span><span class="pp-main"><b>${esc(t.name)} 선생님</b><small>${t.closed ? '🔒 시험 출제 중' : '🟢 상담 가능 · 교무실'}</small></span></div>`).join('') : ''}
+    <div class="pp-sec">학생</div>
+    ${me ? row(me, true) : ''}
+    ${list.map((x) => row(x, false)).join('') || (me ? '' : '<p class="hint">지금 접속한 학생이 없어요</p>')}
+    ${Room.ready() ? '' : '<p class="hint">실시간 연결이 안 돼서 나만 보여요</p>'}`;
+  if (panel.dataset.html === html) return;   // 바뀐 게 없으면 그대로 (누르는 중에 버튼이 바뀌지 않게)
+  panel.dataset.html = html;
+  panel.innerHTML = html;
+  panel.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => {
+    const r = world.goToRemote(b.dataset.go);
+    if (r === 'office') toast('지금 교무실에 있어요');
+    else if (r === 'main') toast('지금 공부방에 있어요');
+    else if (r === 'gone') toast('방금 나갔어요');
+    panel.remove();
+  }));
+  panel.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => {
+    const x = Room.onlinePlayers().find((y) => y.uid === b.dataset.act);
+    panel.remove();
+    if (!x) return toast('방금 나갔어요');
+    if (Office.isTeacher()) Office.callStudent(x.uid, x.n, x.a); else openCheer(x.uid, x);
+  }));
+}
+
+// 선생님 설정: 캐릭터·과목 대신 선생님 일만
+function openTeacherSettings() {
+  const admin = Office.isAdmin();
+  const m = openModal(`
+    <h2>⚙️ ${esc(Office.teacherName())} 선생님${admin ? ' <small style="font-size:14px;color:var(--muted)">(관리자)</small>' : ''}</h2>
+    <button class="btn primary block" id="tsInbox" type="button">📥 받은 대화</button>
+    ${admin ? `
+    <label class="lbl">관리자</label>
+    <button class="btn soft block" id="tsAdmin" type="button">🛠️ 관리자 메뉴 (신고 · 차단 · 선생님)</button>
+    <button class="btn soft block" id="tsSuggest" type="button" style="margin-top:8px">📮 건의함 보기</button>
+    <a class="btn soft block" href="book.html" target="_blank" rel="noopener" style="margin-top:8px;text-align:center;text-decoration:none">📚 교과서 넣기 (컴퓨터 추천)</a>` : ''}
+    <div class="foot">
+      <button class="btn ghost" id="tsLogout" type="button">로그아웃</button>
+      <button class="btn primary" id="tsClose" type="button">닫기</button>
+    </div>
+    <p class="hint">조작: 끌기 = 화면 옮기기 · 두 손가락 비틀기(PC는 오른쪽 버튼 끌기) = 돌리기 · 공부 중인 학생을 누르면 말 걸기</p>`);
+  m.querySelector('#tsClose').onclick = closeModal;
+  m.querySelector('#tsInbox').onclick = () => Office.openInbox();
+  if (admin) {
+    m.querySelector('#tsAdmin').onclick = () => Office.openAdminMenu();
+    m.querySelector('#tsSuggest').onclick = () => Board.openSuggestAdmin();
+  }
+  m.querySelector('#tsLogout').onclick = () => { Office.logout(); closeModal(); toast('로그아웃했어요'); };
+}
+
 function openSettings() {
+  if (Office.isTeacher()) return openTeacherSettings();
   const p = st.profile || { name: '', animal: 'bear' };
   let animal = p.animal;
   const m = openModal(`

@@ -21,6 +21,11 @@ let mySeat = -1;
 let started = false;
 
 export const myUid = () => uid;
+let players = [];
+/** 지금 접속 중인 다른 학생들 */
+export const onlinePlayers = () => players;
+/** 시험용(?debug): 실시간 연결 없이 친구 목록 흉내 */
+export function debugPlayers(list) { players = list; ctx && ctx.world.setRemotePlayers(list); }
 export const ready = () => !!uid;
 
 export async function initRoom(c) {
@@ -50,6 +55,7 @@ export async function initRoom(c) {
     const list = Object.entries(all)
       .filter(([k, v]) => k !== uid && v && v.n && (!v.t || now - v.t < GONE_MS))
       .map(([k, v]) => ({ uid: k, ...v }));
+    players = list;
     ctx.world.setRemotePlayers(list);
     ctx.onRemote && ctx.onRemote(list);
   });

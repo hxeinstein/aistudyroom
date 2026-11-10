@@ -1511,6 +1511,17 @@ export function createWorld(container, opts = {}) {
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus });
     },
     walkToBot: tapBot,
+    /** 접속 중 목록에서 '찾아가기': 학생은 걸어가고, 선생님(구경)은 그곳으로 시점을 옮김 */
+    goToRemote(uid) {
+      const r = remotes.get(uid);
+      if (!r) return 'gone';
+      if ((r.a.area || 'main') !== area.name) return r.a.area === 'office' ? 'office' : 'main';
+      const seat = r.seatIdx >= 0 ? seats[r.seatIdx] : null;
+      const p = seat ? seat.approach : r.a.obj.position;
+      if (observer) { player.obj.position.set(p.x, DECK_Y, p.z); return 'ok'; }
+      walkTo(seat ? seat.approach.clone() : new THREE.Vector3(p.x, DECK_Y, p.z + 0.7));
+      return 'ok';
+    },
     setStick,
     walkTo: (x, z) => walkTo(new THREE.Vector3(x, DECK_Y, z)),
     // 교무실
