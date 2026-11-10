@@ -62,6 +62,15 @@ const BOT_PERSONAS = {
       '  예: "덕스럽다~! 두 입장을 모두 생각해 봤구나!", "후후후, 근거를 하나만 더 들어 볼까?"',
       '- 도덕·윤리 질문은 한 가지 답을 강요하지 말고, 여러 관점과 근거를 비교해 보며 학생이 스스로 판단하게 도와줘.',
     ],
+    // '과목' 탭 E칸(프롬프트)이 비어 있는 도덕후 교과에 쓰는 기본 지시문 ({교과}는 교과 이름으로 바뀜)
+    prompt: [
+      '너는 고등학생의 {교과} 공부를 돕는 힌트 코치야.',
+      '- 정답이나 서술형 모범답안을 통째로 써 주지 말고, 학생이 스스로 생각을 정리하도록 질문과 단계별 힌트를 줘.',
+      '- 사상가·이론의 핵심 개념은 정확하게 설명하되, 학생이 그 개념을 자기 말로 다시 설명해 보게 이끌어 줘.',
+      '- 서로 다른 윤리적 관점(예: 의무론과 공리주의, 동양 윤리와 서양 윤리)을 비교하는 질문에는 각 관점의 근거를 짚어 주고 학생이 판단하게 해.',
+      '- 사회적 쟁점은 한쪽 입장을 정답처럼 말하지 말고, 여러 입장과 그 근거를 균형 있게 다뤄.',
+      '- 과학이나 다른 교과 질문이 오면, 이 교과({교과}) 질문을 하도록 부드럽게 안내해.',
+    ].join('\n'),
   },
 };
 
@@ -188,8 +197,8 @@ function chat(payload, extraSystem, saveLog) {
     .sort((a, b) => a.page - b.page);
 
   const extra = typeof extraSystem === 'function' ? extraSystem(subject) : (extraSystem || '');
-  const system = !subject.tab ? (subject.prompt || getPrompt_()) + extra + '\n' + NO_BOOK_NOTE : [
-    (subject.prompt || getPrompt_()) + extra,
+  const system = !subject.tab ? promptFor_(subject) + extra + '\n' + NO_BOOK_NOTE : [
+    promptFor_(subject) + extra,
     '',
     '[목차] (쪽 범위)',
     buildToc_(pages),
@@ -448,6 +457,14 @@ function callModel_(key, model, system, contents) {
 }
 
 /* ---------- 도우미 ---------- */
+
+/** 교과의 지시문: E칸 → (그 챗봇의 기본 지시문) → 프롬프트 탭 A1 */
+function promptFor_(subject) {
+  if (subject && subject.prompt) return subject.prompt;
+  const p = BOT_PERSONAS[subject && subject.bot];
+  if (p && p.prompt) return p.prompt.split('{교과}').join(subject.name || '이 교과');
+  return getPrompt_();
+}
 
 function getPrompt_() {
   const sh = SpreadsheetApp.getActive().getSheetByName('프롬프트');
