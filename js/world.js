@@ -1036,7 +1036,11 @@ export function createWorld(container, opts = {}) {
     if (observer && (player.seat || player.officeDesk)) standUp();
     player.obj.visible = !observer;
     player.el.classList.toggle('hidden', observer);
+    document.body.classList.toggle('observer', observer);
   }
+  // 화면 조이스틱 (x: 오른쪽 +, y: 아래 +, 길이 0~1)
+  const stick = { x: 0, y: 0 };
+  function setStick(x, y) { stick.x = x || 0; stick.y = y || 0; }
 
   function walkToSeat(idx) {
     pendingBot = null;
@@ -1307,6 +1311,8 @@ export function createWorld(container, opts = {}) {
     if (keys.has('s') || keys.has('arrowdown')) kz += 1;
     if (keys.has('a') || keys.has('arrowleft')) kx -= 1;
     if (keys.has('d') || keys.has('arrowright')) kx += 1;
+    let mag = 1;
+    if (!kx && !kz && (stick.x || stick.y)) { kx = stick.x; kz = stick.y; mag = Math.min(1, Math.hypot(kx, kz)); }
     const p = player.obj.position;
     let moving = false;
     if ((kx || kz) && !studying) {
@@ -1318,7 +1324,7 @@ export function createWorld(container, opts = {}) {
       const c = Math.cos(yaw), s = Math.sin(yaw);
       const dx = kx * c + kz * s, dz = -kx * s + kz * c;
       const len = Math.hypot(dx, dz);
-      moveStep(dx / len, dz / len, dt);
+      moveStep(dx / len, dz / len, dt * (mag < 0.35 ? 0.45 : mag));
       moving = true;
     } else if (path.length) {
       const target = path[0];
@@ -1505,6 +1511,7 @@ export function createWorld(container, opts = {}) {
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus });
     },
     walkToBot: tapBot,
+    setStick,
     walkTo: (x, z) => walkTo(new THREE.Vector3(x, DECK_Y, z)),
     // 교무실
     goToOffice,

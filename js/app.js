@@ -7,6 +7,7 @@ import { CONFIG } from './config.js';
 import * as Office from './office.js';
 import * as Room from './room.js';
 import * as Board from './board.js';
+import { initJoystick } from './joystick.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -45,6 +46,7 @@ function boot() {
     onOfficeSeat: (n, t) => Office.tapSeat(n, t),
     confirmClosedOffice: () => Office.confirmClosed(),
   });
+  initJoystick(world);
 
   // 진행 중이던 공부 복원 (새로고침/앱 전환)
   const a = st.active;

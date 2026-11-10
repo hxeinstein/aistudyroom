@@ -295,3 +295,17 @@ body.studying .zoom-ctl { display: none; }
 .sg-btns { display: flex; gap: 6px; }
 .sg-btns button { border: 1.5px solid #EADBC2; background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; color: var(--brown); }
 .sg-btns button.on { background: var(--green); border-color: var(--green); color: #fff; }
+
+/* 화면 조이스틱 (터치 기기에서만, 학생 시점) */
+.joy {
+  position: fixed; left: calc(env(safe-area-inset-left) + 18px); bottom: calc(env(safe-area-inset-bottom) + 104px);
+  width: 112px; height: 112px; border-radius: 50%; z-index: 5; touch-action: none; display: none;
+  background: rgba(255, 248, 233, 0.55); border: 3px solid rgba(255, 255, 255, 0.85); box-shadow: var(--shadow);
+}
+.joy-knob {
+  position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px 0 0 -25px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 4px 0 var(--green-d); pointer-events: none;
+}
+.joy.on { background: rgba(255, 248, 233, 0.8); }
+@media (pointer: coarse) { .joy { display: block; } }
+body.studying .joy, body.observer .joy { display: none !important; }
