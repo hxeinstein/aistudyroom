@@ -1019,24 +1019,37 @@ export function createWorld(container, opts = {}) {
   scene.add(toPark);
   // 오솔길: 공부방 왼쪽 끝에서 숲을 지나 쉼터 입구까지 (구불구불, 길가에 돌·꽃·작은 등)
   scene.add(mesh(new THREE.BoxGeometry(0.5, 0.15, 1.6), '#C48D52', { x: -10.05, y: 0.075, z: -0.2, receive: true }));   // 계단
+  // 오솔길 높이: 풀밭(0)에서 쉼터 땅(DECK_Y) 위로 자연스럽게
+  const trailY = (p) => { const d = Math.hypot(p.x - PX, p.z); return 0.015 + (DECK_Y + 0.005 - 0.015) * Math.min(1, Math.max(0, (22.2 - d) / 1.6)); };
   const trail = new THREE.CatmullRomCurve3([
     new THREE.Vector3(-10.2, 0, -0.2), new THREE.Vector3(-13, 0, 0.6), new THREE.Vector3(-16, 0, 2.6),
     new THREE.Vector3(-19.5, 0, 5.4), new THREE.Vector3(-24, 0, 8.6), new THREE.Vector3(-29, 0, 10.6),
     new THREE.Vector3(-33.5, 0, 11.2), new THREE.Vector3(PX, 0, 10.4), new THREE.Vector3(PX, 0, 9.2),
   ]);
   {
-    const N = 90, pos = [], idx = [];
-    for (let i = 0; i <= N; i++) {
-      const t = i / N, p = trail.getPointAt(t), tg = trail.getTangentAt(t);
-      const side = new THREE.Vector3(-tg.z, 0, tg.x).normalize().multiplyScalar(0.62 + Math.sin(i * 0.9) * 0.06);
-      const y = 0.02 + (DECK_Y - 0.01) * Math.max(0, (t - 0.82) / 0.18);   // 쉼터 땅 높이로 살짝 올라감
-      pos.push(p.x + side.x, y, p.z + side.z, p.x - side.x, y, p.z - side.z);
-      if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    // 흙길: 갈색 길 + 양옆 조금 더 진한 테두리 (쉼터 땅 위로 올라가는 부분은 그 높이에 맞춤)
+    const ribbon = (w, color, lift) => {
+      const N = 120, pos = [], idx = [];
+      for (let i = 0; i <= N; i++) {
+        const t = i / N, p = trail.getPointAt(t), tg = trail.getTangentAt(t);
+        const side = new THREE.Vector3(-tg.z, 0, tg.x).normalize().multiplyScalar(w + Math.sin(i * 0.9) * 0.05);
+        const y = trailY(p) + lift;
+        pos.push(p.x + side.x, y, p.z + side.z, p.x - side.x, y, p.z - side.z);
+        if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, mat(color, { side: THREE.DoubleSide })); m.receiveShadow = true;
+      scene.add(m);
+    };
+    ribbon(0.82, '#9C7046', 0.004);   // 테두리
+    ribbon(0.66, '#C69A68', 0.01);    // 길
+    // 길 위 작은 자갈
+    const prd = mulberry(55);
+    for (let i = 0; i < 70; i++) {
+      const t = prd(), p = trail.getPointAt(t), tg = trail.getTangentAt(t), o = (prd() - 0.5) * 1.0;
+      scene.add(mesh(new THREE.CylinderGeometry(0.05 + prd() * 0.05, 0.06, 0.02, 6), prd() < 0.5 ? '#B08658' : '#D8B98C', { x: p.x - tg.z * o, y: trailY(p) + 0.02, z: p.z + tg.x * o, cast: false }));
     }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
-    const path = new THREE.Mesh(geo, mat('#E2C995', { side: THREE.DoubleSide })); path.receiveShadow = true;
-    scene.add(path);
     const trnd = mulberry(33);
     for (let i = 0; i < 46; i++) {
       const t = 0.03 + trnd() * 0.8, p = trail.getPointAt(t), tg = trail.getTangentAt(t);
@@ -1276,7 +1289,7 @@ export function createWorld(container, opts = {}) {
     const u = trailWalk.back ? 1 - k : k;
     const pt = trail.getPointAt(u), tg = trail.getTangentAt(u);
     const p = player.obj.position;
-    p.set(pt.x, 0.02 + (DECK_Y - 0.01) * Math.max(0, (u - 0.82) / 0.18), pt.z);
+    p.set(pt.x, trailY(pt) + 0.01, pt.z);
     const dir = trailWalk.back ? -1 : 1;
     faceDir(tg.x * dir, tg.z * dir, dt * 2);
     player.mode = 'walk';
