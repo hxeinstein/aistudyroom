@@ -8,6 +8,7 @@
  *   GEMINI_API_KEY : 필수. Google AI Studio에서 받은 키
  *   ACCESS_CODE    : 선택. 넣으면 학생이 처음에 이 수업 코드를 입력해야 사용 가능
  *   GEMINI_MODEL   : 선택. 쓸 제미나이 모델 이름 (예: gemini-2.5-flash). 비우면 아래 MODEL
+ *   GEMINI_FALLBACKS : 선택. 하루 한도가 차면 차례로 쓸 예비 모델 (쉼표로, 비우면 gemini-2.5-flash-lite, gemma-3-27b-it)
  *
  * [교과 추가하기] — '과목' 탭 (처음 한 번 편집기에서 setupSubjects 실행하면 자동으로 만들어짐)
  *   한 줄 = 교과 하나.  A 사용(체크) | B 교과 이름 | C 연결 낱말 | D 교과서 탭 이름 | E 프롬프트 | F 첫 인사
@@ -201,6 +202,7 @@ function chat(payload, extraSystem, saveLog) {
 
   const contents = toContents_(history);
   const result = callGemini_(key, system, contents);
+  if (result.dayLimit) return { error: dayLimitMsg_(subject.bot || MASCOT_NAME) };
   if (result.error) return result;
 
   if (saveLog === undefined ? SAVE_LOG : saveLog) {
@@ -365,52 +367,82 @@ function toContents_(history) {
   return out;
 }
 
-const DAY_LIMIT_MSG = '오늘은 뭉치 박사가 질문을 너무 많이 받아서 쉬는 중이야 🐾 내일 다시 물어봐 줘! (급하면 교무실 선생님께 질문해 봐)';
+/** 하루 한도 안내 (질문한 챗봇 이름으로) */
+function dayLimitMsg_(botName) {
+  return '오늘은 ' + (botName || MASCOT_NAME) + '가 질문을 너무 많이 받아서 쉬는 중이야 🐾 내일 다시 물어봐 줘! (급하면 [선생님 부르기]를 눌러 봐)';
+}
+
+/**
+ * 쓸 모델 순서: GEMINI_MODEL(또는 MODEL) → 예비 모델들.
+ * 무료 하루 한도는 모델마다 따로라서, 한 모델이 다 차면 다음 모델로 넘어가요 (결제 없이 무료 그대로).
+ * 예비 모델은 스크립트 속성 GEMINI_FALLBACKS에 쉼표로 적어 바꿀 수 있어요.
+ */
+const DEFAULT_FALLBACKS = ['gemini-2.5-flash-lite', 'gemma-3-27b-it'];
+function modelChain_() {
+  const first = getProp_('GEMINI_MODEL') || MODEL;
+  const extra = getProp_('GEMINI_FALLBACKS');
+  const rest = extra ? extra.split(',').map((x) => x.trim()).filter(Boolean) : DEFAULT_FALLBACKS;
+  return [first].concat(rest).filter((m, i, arr) => arr.indexOf(m) === i);
+}
 
 function callGemini_(key, system, contents) {
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + (getProp_('GEMINI_MODEL') || MODEL) + ':generateContent';
-  const options = {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { 'x-goog-api-key': key },
-    muteHttpExceptions: true,
-    payload: JSON.stringify({
-      system_instruction: { parts: [{ text: system }] },
-      contents: contents,
-      generationConfig: { temperature: 0.4 }
-    })
-  };
-
-  // 무료 하루 한도를 다 쓴 걸 이미 알고 있으면 제미나이를 부르지 않고 바로 안내
   const cache = CacheService.getScriptCache();
-  if (cache.get('GEMINI_DAY_LIMIT')) return { error: DAY_LIMIT_MSG };
+  let busy = false;
+  for (const model of modelChain_()) {
+    // 이 모델의 하루 한도를 이미 다 쓴 걸 알면 건너뜀 (1시간마다 다시 확인)
+    if (cache.get('GEMINI_DAY_LIMIT_' + model)) continue;
+    const r = callModel_(key, model, system, contents);
+    if (r.text) return r;
+    if (r.dayLimit) { cache.put('GEMINI_DAY_LIMIT_' + model, '1', 60 * 60); continue; }
+    if (r.skip) { cache.put('GEMINI_DAY_LIMIT_' + model, '1', 6 * 60 * 60); continue; } // 이 계정에서 못 쓰는 모델 → 다음 모델
+    if (r.busy) { busy = true; continue; }
+    return r;
+  }
+  if (busy) return { error: '지금 사용하는 학생이 많아요. 30초쯤 뒤에 다시 보내 줘.' };
+  return { error: dayLimitMsg_(), dayLimit: true };
+}
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+function callModel_(key, model, system, contents) {
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
+  // Gemma 모델은 시스템 지시문을 따로 받지 않아서 첫 질문 앞에 붙여서 보냄
+  const gemma = /^gemma/i.test(model);
+  let body;
+  if (gemma) {
+    const c = JSON.parse(JSON.stringify(contents));
+    if (c.length && c[0].role === 'user') c[0].parts.unshift({ text: '[지시문]\n' + system + '\n\n[학생 질문]' });
+    body = { contents: c, generationConfig: { temperature: 0.4 } };
+  } else {
+    body = { system_instruction: { parts: [{ text: system }] }, contents: contents, generationConfig: { temperature: 0.4 } };
+  }
+  const options = { method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key }, muteHttpExceptions: true, payload: JSON.stringify(body) };
+
+  for (let attempt = 0; attempt < 2; attempt++) {
     const res = UrlFetchApp.fetch(url, options);
     const code = res.getResponseCode();
+    const txt = res.getContentText();
     if (code === 200) {
-      const data = JSON.parse(res.getContentText());
+      const data = JSON.parse(txt);
       const cand = data.candidates && data.candidates[0];
       const text = cand && cand.content && cand.content.parts
         ? cand.content.parts.map(p => p.text || '').join('').trim()
         : '';
       if (!text) return { error: '답을 만들지 못했어요. 질문을 조금 바꿔서 다시 보내 줄래?' };
-      return { text: text };
+      return { text: text, model: model };
     }
-    if (code === 429 && /PerDay/i.test(res.getContentText())) {
-      // 무료 등급의 하루 요청 수를 다 씀 → 기다려도 안 풀리니 1시간 동안 바로 안내
-      // (결제 정보가 없으면 요금은 나가지 않고 이렇게 막히기만 함)
-      cache.put('GEMINI_DAY_LIMIT', '1', 60 * 60);
-      return { error: DAY_LIMIT_MSG };
+    // 무료 하루 요청 수를 다 씀 (결제 정보가 없으면 요금은 나가지 않고 이렇게 막히기만 함)
+    if (code === 429 && /PerDay/i.test(txt)) return { dayLimit: true };
+    if (code === 404 || (code === 400 && /not found|not supported|is not enabled/i.test(txt))) {
+      console.warn('모델을 쓸 수 없어 건너뜀: ' + model + ' ' + code);
+      return { skip: true };
     }
     if (code === 429 || code >= 500) {        // 분당 한도·서버 혼잡이면 잠시 기다렸다 다시
       Utilities.sleep(2000 * (attempt + 1));
       continue;
     }
-    console.error(code, res.getContentText());
+    console.error(model, code, txt);
     return { error: '챗봇 연결에 문제가 생겼어요. (오류 ' + code + ') 선생님께 알려 주세요.' };
   }
-  return { error: '지금 사용하는 학생이 많아요. 30초쯤 뒤에 다시 보내 줘.' };
+  return { busy: true };
 }
 
 /* ---------- 도우미 ---------- */
@@ -431,5 +463,5 @@ function testSetup() {
   console.log('교과서 쪽 수: ' + pages.length);
   console.log('바이메탈 검색 결과: ' + rankPages_(pages, '바이메탈 열팽창 휘어').map(p => p.page).join(', '));
   const r = callGemini_(getProp_('GEMINI_API_KEY'), '한 문장으로 짧게 대답해.', [{ role: 'user', parts: [{ text: '안녕?' }] }]);
-  console.log(r.error || ('Gemini 응답: ' + r.text));
+  console.log(r.error || ('Gemini 응답(' + r.model + '): ' + r.text));
 }
