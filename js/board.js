@@ -64,13 +64,13 @@ export function openBoard() {
 function renderGrid() {
   const box = $('boardGrid');
   if (!box) return;
-  const teacher = !!ctx.teacherToken();
+  const admin = ctx.isAdmin();   // 남의 포스트잇 떼기는 관리자만
   box.innerHTML = notes.length ? notes.map((n, i) => `
     <div class="note" style="background:${n.color};transform:rotate(${((i * 37) % 7) - 3}deg)">
       ${n.to ? `<div class="note-to">To. ${esc(n.to)}</div>` : ''}
       <div class="note-text">${esc(n.text)}</div>
       <div class="note-from">— ${esc(n.from)} · ${ago(n.t)}</div>
-      <div class="note-act">${n.mine || teacher ? `<button type="button" data-del="${n.id}">떼기</button>` : `<button type="button" data-rep="${n.id}">신고</button>`}</div>
+      <div class="note-act">${n.mine || admin ? `<button type="button" data-del="${n.id}">떼기</button>` : `<button type="button" data-rep="${n.id}">신고</button>`}</div>
     </div>`).join('') : '<p class="hint center">아직 포스트잇이 없어요. 첫 응원을 붙여 주세요!</p>';
   box.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => {
     if (!confirm('이 포스트잇을 뗄까요?')) return;

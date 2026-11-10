@@ -420,6 +420,7 @@ function officeClose_(b) {
 function officeBlock_(b) {
   const teacher = teacherByToken_(b.token);
   if (!teacher) return { error: '다시 로그인해 주세요.', relogin: true };
+  if (!isAdmin_(teacher)) return { error: '차단은 관리자만 할 수 있어요.' };
   const c = getConv_(b.conv);
   if (!c || side_(c, b, teacher) !== 'b' || c.a.type !== 'student') return { error: '차단할 수 없어요.' };
   const sh = SpreadsheetApp.getActive().getSheetByName('차단');
@@ -658,7 +659,7 @@ function boardDelete_(b) {
   if (!row) return { ok: true };
   const teacher = b.token ? teacherByToken_(b.token) : null;
   const mine = String(sh.getRange(row, 7).getValue()) === devHash_(b.device);
-  if (!teacher && !mine) return { error: '내가 붙인 포스트잇만 뗄 수 있어요.' };
+  if (!(teacher && isAdmin_(teacher)) && !mine) return { error: '내가 붙인 포스트잇만 뗄 수 있어요. (다른 사람 것은 관리자만)' };
   sh.getRange(row, 9).setValue(true);   // 시트에는 숨김으로 남겨 둠 (기록용)
   return { ok: true };
 }

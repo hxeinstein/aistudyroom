@@ -193,7 +193,7 @@ function renderHead() {
   $('oAva').textContent = w ? (conv.student ? animalById(w.animal).emoji : '👩‍🏫') : '🏫';
   $('oName').textContent = w ? w.name + (w.student ? '' : (w.name.endsWith('학생') ? '' : ' 선생님')) : '교무실';
   $('oStatus').textContent = conv && conv.ended ? '대화가 끝났어요' : w && w.online === false ? '⚪ 부재중 · 메시지를 남겨 두세요' : '🟢 대화 중';
-  $('oBlock').classList.toggle('hidden', !(teacher && conv && conv.student));
+  $('oBlock').classList.toggle('hidden', !(isAdmin() && conv && conv.student)); // 차단은 관리자만
   const off = !conv || conv.ended;
   $('oInput').disabled = off;
   $('oSend').disabled = off || sending;
