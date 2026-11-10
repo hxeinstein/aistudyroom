@@ -118,6 +118,7 @@ export function initOffice(c) {
   $('oEnd').onclick = endConv;
   $('oSend').onclick = send;
   $('oBlock').onclick = blockStudent;
+  $('oReport').onclick = reportStudent;
   $('officePill').onclick = () => (conv ? openSheet() : openInbox());
   const input = $('oInput');
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 110) + 'px'; });
@@ -194,6 +195,7 @@ function renderHead() {
   $('oName').textContent = w ? w.name + (w.student ? '' : (w.name.endsWith('학생') ? '' : ' 선생님')) : '교무실';
   $('oStatus').textContent = conv && conv.ended ? '대화가 끝났어요' : w && w.online === false ? '⚪ 부재중 · 메시지를 남겨 두세요' : '🟢 대화 중';
   $('oBlock').classList.toggle('hidden', !(isAdmin() && conv && conv.student)); // 차단은 관리자만
+  $('oReport').classList.toggle('hidden', !(teacher && !isAdmin() && conv && conv.student && !conv.ended)); // 일반 선생님은 관리자에게 알리기
   const off = !conv || conv.ended;
   $('oInput').disabled = off;
   $('oSend').disabled = off || sending;
@@ -279,6 +281,102 @@ async function blockStudent() {
   conv.ended = true;
   await endConv(true);
   ctx.toast('차단했어요');
+}
+
+async function reportStudent() {
+  if (!teacher || !conv || !conv.student) return;
+  const reason = prompt('관리자 선생님께 알릴 이유를 적어 주세요. (예: 욕설, 장난 메시지 반복)\n이 학생의 최근 메시지 5개까지가 관리자에게 전달되고, 관리자가 차단할지 정해요.');
+  if (reason === null) return;
+  const r = await api({ action: 'office.report', token: teacher.token, conv: conv.conv, reason }).catch(() => ({ error: '연결하지 못했어요' }));
+  if (r.error) return ctx.toast(r.error);
+  ctx.toast('관리자 선생님께 알렸어요. 대화를 끝내도 괜찮아요.');
+}
+
+/* ---------- 관리자 메뉴: 신고 · 차단 · 선생님 ---------- */
+let adminTab = 'reports';
+export async function openAdminMenu() {
+  if (!isAdmin()) return;
+  const m = ctx.openModal(`
+    <h2>🛠️ 관리자 메뉴</h2>
+    <div class="tabs">
+      <button type="button" class="tab" data-t="reports">🚨 신고</button>
+      <button type="button" class="tab" data-t="blocks">🚫 차단</button>
+      <button type="button" class="tab" data-t="teachers">👩‍🏫 선생님</button>
+    </div>
+    <div id="admBody" class="adm-body"><p class="hint">불러오는 중…</p></div>
+    <div class="foot"><button class="btn primary" id="admClose" type="button">닫기</button></div>`, { wide: true });
+  m.querySelector('#admClose').onclick = ctx.closeModal;
+  let data = null;
+  const call = async (body, okMsg) => {
+    const r = await api({ action: 'office.admin', token: teacher.token, ...body }).catch(() => ({ error: '연결하지 못했어요' }));
+    if (r.error) { ctx.toast(r.error); return null; }
+    if (okMsg) ctx.toast(okMsg);
+    return r;
+  };
+  const load = async () => { data = await call({ op: 'overview' }); render(); };
+  const fmt = (t) => (t ? new Date(t).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+  const render = () => {
+    m.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.t === adminTab));
+    const box = m.querySelector('#admBody');
+    if (!box || !data) return;
+    if (adminTab === 'reports') {
+      box.innerHTML = data.reports.length ? data.reports.map((x) => `
+        <div class="adm-card ${x.status === '새 신고' ? 'new' : ''}">
+          <div class="adm-top"><b>${esc(x.nick)}</b> 학생 <span class="hint">· ${esc(x.teacher)} 선생님이 알림 · ${fmt(x.t)}</span><span class="adm-st">${esc(x.status)}</span></div>
+          <div class="adm-reason">이유: ${esc(x.reason)}</div>
+          ${x.msgs ? `<div class="adm-msgs">${esc(x.msgs)}</div>` : ''}
+          ${x.status === '새 신고' ? `<div class="adm-act"><button class="btn soft" data-dismiss="${x.row}" type="button">넘어가기</button><button class="btn primary" data-block="${x.row}" type="button">🚫 차단하기</button></div>` : ''}
+        </div>`).join('') : '<p class="hint">들어온 신고가 없어요 🌿</p>';
+      box.querySelectorAll('[data-block]').forEach((b) => (b.onclick = async () => {
+        if (!confirm('이 학생 기기를 차단할까요? 그 기기에서는 교무실 대화를 열 수 없어요.')) return;
+        if (await call({ op: 'blockReport', row: Number(b.dataset.block) }, '차단했어요')) load();
+      }));
+      box.querySelectorAll('[data-dismiss]').forEach((b) => (b.onclick = async () => { if (await call({ op: 'dismissReport', row: Number(b.dataset.dismiss) })) load(); }));
+    } else if (adminTab === 'blocks') {
+      box.innerHTML = '<p class="hint">차단된 기기는 교무실 대화를 열 수 없어요. 풀면 다시 열 수 있어요.</p>' + (data.blocks.length ? data.blocks.map((x) => `
+        <div class="adm-card"><div class="adm-top"><b>${esc(x.nick || '(닉네임 없음)')}</b><span class="hint">· ${esc(x.by)} · ${fmt(x.t)}</span>
+          <button class="btn soft adm-mini" data-unblock="${x.row}" data-nick="${esc(x.nick)}" type="button">풀기</button></div></div>`).join('') : '<p class="hint">차단된 학생이 없어요</p>');
+      box.querySelectorAll('[data-unblock]').forEach((b) => (b.onclick = async () => {
+        if (!confirm(`'${b.dataset.nick}' 차단을 풀까요?`)) return;
+        if (await call({ op: 'unblock', row: Number(b.dataset.unblock), nick: b.dataset.nick }, '차단을 풀었어요')) load();
+      }));
+    } else {
+      box.innerHTML = `<button class="btn soft block" id="admInvite" type="button">➕ 새 초대코드 만들기</button>
+        <p class="hint">초대코드를 선생님께 한 명에 하나씩 알려 주세요. 선생님은 독서실 ⚙️ 설정 → 선생님 로그인 → 처음 등록에서 써요.</p>` +
+        data.teachers.map((x) => `
+        <div class="adm-card ${x.on ? '' : 'off'}">
+          <div class="adm-top"><b>${x.registered ? esc(x.name) : '(아직 등록 전)'}</b> ${x.admin ? '<span class="adm-st">관리자</span>' : ''}
+            <span class="hint">· <code>${esc(x.code)}</code>${x.registered ? ` · 기기 ${x.devices}대 ${x.online ? '· 🟢 접속 중' : ''}` : ''}${x.on ? '' : ' · 꺼짐'}</span></div>
+          ${x.admin ? '' : `<div class="adm-act">
+            <button class="btn soft adm-mini" data-tog="${x.row}" data-code="${esc(x.code)}" data-on="${x.on ? 0 : 1}" type="button">${x.on ? '끄기 (권한 빼기)' : '다시 켜기'}</button>
+            ${x.registered ? `<button class="btn soft adm-mini" data-out="${x.row}" data-code="${esc(x.code)}" type="button">모든 기기 로그아웃</button>
+            <button class="btn soft adm-mini" data-reset="${x.row}" data-code="${esc(x.code)}" data-name="${esc(x.name)}" type="button">비밀번호 초기화</button>` : ''}
+          </div>`}
+        </div>`).join('');
+      box.querySelector('#admInvite').onclick = async () => {
+        const r = await call({ op: 'newInvite' });
+        if (!r) return;
+        try { await navigator.clipboard.writeText(r.code); } catch (e) {}
+        alert('새 초대코드: ' + r.code + '\n(복사해 두었어요. 선생님께 알려 주세요)');
+        load();
+      };
+      box.querySelectorAll('[data-tog]').forEach((b) => (b.onclick = async () => {
+        const on = b.dataset.on === '1';
+        if (!on && !confirm('이 선생님 권한을 뺄까요? 바로 로그인할 수 없게 돼요.')) return;
+        if (await call({ op: 'toggleTeacher', row: Number(b.dataset.tog), code: b.dataset.code, on }, on ? '다시 켰어요' : '권한을 뺐어요')) load();
+      }));
+      box.querySelectorAll('[data-out]').forEach((b) => (b.onclick = async () => {
+        if (await call({ op: 'logoutTeacher', row: Number(b.dataset.out), code: b.dataset.code }, '모든 기기에서 로그아웃시켰어요')) load();
+      }));
+      box.querySelectorAll('[data-reset]').forEach((b) => (b.onclick = async () => {
+        if (!confirm(`'${b.dataset.name}' 선생님 비밀번호를 초기화할까요?\n닉네임·비밀번호가 지워지고, 같은 초대코드(${b.dataset.code})로 '처음 등록'을 다시 하면 돼요.`)) return;
+        if (await call({ op: 'resetTeacher', row: Number(b.dataset.reset), code: b.dataset.code }, '초기화했어요. 같은 초대코드로 다시 등록하면 돼요')) load();
+      }));
+    }
+  };
+  m.querySelectorAll('.tab').forEach((b) => (b.onclick = () => { adminTab = b.dataset.t; render(); }));
+  render();
+  load();
 }
 
 /* ---------- 새 메시지 가져오기 ---------- */
@@ -495,7 +593,7 @@ export function openInbox() {
     <button class="btn soft block" id="ibDoor" type="button">${myDoorClosed() ? '🔓 문 열기 (질문 받기)' : '🔒 문 닫기 (시험 출제 중)'}</button>
     <p class="hint">문을 닫으면 학생에게 “시험 출제 중”으로 보이고 새 질문을 받지 않아요. 하던 대화는 그대로예요.</p>
     <button class="btn soft block" id="ibLook" type="button">✏️ 닉네임 바꾸기</button>
-    ${isAdmin() ? '<button class="btn soft block" id="ibSuggest" type="button" style="margin-top:8px">📮 건의함 보기 (관리자)</button>' : ''}
+    ${isAdmin() ? '<button class="btn soft block" id="ibAdmin" type="button" style="margin-top:8px">🛠️ 관리자 메뉴 (신고 · 차단 · 선생님)</button><button class="btn soft block" id="ibSuggest" type="button" style="margin-top:8px">📮 건의함 보기 (관리자)</button>' : ''}
     <div class="todo-pick" id="inboxList"></div>
     <label class="lbl">다른 선생님께 메시지</label>
     <div class="chips" id="teacherList"></div>
@@ -506,6 +604,7 @@ export function openInbox() {
   m.querySelector('#ibClose').onclick = ctx.closeModal;
   m.querySelector('#ibDoor').onclick = () => toggleDoor();
   m.querySelector('#ibLook').onclick = () => openTeacherProfile();
+  if (m.querySelector('#ibAdmin')) m.querySelector('#ibAdmin').onclick = () => openAdminMenu();
   if (m.querySelector('#ibSuggest')) m.querySelector('#ibSuggest').onclick = () => ctx.onOpenSuggestAdmin && ctx.onOpenSuggestAdmin();
   m.querySelector('#ibLogout').onclick = () => { logout(); ctx.closeModal(); ctx.toast('로그아웃했어요'); };
   renderInbox();

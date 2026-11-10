@@ -330,3 +330,17 @@ body.studying .joy, body.observer .joy { display: none !important; }
 .sound-menu button small { font-size: 11px; }
 .sound-menu button.on { background: var(--green); color: #fff; box-shadow: 0 3px 0 var(--green-d); }
 .sound-menu button:active { transform: scale(.94); }
+
+/* 관리자 메뉴 */
+.adm-body { max-height: 56vh; overflow: auto; margin-top: 8px; }
+.adm-card { background: #fff; border: 2px solid #F0E2C8; border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; }
+.adm-card.new { border-color: #E9785A; background: #FFF6F2; }
+.adm-card.off { opacity: .6; }
+.adm-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.adm-top .hint { margin: 0; }
+.adm-st { margin-left: auto; font-size: 12px; font-weight: 800; color: var(--brown); background: var(--cream-2); border-radius: 999px; padding: 2px 8px; }
+.adm-reason { font-size: 14px; margin-top: 4px; }
+.adm-msgs { font-size: 13px; white-space: pre-wrap; background: var(--cream); border-radius: 10px; padding: 8px; margin-top: 6px; color: var(--ink); }
+.adm-act { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; justify-content: flex-end; }
+.adm-mini { padding: 6px 10px; font-size: 13px; min-height: 0; }
+.adm-top .adm-mini { margin-left: auto; }

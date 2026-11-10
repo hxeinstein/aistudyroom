@@ -18,7 +18,9 @@
  * [규칙]
  *   - 학생 ↔ 교사, 교사 ↔ 교사만 대화 가능 (학생끼리는 대화를 열 수 없음)
  *   - 대화는 시트에 저장하지 않음. 임시 저장소(캐시)에만 있고, 어느 한쪽이 대화를 끝내면 바로 지워짐 (늦어도 6시간 뒤 자동 삭제)
- *   - 차단: 선생님이 차단하면 그 기기는 교무실 대화를 열 수 없음 ('차단' 탭에 기기 번호만 남음, 대화 내용은 안 남음)
+ *   - 신고: 선생님이 대화창에서 [관리자에게 알리기]를 누르면 '신고' 탭에 그 학생의 최근 메시지(5개까지)가 남고 관리자에게 메일이 가요
+ *   - 관리자 메뉴(독서실 안): 신고 처리 · 차단 풀기 · 선생님 초대코드 만들기/끄기/비밀번호 초기화
+ *   - 차단: 관리자가 차단하면 그 기기는 교무실 대화를 열 수 없음 ('차단' 탭에 기기 번호만 남음, 대화 내용은 안 남음)
  */
 
 const OFFICE_SEATS = 10;
@@ -98,6 +100,8 @@ function officeHandle_(body) {
       case 'block': return officeBlock_(body);
       case 'door': return officeDoor_(body);
       case 'call': return officeCall_(body);
+      case 'report': return officeReport_(body);
+      case 'admin': return officeAdmin_(body);
       default: return { error: '알 수 없는 요청이에요.' };
     }
   } catch (e) {
@@ -716,7 +720,7 @@ function suggestMark_(b) {
  * body = { token, tab, start(첫 묶음이면 true → 탭을 새로 만들거나 비움), rows: [[쪽, 대단원, 소단원, 내용], ...],
  *          register?: { name, room, bot } (마지막 묶음에서 '과목' 탭에 교과 등록) }
  */
-const RESERVED_TABS = ['과목', '교사', '차단', '게시판', '건의함', '프롬프트', '기록'];
+const RESERVED_TABS = ['과목', '교사', '차단', '신고', '게시판', '건의함', '프롬프트', '기록'];
 function bookImport_(b) {
   const t = teacherByToken_(b.token);
   if (!t) return { error: '다시 로그인해 주세요.', relogin: true };
@@ -757,4 +761,125 @@ function bookImport_(b) {
   } finally {
     lock.releaseLock();
   }
+}
+
+
+/* ---------- 신고 (선생님 → 관리자) ---------- */
+function reportSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName('신고');
+  if (!sh) {
+    sh = ss.insertSheet('신고');
+    sh.getRange(1, 1, 1, 7).setValues([['날짜', '알린 선생님', '학생 닉네임', '이유', '학생의 최근 메시지', '처리', '기기 번호']]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+/** 선생님이 대화 중인 학생을 관리자에게 알리기 (학생 메시지 최근 5개만 남김) */
+function officeReport_(b) {
+  const teacher = teacherByToken_(b.token);
+  if (!teacher) return { error: '다시 로그인해 주세요.', relogin: true };
+  const c = getConv_(b.conv);
+  if (!c || side_(c, b, teacher) !== 'b' || c.a.type !== 'student') return { error: '알릴 수 없는 대화예요.' };
+  if (!countOk_('rep_' + tid_(teacher.code), 10, 3600)) return { error: '잠시 뒤에 다시 해 주세요.' };
+  const reason = String(b.reason || '').trim().slice(0, 200) || '(이유 없음)';
+  const msgs = c.msgs.filter((m) => m.from === 'a').slice(-5).map((m) => m.text.slice(0, 200)).join('\n');
+  reportSheet_().appendRow([new Date(), teacher.name, c.a.nick, reason, msgs, '새 신고', c.a.device]);
+  const cache = CacheService.getScriptCache();
+  if (!cache.get('rep_mail')) {
+    teachers_().filter((t) => isAdmin_(t) && t.email).forEach((t) => {
+      try {
+        MailApp.sendEmail(t.email, '🚨 숲속 독서실: ' + teacher.name + ' 선생님이 학생을 알렸어요',
+          teacher.name + ' 선생님이 교무실 대화 중인 학생(' + c.a.nick + ')을 관리자에게 알렸어요.\n이유: ' + reason +
+          '\n\n독서실에서 관리자로 로그인한 뒤 [📥 받은 대화 → 🛠️ 관리자 메뉴 → 신고]에서 차단할지 정해 주세요.\n' + STUDYROOM_URL);
+      } catch (e) { console.error(e); }
+    });
+    cache.put('rep_mail', '1', 600);
+  }
+  return { ok: true };
+}
+
+/* ---------- 관리자 메뉴 ---------- */
+function officeAdmin_(b) {
+  const me = teacherByToken_(b.token);
+  if (!me) return { error: '다시 로그인해 주세요.', relogin: true };
+  if (!isAdmin_(me)) return { error: '관리자만 쓸 수 있어요.' };
+  const ss = SpreadsheetApp.getActive();
+  const row = Number(b.row);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    switch (String(b.op || '')) {
+      case 'overview': return adminOverview_();
+      case 'blockReport': {
+        const sh = reportSheet_();
+        if (!(row >= 2) || row > sh.getLastRow()) return { error: '잘못된 요청이에요.' };
+        const r = sh.getRange(row, 1, 1, 7).getValues()[0];
+        if (r[6] && !isBlocked_(String(r[6]))) ss.getSheetByName('차단').appendRow([String(r[6]), String(r[2]), me.name + ' (신고: ' + r[1] + ')', new Date()]);
+        sh.getRange(row, 6).setValue('차단함');
+        return { ok: true };
+      }
+      case 'dismissReport': {
+        const sh = reportSheet_();
+        if (!(row >= 2) || row > sh.getLastRow()) return { error: '잘못된 요청이에요.' };
+        sh.getRange(row, 6).setValue('넘어감');
+        return { ok: true };
+      }
+      case 'unblock': {
+        const sh = ss.getSheetByName('차단');
+        if (!sh || !(row >= 2) || row > sh.getLastRow()) return { error: '잘못된 요청이에요.' };
+        if (String(sh.getRange(row, 2).getValue()) !== String(b.nick || '')) return { error: '목록이 바뀌었어요. 다시 열어 주세요.' };
+        sh.deleteRow(row);
+        return { ok: true };
+      }
+      case 'newInvite': return { ok: true, code: makeTeacherInvite() };
+      case 'toggleTeacher':
+      case 'resetTeacher':
+      case 'logoutTeacher': {
+        const t = teachers_().filter((x) => x.row === row && x.code === String(b.code || ''))[0];
+        if (!t) return { error: '목록이 바뀌었어요. 다시 열어 주세요.' };
+        if (isAdmin_(t)) return { error: '관리자 선생님은 여기서 바꿀 수 없어요.' };
+        const sh = ss.getSheetByName('교사');
+        if (b.op === 'toggleTeacher') {
+          sh.getRange(row, 1).insertCheckboxes().setValue(!!b.on);
+          if (!b.on) sh.getRange(row, 10).setValue('');
+        } else if (b.op === 'logoutTeacher') {
+          sh.getRange(row, 10).setValue('');
+        } else {
+          // 비밀번호 초기화: 같은 초대코드로 다시 등록할 수 있게 (닉네임·비밀번호·이메일·캐릭터·로그인 기기 지움)
+          sh.getRange(row, 3, 1, 6).setValues([['', '', '', '', '', '']]);
+          sh.getRange(row, 10).setValue('');
+        }
+        return { ok: true };
+      }
+      default: return { error: '알 수 없는 요청이에요.' };
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function adminOverview_() {
+  const ss = SpreadsheetApp.getActive();
+  const cache = CacheService.getScriptCache();
+  const reports = [];
+  const rv = reportSheet_().getDataRange().getValues();
+  for (let i = rv.length - 1; i >= 1 && reports.length < 40; i--) {
+    const r = rv[i];
+    if (!r[2]) continue;
+    reports.push({ row: i + 1, t: new Date(r[0]).getTime(), teacher: String(r[1]), nick: String(r[2]), reason: String(r[3]), msgs: String(r[4]), status: String(r[5] || '새 신고') });
+  }
+  const blocks = [];
+  const bs = ss.getSheetByName('차단');
+  if (bs) bs.getDataRange().getValues().forEach((r, i) => {
+    if (i === 0 || !r[0]) return;
+    blocks.push({ row: i + 1, nick: String(r[1]), by: String(r[2]), t: new Date(r[3]).getTime() || 0 });
+  });
+  blocks.reverse();
+  const teachers = teachers_().map((t) => ({
+    row: t.row, code: t.code, name: t.name, on: t.on, registered: !!t.hash, admin: isAdmin_(t),
+    devices: t.keys.length, online: Date.now() - Number(cache.get('tpres_' + tid_(t.code)) || 0) < ONLINE_MS,
+  }));
+  return { reports: reports, blocks: blocks, teachers: teachers, freshReports: reports.filter((x) => x.status === '새 신고').length };
 }
