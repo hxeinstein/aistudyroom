@@ -93,6 +93,8 @@ function boot() {
       return {
         n: st.profile?.name || '학생', a: st.profile?.animal || 'bear',
         sj: s ? S.subjectById(s.subject).name : '', st: !!s, ps: S.isPaused(), el: Math.floor(el / 60000) * 60000, // 1분 단위
+        td: Math.floor(S.totalMs() / 60000) * 60000,   // 오늘 공부 시간 (순위용)
+        rk: S.showInRank(), gl: S.getGoal(), sk: S.streak(),
       };
     },
   });
@@ -296,6 +298,10 @@ function openOnboarding() {
   };
 }
 
+// 모두에게 보이는 글(목표) 거르기 — 게시판과 같은 낱말
+const BAD_WORDS = ['시발', '씨발', 'ㅅㅂ', 'ㅆㅂ', '병신', 'ㅂㅅ', '개새', '좆', '존나', 'ㅈㄴ', '꺼져', '죽어', '닥쳐', '미친놈', '미친년', '애미', '느금', 'fuck', 'shit', 'bitch'];
+const badWord = (t) => { const x = String(t).toLowerCase().replace(/\s/g, ''); return BAD_WORDS.some((w) => x.includes(w)); };
+
 // ---------------- 지금 접속 중 (오른쪽 위 👥) ----------------
 function fmtMin(ms) { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`; }
 function studentStatus(x) {
@@ -309,6 +315,16 @@ function updatePeopleCount() {
   const students = Room.onlinePlayers().length + (Office.isTeacher() ? 0 : 1);
   $('peopleCount').textContent = students + teachers;
   if ($('peoplePanel')) renderPeople();
+}
+let peopleTab = 'now';
+function showFollowBar(name) {
+  $('followBar')?.remove();
+  const bar = document.createElement('div');
+  bar.id = 'followBar';
+  bar.className = 'follow-bar';
+  bar.innerHTML = `👀 <b>${esc(name)}</b> 따라가는 중 <button type="button">그만</button>`;
+  bar.querySelector('button').onclick = () => world.stopFollow();
+  document.body.appendChild(bar);
 }
 function togglePeople() {
   let panel = $('peoplePanel');
@@ -324,17 +340,28 @@ function togglePeople() {
 function renderPeople() {
   const panel = $('peoplePanel');
   if (!panel) return;
-  const me = Office.isTeacher() ? null : { n: st.profile?.name || '나', a: st.profile?.animal || 'bear', ...world.getPlayerState(), sj: S.activeSession() ? S.subjectById(S.activeSession().subject).name : '', st: !!S.activeSession(), ps: S.isPaused(), el: S.activeSession() ? Math.floor(S.activeElapsed() / 60000) * 60000 : 0 };
-  const list = Room.onlinePlayers().slice().sort((x, y) => (y.st && !y.ps) - (x.st && !x.ps) || String(x.n).localeCompare(String(y.n)));
+  const me = Office.isTeacher() ? null : { n: st.profile?.name || '나', a: st.profile?.animal || 'bear', ...world.getPlayerState(), sj: S.activeSession() ? S.subjectById(S.activeSession().subject).name : '', st: !!S.activeSession(), ps: S.isPaused(), el: S.activeSession() ? Math.floor(S.activeElapsed() / 60000) * 60000 : 0,
+    td: Math.floor(S.totalMs() / 60000) * 60000, rk: S.showInRank(), gl: S.getGoal(), sk: S.streak() };
+  const list = Room.onlinePlayers().map((x) => (x.gl && badWord(x.gl) ? { ...x, gl: '' } : x)).sort((x, y) => (y.st && !y.ps) - (x.st && !x.ps) || String(x.n).localeCompare(String(y.n)));
   const teachers = Office.teacherSeats().filter((t) => t.online);
   const row = (x, mine) => `
     <div class="pp-row">
       <span class="pp-ava">${S.animalById(x.a).emoji}</span>
-      <span class="pp-main"><b>${esc(x.n)}${mine ? ' <i class="pp-me">나</i>' : ''}</b><small>${studentStatus(x)}${x.s >= 0 && x.ar !== 'office' ? ' · ' + seatName(x.s) : ''}</small></span>
+      <span class="pp-main"><b>${esc(x.n)}${x.sk >= 2 ? ` <i class="pp-fire">🔥${x.sk}일</i>` : ''}${mine ? ' <i class="pp-me">나</i>' : ''}</b><small>${studentStatus(x)}${x.s >= 0 && x.ar !== 'office' ? ' · ' + seatName(x.s) : ''}</small>${x.gl ? `<small class="pp-goal">🎯 ${esc(x.gl)}</small>` : ''}</span>
       ${mine ? '' : `<button type="button" class="pp-btn" data-go="${esc(x.uid)}" title="찾아가기">📍</button>
+      ${Office.isTeacher() ? `<button type="button" class="pp-btn ${world.following === x.uid ? 'on' : ''}" data-follow="${esc(x.uid)}" title="따라가기">👀</button>` : ''}
       <button type="button" class="pp-btn" data-act="${esc(x.uid)}" title="${Office.isTeacher() ? '말 걸기' : '응원 보내기'}">${Office.isTeacher() ? '💬' : '📣'}</button>`}
     </div>`;
-  const html = `
+  const tabs = `<div class="pp-tabs"><button type="button" class="${peopleTab === 'now' ? 'on' : ''}" data-pt="now">👥 접속 중</button><button type="button" class="${peopleTab === 'rank' ? 'on' : ''}" data-pt="rank">🏆 오늘 순위</button></div>`;
+  let html;
+  if (peopleTab === 'rank') {
+    const ranked = (me ? [{ ...me, mine: true }] : []).concat(list).filter((x) => x.rk !== false && (x.td || 0) >= 60000).sort((x, y) => (y.td || 0) - (x.td || 0));
+    html = tabs + `<div class="pp-sec">지금 접속한 친구들의 오늘 공부 시간</div>` + (ranked.length ? ranked.map((x, i) => `
+      <div class="pp-row ${x.mine ? 'mine' : ''}"><span class="pp-rank">${['🥇', '🥈', '🥉'][i] || i + 1}</span><span class="pp-ava">${S.animalById(x.a).emoji}</span>
+        <span class="pp-main"><b>${esc(x.n)}${x.sk >= 2 ? ` <i class="pp-fire">🔥${x.sk}일</i>` : ''}${x.mine ? ' <i class="pp-me">나</i>' : ''}</b><small>${fmtMin(x.td || 0)}${x.gl ? ' · 🎯 ' + esc(x.gl) : ''}</small></span></div>`).join('')
+      : '<p class="hint">아직 오늘 공부를 시작한 친구가 없어요</p>') +
+      `<p class="hint">순위는 지금 접속한 친구만 보여요. ${me ? (S.showInRank() ? '내 이름을 순위에서 빼려면 ⚙️ 설정에서 끌 수 있어요.' : '나는 순위에서 빠져 있어요 (⚙️ 설정).') : ''}</p>`;
+  } else html = tabs + `
     <div class="pp-head">👥 지금 접속 중 <span>학생 ${list.length + (me ? 1 : 0)} · 선생님 ${teachers.length}</span></div>
     ${teachers.length ? `<div class="pp-sec">선생님</div>` + teachers.map((t) => `
       <div class="pp-row"><span class="pp-ava">👩‍🏫</span><span class="pp-main"><b>${esc(t.name)} 선생님</b><small>${t.closed ? '🔒 시험 출제 중' : '🟢 상담 가능 · 교무실'}</small></span></div>`).join('') : ''}
@@ -345,6 +372,19 @@ function renderPeople() {
   if (panel.dataset.html === html) return;   // 바뀐 게 없으면 그대로 (누르는 중에 버튼이 바뀌지 않게)
   panel.dataset.html = html;
   panel.innerHTML = html;
+  panel.querySelectorAll('[data-pt]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); peopleTab = b.dataset.pt; renderPeople(); }));
+  panel.querySelectorAll('[data-follow]').forEach((b) => (b.onclick = () => {
+    const uid = b.dataset.follow;
+    if (world.following === uid) { world.stopFollow(); panel.remove(); return; }
+    const x = Room.onlinePlayers().find((y) => y.uid === uid);
+    if (!world.startFollow(uid, (why) => {
+      $('followBar')?.remove();
+      if (why === 'office') toast('교무실로 가서 따라가기를 멈췄어요');
+      else if (why === 'gone') toast('학생이 나가서 따라가기를 멈췄어요');
+    })) return toast('지금은 따라갈 수 없어요');
+    panel.remove();
+    showFollowBar(x ? x.n : '학생');
+  }));
   panel.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => {
     const r = world.goToRemote(b.dataset.go);
     if (r === 'office') toast('지금 교무실에 있어요');
@@ -400,6 +440,9 @@ function openSettings() {
       <input class="field" id="sExam" maxlength="8" placeholder="수능 시험" value="${esc(st.exam?.name || '')}" />
       <input class="field" id="sDate" type="date" value="${esc(st.exam?.date || '')}" />
     </div>
+    <label class="lbl">🎯 오늘의 목표 <small style="color:var(--muted)">(접속 중 목록에 보여요, 24자)</small></label>
+    <input class="field" id="sGoal" maxlength="24" placeholder="예: 수학 3시간, 영단어 100개" value="${esc(S.getGoal())}" />
+    <label class="glasses-tg" style="margin:10px 0 0"><input type="checkbox" id="sRank" ${S.showInRank() ? 'checked' : ''} /> 🏆 오늘 순위에 내 이름 보이기</label>
     <button class="btn soft block" id="sSubjects" type="button" style="margin-top:14px">📚 내 과목 관리</button>
     <button class="btn soft block" id="sTeacher" type="button" style="margin-top:8px">${Office.isTeacher() ? `📥 ${esc(Office.teacherName())} 선생님 · 받은 대화` : '👩‍🏫 선생님 로그인'}</button>
     <div class="foot">
@@ -417,6 +460,11 @@ function openSettings() {
     const name = p.name || randomName();
     S.setProfile({ name, animal });
     S.setExam({ name: m.querySelector('#sExam').value.trim() || '시험', date: m.querySelector('#sDate').value });
+    const goal = m.querySelector('#sGoal').value.trim();
+    if (badWord(goal)) return toast('목표에 쓸 수 없는 말이 있어요');
+    S.setGoal(goal);
+    S.setShowInRank(m.querySelector('#sRank').checked);
+    Room.syncNow();
     world.setPlayer({ animal, name });
     closeModal();
     refreshHud();

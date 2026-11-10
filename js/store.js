@@ -283,6 +283,26 @@ export function subjectTotals(key = dayKey()) {
   return m;
 }
 
+/** 연속 공부 일수: 오늘(아직 안 했으면 어제)부터 거꾸로 1분 이상 공부한 날 수 */
+export function streak() {
+  let key = dayKey();
+  let n = 0;
+  if (totalMs(key) < 60000) key = dayKey(dayStartTs(key) - 3600 * 1000);   // 오늘 아직 안 했으면 어제부터
+  for (let i = 0; i < 400; i++) {
+    if (!state.days[key] || totalMs(key) < 60000) break;
+    n++;
+    key = dayKey(dayStartTs(key) - 3600 * 1000);
+  }
+  return n;
+}
+
+/** 오늘의 목표 한 줄 (날마다 새로) */
+export function getGoal() { return state.goal && state.goal.day === dayKey() ? state.goal.text : ''; }
+export function setGoal(text) { state.goal = { day: dayKey(), text: String(text || '').trim().slice(0, 24) }; save(); }
+/** 오늘 순위에 내 이름 보이기 (기본: 보임) */
+export const showInRank = () => state.rank !== false;
+export function setShowInRank(on) { state.rank = !!on; save(); }
+
 export function finishDay(note) {
   const day = getDay();
   day.note = (note || '').trim();

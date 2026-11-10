@@ -1038,6 +1038,22 @@ export function createWorld(container, opts = {}) {
     player.el.classList.toggle('hidden', observer);
     document.body.classList.toggle('observer', observer);
   }
+  // 선생님(구경): 학생 따라가기 — 화면을 끌면 멈춤
+  let follow = null;   // { uid, onStop }
+  function startFollow(uid, onStop) { if (!observer || !remotes.has(uid)) return false; follow = { uid, onStop }; return true; }
+  function stopFollow(why) { const f = follow; follow = null; if (f && f.onStop) f.onStop(why || 'stop'); }
+  function stepFollow(dt) {
+    if (!follow) return;
+    const r = remotes.get(follow.uid);
+    if (!observer || !r) return stopFollow('gone');
+    if ((r.a.area || 'main') !== area.name) return stopFollow(r.a.area === 'office' ? 'office' : 'main');
+    const seat = r.seatIdx >= 0 ? seats[r.seatIdx] : null;
+    const t = seat ? seat.approach : r.a.obj.position;
+    const p = player.obj.position;
+    const k = Math.min(1, dt * 4);
+    p.x += (t.x - p.x) * k;
+    p.z += (t.z - p.z) * k;
+  }
   // 화면 조이스틱 (x: 오른쪽 +, y: 아래 +, 길이 0~1)
   const stick = { x: 0, y: 0 };
   function setStick(x, y) { stick.x = x || 0; stick.y = y || 0; }
@@ -1188,7 +1204,7 @@ export function createWorld(container, opts = {}) {
     if (!down) return;
     const dx = e.clientX - down.x;
     const dy = e.clientY - down.y;
-    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) down.drag = true;
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) { if (!down.drag && down.pan && follow) stopFollow(); down.drag = true; }
     if (down.drag && down.pan) {
       // 손바닥으로 끌듯이 화면 옮기기: 끈 방향으로 바닥이 따라옴
       // 화면 1픽셀이 바닥에서 몇 칸인지 (끈 손가락에 바닥이 붙어 움직이게)
@@ -1305,6 +1321,7 @@ export function createWorld(container, opts = {}) {
     moodCheck += dt;
     if (moodCheck > 30) { moodCheck = 0; applyMood(moodFor(new Date().getHours())); }
 
+    stepFollow(dt);
     // 키보드 이동
     let kx = 0, kz = 0;
     if (keys.has('w') || keys.has('arrowup')) kz -= 1;
@@ -1316,6 +1333,7 @@ export function createWorld(container, opts = {}) {
     const p = player.obj.position;
     let moving = false;
     if ((kx || kz) && !studying) {
+      if (follow) stopFollow();
       if (player.seat || player.officeDesk) standUp();
       path = [];
       pendingSeat = null;
@@ -1511,6 +1529,9 @@ export function createWorld(container, opts = {}) {
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus });
     },
     walkToBot: tapBot,
+    startFollow,
+    stopFollow: () => stopFollow(),
+    get following() { return follow ? follow.uid : null; },
     /** 접속 중 목록에서 '찾아가기': 학생은 걸어가고, 선생님(구경)은 그곳으로 시점을 옮김 */
     goToRemote(uid) {
       const r = remotes.get(uid);
