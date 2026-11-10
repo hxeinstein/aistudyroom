@@ -202,6 +202,7 @@ function addBubble(role, text, imgUrl) {
   if (role !== 'user') row.innerHTML = `<img class="c-ava" src="${(bot || CONFIG.BOTS[0]).img}" alt="" />`;
   const div = document.createElement('div');
   div.className = 'c-msg';
+  if (role !== 'user') { const who = document.createElement('span'); who.className = 'c-who'; who.textContent = (bot || CONFIG.BOTS[0]).name; div.appendChild(who); }
   if (imgUrl) {
     const im = document.createElement('img');
     im.src = imgUrl;

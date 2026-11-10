@@ -456,3 +456,33 @@ body.in-park .study-panel { display: none; }
   .hud-left { max-width: calc(100vw - 196px); }
   .hud-left .icon-btn { display: none; }   /* 아주 좁으면 왼쪽 플래너 단추는 빼고(아래 줄에 있음) 학교 이름 자리로 */
 }
+
+/* ---------- 포근한 말풍선 · 이름표 스타일 (따뜻한 크림색, 기울어진 이름 리본, 동그란 진회색 닫기) ---------- */
+:root { --ink: #5C4A38; --bubble: #FFF9E8; --ribbon: #D48A45; --slate: #44505F; --accent-blue: #2F8FBF; }
+.modal, .chat-sheet { background: var(--bubble); }
+.modal { border-radius: 36px; box-shadow: 0 8px 0 rgba(107, 74, 46, 0.14), 0 16px 34px rgba(60, 40, 20, 0.22); }
+.chat-sheet { border-radius: 36px 36px 0 0; }
+@media (min-width: 640px) { .chat-sheet { border-radius: 36px; } }
+.c-log { padding-top: 22px; gap: 22px; }
+/* 챗봇 말: 크림색 둥근 말풍선 + 왼쪽 위에 살짝 기울어진 이름 리본 */
+.bot .c-msg {
+  position: relative; background: #FFFDF5; color: var(--ink); border-radius: 26px 30px 28px 24px;
+  padding: 16px 16px 12px; box-shadow: 0 3px 0 #EFE0C4, 0 6px 14px rgba(107, 74, 46, 0.08);
+}
+.c-who {
+  position: absolute; left: 14px; top: -13px; transform: rotate(-4deg);
+  background: var(--ribbon); color: #FFF8E9; font-size: 12px; font-weight: 700; padding: 2px 12px 3px; border-radius: 999px;
+  box-shadow: 0 2px 0 rgba(107, 74, 46, 0.25); white-space: nowrap;
+}
+.bot .c-msg strong, .bot .c-msg b { color: var(--accent-blue); }
+/* 마지막 챗봇 말풍선 아래 작은 주황 ▼ */
+.c-row.bot:last-child .c-msg::after {
+  content: ''; position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%);
+  border: 8px solid transparent; border-top-color: #F0A93E; border-bottom: 0;
+}
+.me .c-msg { border-radius: 24px 24px 8px 24px; }
+/* 닫기 단추: 동그란 진회색에 흰 표시 */
+#cClose, #oClose { background: var(--slate); color: #fff; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18); }
+/* 모달 제목 왼쪽 위 리본 느낌 */
+.modal h2 { color: var(--brown); }
+.toast { border-radius: 999px; }
