@@ -1,3 +1,4 @@
+import { wrapLines } from './wrap.js';
 // 스터디플래너 이미지(캔버스) 렌더링 + 사진 저장
 import {
   getState, getDay, sessionsWithLive, totalMs, subjectTotals, subjectById, animalById,
@@ -293,14 +294,7 @@ function clipText(ctx, text, max) {
 }
 
 function wrap(ctx, text, x, y, max, lh, maxLines) {
-  const lines = [];
-  for (const para of text.split('\n')) {
-    let cur = '';
-    for (const ch of para) {
-      if (ctx.measureText(cur + ch).width > max) { lines.push(cur); cur = ch; } else cur += ch;
-    }
-    lines.push(cur);
-  }
+  const lines = wrapLines(ctx, text, max);
   lines.slice(0, maxLines).forEach((l, i) => ctx.fillText(l, x, y + i * lh));
 }
 

@@ -1,5 +1,6 @@
 // 3D 숲속 독서실 — 둥글고 아기자기한 로우폴리 스타일 (외부 그림 파일 없이 코드로 생성)
 import { badWord } from './words.js';
+import { wrapLines } from './wrap.js';
 import * as THREE from '../vendor/three.module.min.js';
 import { makeAnimal, animateAnimal, animalSpeed } from './animals.js';
 export { makeAnimal };
@@ -670,15 +671,7 @@ export function createWorld(container, opts = {}) {
   addObs(BOX_POS.x, BOX_POS.z, 0.8, 0.6);
 
   function wrapText(g, text, x, y, maxW, lh, maxLines) {
-    let line = '', n = 0;
-    for (const ch of String(text)) {
-      if (g.measureText(line + ch).width > maxW) {
-        g.fillText(line, x, y + n * lh);
-        line = ch;
-        if (++n >= maxLines) return;
-      } else line += ch;
-    }
-    if (line && n < maxLines) g.fillText(n === maxLines - 1 && line.length > 1 ? line : line, x, y + n * lh);
+    wrapLines(g, text, maxW).slice(0, maxLines).forEach((l, i) => g.fillText(l, x, y + i * lh));
   }
   /** 게시판에 포스트잇 그리기 (최근 8장) */
   function setBoardNotes(notes) {
