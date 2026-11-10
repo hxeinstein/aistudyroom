@@ -68,7 +68,7 @@ function makeTeacherInvite(school) {
   r = r < 0 ? rows.length + 1 : r + 1;
   sh.getRange(r, 1, 1, 2).setValues([[true, code]]);
   const sc = schoolCode_(school);
-  sh.getRange(r, 11).setValue(sc === DEFAULT_SCHOOL ? '' : sc);
+  sh.getRange(r, 11).setValue(sc === defaultSchool_() ? '' : sc);
   sh.getRange(r, 1).insertCheckboxes().check();
   console.log('새 초대코드: ' + code);
   return code;
@@ -82,6 +82,7 @@ function onOpen() {
       .addItem('교무실 설정(처음 한 번)', 'setupOffice')
       .addItem('과목 탭 만들기/머리글 갱신', 'setupSubjects')
       .addItem('빈 학교 칸을 기본 학교 코드로 채우기', 'fillSchoolCodes')
+      .addItem('학교 코드 바꾸기', 'changeSchoolCode')
       .addToUi();
   } catch (e) { /* 편집기에서 실행 시 무시 */ }
 }
@@ -182,7 +183,7 @@ function officeLogout_(b) {
   }
   return { ok: true };
 }
-function me_(t) { const s = schoolInfo_(t.school); return { id: tid_(t.code), name: t.name, seat: t.seat, animal: t.animal, color: t.color, glasses: t.glasses, closed: t.closed, admin: isAdmin_(t), school: t.school, schoolName: s ? s.name : '' }; }
+function me_(t) { const s = schoolInfo_(t.school); return { id: tid_(t.code), name: t.name, seat: t.seat, animal: t.animal, color: t.color, glasses: t.glasses, closed: t.closed, admin: isAdmin_(t), school: t.school, schoolName: s ? s.name : '', schoolDef: t.school === defaultSchool_() }; }
 
 function officeRegister_(b) {
   const code = String(b.code || '').trim().toUpperCase();
@@ -613,7 +614,7 @@ function boardHandle_(body) {
     if (a === 'book.import') return bookImport_(body);
     if (a === 'stat.day') return statDay_(body);
     if (a === 'notice.get') return noticeGet_(body);
-    if (a === 'school.check') { const s = schoolInfo_(String(body.code || '').trim().toUpperCase()); return s && s.on ? { ok: true, code: aliasSc_(s.code), name: s.name } : { error: '학교 코드가 맞지 않아요. 선생님께 다시 물어봐 줘.' }; }
+    if (a === 'school.check') { const s = schoolInfo_(String(body.code || '').trim().toUpperCase()); return s && s.on ? { ok: true, code: s.code, name: s.name, def: s.code === defaultSchool_() } : { error: '학교 코드가 맞지 않아요. 선생님께 다시 물어봐 줘.' }; }
   } catch (e) {
     console.error(e);
     return { error: '잠시 문제가 생겼어요. 조금 뒤에 다시 해 주세요.' };
@@ -766,7 +767,7 @@ function bookImport_(b) {
         let empty = 0;
         for (let i = 1; i < data.length; i++) if (!String(data[i][1]).trim()) { empty = i + 1; break; }
         if (!empty) empty = data.length + 1;
-        sub.getRange(empty, 1, 1, 10).setValues([[true, name, String(b.register.room || '').slice(0, 80), tab, '', DEFAULT_GREETING, '', String(b.register.bot || '').slice(0, 20), '', b.school === DEFAULT_SCHOOL ? '' : b.school]]);
+        sub.getRange(empty, 1, 1, 10).setValues([[true, name, String(b.register.room || '').slice(0, 80), tab, '', DEFAULT_GREETING, '', String(b.register.bot || '').slice(0, 20), '', b.school === defaultSchool_() ? '' : b.school]]);
         sub.getRange(empty, 1).insertCheckboxes().check();
       }
       registered = true;
@@ -848,12 +849,12 @@ function officeAdmin_(b) {
         return { ok: true };
       }
       case 'newInvite': return { ok: true, code: makeTeacherInvite(b.school) };
-      case 'schools': return { schools: schools_(), current: b.school };
+      case 'schools': { const d = defaultSchool_(); return { schools: schools_().map((x) => Object.assign({}, x, { def: x.code === d })), current: b.school }; }
       case 'addSchool': return addSchool_(b);
       case 'toggleSchool': {
         const sh = schoolSheet_(), list = schools_();
         const s = list.filter((x) => x.code === String(b.code || '').toUpperCase())[0];
-        if (!s || s.code === DEFAULT_SCHOOL) return { error: '이 학교는 끌 수 없어요.' };
+        if (!s || s.code === defaultSchool_()) return { error: '이 학교는 끌 수 없어요.' };
         sh.getRange(s.row, 3).insertCheckboxes().setValue(!!b.on);
         CacheService.getScriptCache().remove('schools');
         return { ok: true };
@@ -1028,7 +1029,7 @@ function adminSummary_(sc) {
 }
 
 /** 공지: 관리자가 쓰면 모든 학생 화면 위에 한 줄로 */
-const noticeKey_ = (sc) => (sc === DEFAULT_SCHOOL ? 'NOTICE' : 'NOTICE_' + sc);
+const noticeKey_ = (sc) => (sc === defaultSchool_() ? 'NOTICE' : 'NOTICE_' + sc);
 function noticeGet_(b) {
   const p = PropertiesService.getScriptProperties(), k = noticeKey_(schoolCode_(b && b.school));
   return { notice: p.getProperty(k) || '', id: p.getProperty(k + '_ID') || '' };
@@ -1047,21 +1048,20 @@ function noticeSet_(b, me) {
  * '학교' 탭: A 학교 코드 | B 학교 이름 | C 사용 | D 만든 날
  * - 학생은 처음 들어올 때 학교 코드를 넣거나, 주소 뒤 ?school=코드 링크로 들어와요
  * - 공부방(실시간)·게시판·건의함·공지·통계·교무실 선생님·챗봇 교과가 학교별로 나뉘어요
- * - 기본 학교(DEFAULT_SCHOOL)는 예전부터 쓰던 기록 (학교 칸이 빈 줄)
+ * - 기본 학교(defaultSchool_())는 예전부터 쓰던 기록 (학교 칸이 빈 줄)
  */
-const DEFAULT_SCHOOL = 'SCHOOL';
-const DEFAULT_SCHOOL_NAME = '우리 학교';
-// 예전 코드 → 지금 코드 (처음에 SCHOOL로 만들었다가 SCHOOL로 바꿈)
-const SCHOOL_ALIAS = { SCHOOL: 'SCHOOL' };
-const aliasSc_ = (c) => SCHOOL_ALIAS[c] || c;
-const scOf_ = (v) => aliasSc_(String(v || '').trim().toUpperCase()) || DEFAULT_SCHOOL;
+// 학교 코드는 코드 안에 적지 않아요 (사이트 코드는 공개돼 있어서). '학교' 탭의 첫 줄이 기본 학교예요.
+const GUEST_SCHOOL = 'PUBLIC';   // 학교 코드 없이 들어온 학생 (교과서 쪽수 없이 챗봇만)
+function defaultSchool_() { const l = schools_(); return (l[0] && l[0].code) || 'SCHOOL1'; }
+const scOf_ = (v) => String(v || '').trim().toUpperCase() || defaultSchool_();
 function schoolSheet_() {
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName('학교');
   if (!sh) {
     sh = ss.insertSheet('학교');
     sh.getRange(1, 1, 1, 4).setValues([['학교 코드', '학교 이름', '사용', '만든 날']]);
-    sh.getRange(2, 1, 1, 4).setValues([[DEFAULT_SCHOOL, DEFAULT_SCHOOL_NAME, true, new Date()]]);
+    const code = 'S' + Utilities.getUuid().replace(/[^A-Z0-9]/gi, '').slice(0, 5).toUpperCase();
+    sh.getRange(2, 1, 1, 4).setValues([[code, '우리 학교', true, new Date()]]);
     sh.getRange(2, 3).insertCheckboxes().check();
     sh.setFrozenRows(1);
   }
@@ -1077,13 +1077,38 @@ function schools_() {
   cache.put('schools', JSON.stringify(list), 60);   // 시트에서 바꾸면 1분 안에 반영
   return list;
 }
-function schoolInfo_(code) { code = aliasSc_(code); return schools_().filter((x) => aliasSc_(x.code) === code)[0] || null; }
-/** 요청의 학교 코드 → 쓸 수 있는 학교 코드 (없거나 꺼졌으면 기본 학교) */
+function schoolInfo_(code) { return schools_().filter((x) => x.code === code)[0] || null; }
+/** 요청의 학교 코드 → 쓸 수 있는 학교 코드 (없거나 틀리면 '둘러보기'용 공개 방) */
 function schoolCode_(v) {
-  const c = aliasSc_(String(v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12));
-  if (!c || c === DEFAULT_SCHOOL) return DEFAULT_SCHOOL;
+  const c = String(v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  if (!c || c === GUEST_SCHOOL) return GUEST_SCHOOL;
   const s = schoolInfo_(c);
-  return s && s.on ? c : DEFAULT_SCHOOL;
+  return s && s.on ? c : GUEST_SCHOOL;
+}
+/** 학교 코드 바꾸기: 시트 메뉴에서 실행 (옛 코드 → 새 코드, 모든 탭의 학교 칸까지) */
+function changeSchoolCode() {
+  const ui = SpreadsheetApp.getUi();
+  const a = ui.prompt('학교 코드 바꾸기', '지금 학교 코드를 적어 주세요', ui.ButtonSet.OK_CANCEL);
+  if (a.getSelectedButton() !== ui.Button.OK) return;
+  const b = ui.prompt('학교 코드 바꾸기', '새 학교 코드 (영어·숫자 4~8자)', ui.ButtonSet.OK_CANCEL);
+  if (b.getSelectedButton() !== ui.Button.OK) return;
+  const from = a.getResponseText().trim().toUpperCase(), to = b.getResponseText().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const list = schools_();
+  const s = list.filter((x) => x.code === from)[0];
+  if (!s) return ui.alert('그 학교 코드를 찾지 못했어요.');
+  if (to.length < 4 || to.length > 8 || list.some((x) => x.code === to)) return ui.alert('새 코드를 다시 정해 주세요 (4~8자, 겹치지 않게).');
+  const ss = SpreadsheetApp.getActive();
+  ss.getSheetByName('학교').getRange(s.row, 1).setValue(to);
+  [['게시판', 10], ['건의함', 6], ['신고', 8], ['공부통계', 6], ['질문통계', 6], ['과목', 10], ['교사', 11]].forEach(([name, col]) => {
+    const sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return;
+    const rg = sh.getRange(2, col, sh.getLastRow() - 1, 1);
+    rg.setValues(rg.getValues().map((r) => [String(r[0]).trim().toUpperCase() === from ? to : r[0]]));
+  });
+  const p = PropertiesService.getScriptProperties();
+  if (p.getProperty('NOTICE_' + from)) { p.setProperty('NOTICE_' + to, p.getProperty('NOTICE_' + from)); p.setProperty('NOTICE_' + to + '_ID', p.getProperty('NOTICE_' + from + '_ID') || ''); p.deleteProperty('NOTICE_' + from); }
+  CacheService.getScriptCache().remove('schools');
+  ui.alert('바꿨어요: ' + from + ' → ' + to + '\n학생들은 다음에 들어올 때 새 학교 코드를 한 번 넣어요. (공부 기록은 그대로)');
 }
 function addSchool_(b) {
   const name = String(b.name || '').trim().slice(0, 30);
@@ -1110,8 +1135,8 @@ function fillSchoolCodes() {
     if (!sh || sh.getLastRow() < 2) return;
     const n = sh.getLastRow() - 1;
     const vals = sh.getRange(2, 1, n, col).getValues();
-    const out = vals.map((r) => [r[need - 1] !== '' && r[need - 1] !== null && !String(r[col - 1]).trim() ? DEFAULT_SCHOOL : r[col - 1]]);
+    const out = vals.map((r) => [r[need - 1] !== '' && r[need - 1] !== null && !String(r[col - 1]).trim() ? defaultSchool_() : r[col - 1]]);
     sh.getRange(2, col, n, 1).setValues(out);
   });
-  try { SpreadsheetApp.getUi().alert('빈 학교 칸을 ' + DEFAULT_SCHOOL + '로 채웠어요. 각 탭에서 [데이터 → 필터 만들기]로 학교별로 볼 수 있어요.'); } catch (e) {}
+  try { SpreadsheetApp.getUi().alert('빈 학교 칸을 ' + defaultSchool_() + '로 채웠어요. 각 탭에서 [데이터 → 필터 만들기]로 학교별로 볼 수 있어요.'); } catch (e) {}
 }

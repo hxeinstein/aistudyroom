@@ -555,7 +555,7 @@ function openTeacherSettings() {
     <button class="btn primary block" id="tsInbox" type="button">📥 받은 대화</button>
     ${admin ? `
     <label class="lbl">관리자</label>
-    <button class="btn soft block" id="tsSchools" type="button">🏫 학교 관리 <small>(지금: ${esc(Sch.schoolName() || Sch.schoolCode())})</small></button>
+    <button class="btn soft block" id="tsSchools" type="button">🏫 학교 관리 <small>(지금: ${esc(Sch.schoolName() || '공개 방')})</small></button>
     <button class="btn soft block" id="tsSummary" type="button" style="margin-top:8px">📈 독서실 요약 · 질문 통계</button>
     <button class="btn soft block" id="tsNotice" type="button" style="margin-top:8px">📢 공지 띄우기</button>
     <button class="btn soft block" id="tsAdmin" type="button" style="margin-top:8px">🛠️ 관리자 메뉴 (신고 · 차단 · 선생님)</button>
@@ -598,7 +598,7 @@ function openSettings() {
     <input class="field" id="sGoal" maxlength="24" placeholder="예: 수학 3시간, 영단어 100개" value="${esc(S.getGoal())}" />
     <label class="glasses-tg" style="margin:10px 0 0"><input type="checkbox" id="sRank" ${S.showInRank() ? 'checked' : ''} /> 🏆 오늘 순위에 내 이름 보이기</label>
     <button class="btn soft block" id="sSubjects" type="button" style="margin-top:14px">📚 내 과목 관리</button>
-    ${CONFIG.CHATBOT_URL ? `<button class="btn ghost block" id="sSchool" type="button" style="margin-top:6px">🏫 ${esc(Sch.schoolName() || Sch.schoolCode())} · 학교 바꾸기</button>` : ''}
+    ${CONFIG.CHATBOT_URL ? `<button class="btn ghost block" id="sSchool" type="button" style="margin-top:6px">${Sch.isGuest() || !Sch.school() ? '🏫 학교 코드 넣기 <small>(교과서 쪽수 · 교무실)</small>' : `🏫 ${esc(Sch.schoolName())} · 학교 바꾸기`}</button>` : ''}
     <button class="btn soft block" id="sTeacher" type="button" style="margin-top:8px">${Office.isTeacher() ? `📥 ${esc(Office.teacherName())} 선생님 · 받은 대화` : '👩‍🏫 선생님 로그인'}</button>
     <div class="foot">
       <button class="btn ghost" id="sClose">닫기</button>
@@ -1137,20 +1137,24 @@ async function keepAwake(on) {
 async function start() {
   if (!CONFIG.CHATBOT_URL) return boot();
   const want = (new URLSearchParams(location.search).get('school') || '').trim().toUpperCase();
-  if (want && want !== (Sch.school() && Sch.school().code)) {
+  const cur = Sch.school();
+  if (want && want !== (cur && cur.code)) {
     let r = null;
     try { r = await post({ action: 'school.check', code: want }); } catch (e) {}
     if (r && r.ok) {
-      if (Sch.school() && Sch.school().code !== r.code) resetStudent();   // 다른 학교로 바꾸면 이 기기 기록은 새로
-      Sch.setSchool({ code: r.code, name: r.name });
+      if (cur && cur.code && cur.code !== r.code) resetStudent();   // 다른 학교로 바꾸면 이 기기 기록은 새로
+      Sch.setSchool(r);
       location.replace(location.pathname + location.hash);
       return;
     }
   }
-  if (!Sch.school()) {
-    // 예전부터 쓰던 기기는 기본 학교로
-    if (st.profile) Sch.setSchool({ code: Sch.DEFAULT_SCHOOL, name: '우리 학교' });
-    else { boot(true); openSchoolGate(false); return; }
+  if (!cur) { boot(!st.profile); openSchoolGate(false); return; }
+  if (cur.code) {
+    // 학교 코드가 바뀌었거나 꺼졌는지 확인 (이름·기본 학교 여부도 새로)
+    post({ action: 'school.check', code: cur.code }).then((r) => {
+      if (r && r.ok) { if (r.code !== cur.code || r.def !== cur.def || r.name !== cur.name) { Sch.setSchool(r); if (r.def !== cur.def) location.reload(); } }
+      else if (r && r.error) { Sch.setSchool(null); toast('학교 코드가 바뀌었어요. 새 학교 코드를 넣어 주세요', 5000); openSchoolGate(false); }
+    }).catch(() => {});
   }
   boot();
 }
@@ -1163,9 +1167,10 @@ function openSchoolGate(canCancel) {
     <div class="big-emoji">🏫</div>
     <h2 class="center">학교 코드를 넣어 주세요</h2>
     <p class="desc center">선생님이 알려 준 학교 코드예요.<br/>같은 학교 친구들끼리만 공부방에서 만나요.</p>
-    <input class="field" id="scCode" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="예: SCHOOL" style="text-align:center;font-size:20px;letter-spacing:2px" />
+    <input class="field" id="scCode" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="학교 코드" style="text-align:center;font-size:20px;letter-spacing:2px" />
     <p class="c-gate-msg" id="scMsg"></p>
-    <div class="foot">${canCancel ? '<button class="btn ghost" id="scCancel" type="button">그대로 둘래요</button>' : ''}<button class="btn primary" id="scGo" type="button">들어가기</button></div>
+    <div class="foot">${canCancel ? '<button class="btn ghost" id="scCancel" type="button">그대로 둘래요</button>' : '<button class="btn ghost" id="scGuest" type="button">코드 없이 들어가기</button>'}<button class="btn primary" id="scGo" type="button">들어가기</button></div>
+    ${canCancel ? '' : '<p class="hint center">코드 없이 들어가면 공개 공부방에서 공부하고, 챗봇은 교과서 쪽수 없이 힌트만 줘요. 교무실 선생님은 학교 코드를 넣어야 만날 수 있어요. ⚙️ 설정에서 나중에 넣어도 돼요.</p>'}
     ${canCancel ? '<p class="hint center">다른 학교로 바꾸면 이 기기의 공부 기록은 새로 시작해요.</p>' : ''}`, { dismiss: !!canCancel });
   const go = async () => {
     const code = m.querySelector('#scCode').value.trim().toUpperCase();
@@ -1174,11 +1179,12 @@ function openSchoolGate(canCancel) {
     let r = null;
     try { r = await post({ action: 'school.check', code }); } catch (e) { m.querySelector('#scMsg').textContent = '연결하지 못했어요. 인터넷을 확인해 주세요.'; return; }
     if (!r || !r.ok) { m.querySelector('#scMsg').textContent = (r && r.error) || '학교 코드가 맞지 않아요.'; return; }
-    if (Sch.school() && Sch.school().code !== r.code) resetStudent();
-    Sch.setSchool({ code: r.code, name: r.name });
+    if (Sch.school() && Sch.school().code && Sch.school().code !== r.code) resetStudent();
+    Sch.setSchool(r);
     location.reload();
   };
   m.querySelector('#scGo').onclick = go;
+  if (m.querySelector('#scGuest')) m.querySelector('#scGuest').onclick = () => { Sch.setSchool({ guest: true }); location.reload(); };
   m.querySelector('#scCode').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) go(); });
   if (canCancel) m.querySelector('#scCancel').onclick = closeModal;
   setTimeout(() => m.querySelector('#scCode').focus(), 50);
@@ -1189,7 +1195,7 @@ async function openSchools() {
     <label class="lbl">새 학교 추가</label>
     <div class="row"><input class="field" id="schName" maxlength="30" placeholder="학교 이름 (예: 한빛고)" /><input class="field" id="schCode" maxlength="8" placeholder="코드 (비우면 자동)" style="max-width:130px" autocapitalize="characters" /></div>
     <button class="btn soft block" id="schAdd" type="button" style="margin-top:8px">➕ 학교 만들기</button>
-    <p class="hint">학교마다 공부방·게시판·건의함·공지·통계·교무실 선생님·챗봇 교과가 따로예요. 챗봇 교과는 시트 '과목' 탭 J칸에 학교 코드를 적으면 그 학교에 보여요 (비우면 ${esc(Sch.DEFAULT_SCHOOL)}, *는 모든 학교). 그 학교 선생님 초대코드는 그 학교로 바꾼 뒤 🛠️ 관리자 메뉴 → 선생님에서 만들어요.</p>
+    <p class="hint">학교마다 공부방·게시판·건의함·공지·통계·교무실 선생님·챗봇 교과가 따로예요. 챗봇 교과는 시트 '과목' 탭 J칸에 학교 코드를 적으면 그 학교에 보여요 (비우면 기본 학교(맨 위 학교) · 코드 없이 들어온 학생도 쪽수 없이 사용, *는 모든 학교). 그 학교 선생님 초대코드는 그 학교로 바꾼 뒤 🛠️ 관리자 메뉴 → 선생님에서 만들어요.</p>
     <div class="foot"><button class="btn primary" id="schClose" type="button">닫기</button></div>`, { wide: true });
   m.querySelector('#schClose').onclick = closeModal;
   const base = location.origin + location.pathname;
@@ -1201,16 +1207,16 @@ async function openSchools() {
     if (r.error) { box.innerHTML = `<p class="warn">${esc(r.error)}</p>`; return; }
     box.innerHTML = r.schools.map((s) => `
       <div class="adm-card ${s.on ? '' : 'off'} ${s.code === Sch.schoolCode() ? 'new' : ''}">
-        <div class="adm-top"><b>${esc(s.name)}</b> <code>${esc(s.code)}</code>${s.code === Sch.schoolCode() ? '<span class="adm-st">지금 보는 학교</span>' : ''}</div>
+        <div class="adm-top"><b>${esc(s.name)}</b> <code>${esc(s.code)}</code>${s.def ? ' <small class="hint">기본 학교</small>' : ''}${s.code === Sch.schoolCode() ? '<span class="adm-st">지금 보는 학교</span>' : ''}</div>
         <div class="hint" style="margin:4px 0;word-break:break-all">${esc(base)}?school=${esc(s.code)}</div>
         <div class="adm-act">
           <button class="btn soft adm-mini" data-copy="${esc(s.code)}" type="button">🔗 링크 복사</button>
           ${s.code === Sch.schoolCode() ? '' : `<button class="btn soft adm-mini" data-view="${esc(s.code)}" data-name="${esc(s.name)}" type="button">👀 이 학교로 보기</button>`}
-          ${s.code === Sch.DEFAULT_SCHOOL ? '' : `<button class="btn soft adm-mini" data-tog="${esc(s.code)}" data-on="${s.on ? 0 : 1}" type="button">${s.on ? '끄기' : '다시 켜기'}</button>`}
+          ${s.def ? '' : `<button class="btn soft adm-mini" data-tog="${esc(s.code)}" data-on="${s.on ? 0 : 1}" type="button">${s.on ? '끄기' : '다시 켜기'}</button>`}
         </div>
       </div>`).join('');
     box.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText(`${base}?school=${b.dataset.copy}`); toast('링크를 복사했어요'); } catch (e) { toast('복사하지 못했어요. 위 주소를 길게 눌러 복사해 주세요'); } }));
-    box.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => { Sch.setSchool({ code: b.dataset.view, name: b.dataset.name }); location.reload(); }));
+    box.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => { const x = r.schools.find((y) => y.code === b.dataset.view); Sch.setSchool(x); location.reload(); }));
     box.querySelectorAll('[data-tog]').forEach((b) => (b.onclick = async () => {
       const on = b.dataset.on === '1';
       if (!on && !confirm('이 학교를 끌까요? 그 학교 코드로는 들어올 수 없게 돼요.')) return;

@@ -516,7 +516,7 @@ export function openTeacherLogin() {
     teacher = { token: r.token, me: r.me };
     lsSet('aistudyroom.teacher', teacher);
     // 선생님 학교로 이 기기를 맞춤 (관리자는 지금 보던 학교 그대로)
-    if (r.me.school && !r.me.admin && r.me.school !== schoolCode()) { setSchool({ code: r.me.school, name: r.me.schoolName }); location.reload(); return; }
+    if (r.me.school && (!r.me.admin || !schoolCode()) && r.me.school !== schoolCode()) { setSchool({ code: r.me.school, name: r.me.schoolName, def: r.me.schoolDef }); location.reload(); return; }
     ctx.world.setTeacher(r.me.id);
     ctx.world.setObserver(true);
     ctx.closeModal();

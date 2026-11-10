@@ -103,7 +103,9 @@ function loadSubjects_(school) {
   if (!sh) return null;
   // J칸(학교 코드): 비우면 기본 학교만, '*'면 모든 학교, 코드를 적으면 그 학교만
   const sc = schoolCode_(school);
-  const forSchool = (r) => { const j = String(r[9] || '').trim().toUpperCase(); return j === '*' || (j ? j.split(/[,\s]+/).map(aliasSc_).indexOf(sc) >= 0 : sc === DEFAULT_SCHOOL); };
+  // 학교 코드 없이 들어온 학생(둘러보기): 기본 학교 교과와 *교과를 쓰되 교과서 쪽수는 빼요
+  const guest = sc === GUEST_SCHOOL, def = defaultSchool_();
+  const forSchool = (r) => { const j = String(r[9] || '').trim().toUpperCase(); if (j === '*') return true; const list = j ? j.split(/[,\s]+/) : [def]; return list.indexOf(guest ? def : sc) >= 0; };
   return sh.getDataRange().getValues().slice(1)
     .filter(r => r[0] === true && String(r[1]).trim() && forSchool(r))
     .map(r => ({
@@ -116,6 +118,7 @@ function loadSubjects_(school) {
       bot: String(r[7] || '').trim(),
       teacher: String(r[8] || '').trim()
     }))
+    .map(x => (guest ? Object.assign(x, { tab: '', code: '' }) : x))
     .filter(x => !x.tab || !!ss.getSheetByName(x.tab));
 }
 
