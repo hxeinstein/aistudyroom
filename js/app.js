@@ -52,6 +52,7 @@ function boot(skipOnboarding = false) {
     onRide: (r) => { renderBar(); if (r && r.stretch) startStretch(); else if (!r) stopStretch(); },
     onVend: () => openVend(),
     onTrail: (on) => document.body.classList.toggle('on-trail', on),   // 오솔길을 걷는 동안 버튼 줄 숨김
+    onInteract: (it) => showInteract(it),
     onSfx: (k) => sfx(k),
     confirmClosedOffice: () => Office.confirmClosed(),
   });
@@ -214,15 +215,13 @@ function renderBar() {
   const inPark = world.area === 'park';
   const parkBar = world.onRide
     ? [
-        { e: '🚶', t: world.onRide === 'slide' ? '미끄럼틀 타는 중' : '일어나기', main: true, fn: () => world.standUp() },
         { e: '📸', t: '사진', fn: takePhoto },
         { e: '🏠', t: '독서실로', fn: () => world.goOutOfPark() },
       ]
     : [
-        ...(world.nearDoor === 'vend' ? [{ e: '🥤', t: '간식 고르기', main: true, fn: openVend }] : []),
 
         { e: '📸', t: '사진', fn: takePhoto },
-        { e: '🏠', t: '독서실로', main: world.nearDoor === 'park-exit', fn: () => world.goOutOfPark() },
+        { e: '🏠', t: '독서실로', fn: () => world.goOutOfPark() },
       ];
   if (inPark && Office.isTeacher()) parkBar.splice(0, parkBar.length, { e: '📥', t: unread ? `받은 대화 ${unread}` : '받은 대화', main: true, fn: () => Office.openInbox() }, { e: '🏠', t: '독서실로', fn: () => world.goOutOfPark() });
   if (!inPark && !inOffice && Office.isTeacher()) teacherBar.push({ e: '🌿', t: '쉼터 보기', fn: () => world.goToPark() });
@@ -232,7 +231,7 @@ function renderBar() {
     ? teacherBar
     : inOffice
     ? [
-        ...(nearBot ? [{ e: '🐾', t: `${nearBot.name}에게 질문`, main: true, fn: () => openChat(currentRoomSubject(), nearBot.id) }] : []),
+
         ...(Office.isTeacher()
           ? [
               { e: '📥', t: unread ? `받은 대화 ${unread}` : '받은 대화', main: true, fn: () => Office.openInbox() },
@@ -241,7 +240,7 @@ function renderBar() {
                 : { e: '🔒', t: '문 닫기', fn: () => Office.toggleDoor() },
             ]
           : []),   // 선생님 로그인은 ⚙️ 설정에만
-        { e: '🚪', t: '나가기', main: !Office.isTeacher() && world.nearDoor === 'exit', fn: () => world.goOutOfOffice() },
+        { e: '🚪', t: '나가기', fn: () => world.goOutOfOffice() },
       ]
     : seated
     ? [
@@ -251,11 +250,7 @@ function renderBar() {
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ]
     : [
-        ...(world.nearDoor === 'enter' ? [{ e: '🏫', t: '교무실 들어가기', main: true, fn: () => world.goToOffice() }] : []),
-        ...(world.nearDoor === 'board' ? [{ e: '📌', t: '응원 게시판', main: true, fn: () => Board.openBoard() }] : []),
-        ...(world.nearDoor === 'suggest' ? [{ e: '📮', t: '건의함', main: true, fn: () => Board.openSuggest() }] : []),
-        ...(world.nearDoor === 'park' ? [{ e: '🌿', t: '쉼터 가기', main: true, fn: () => world.goToPark() }] : []),
-        { e: '🪑', t: '빈자리 앉기', main: !world.nearDoor, fn: sitNearest },
+        { e: '🪑', t: '빈자리 앉기', main: true, fn: sitNearest },
         { e: '📒', t: '플래너', fn: () => openPlanner(S.dayKey()) },
         { e: '🌙', t: '오늘 공부끝', fn: openFinish },
       ];
@@ -968,6 +963,27 @@ async function doSave(key) {
     console.error(e);
   }
 }
+
+// ---------------- 상호작용 단추 (오른쪽 아래, 키보드 E · 스페이스) ----------------
+function showInteract(it) {
+  let btn = $('interactBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'interactBtn'; btn.type = 'button'; btn.className = 'interact-btn';
+    btn.onclick = (e) => { e.stopPropagation(); world.interact(); };
+    document.body.appendChild(btn);
+  }
+  btn.classList.toggle('show', !!it);
+  if (it) btn.innerHTML = `<span class="ib-ic">${it.icon}</span><span class="ib-tx">${esc(it.label)}</span><kbd>E</kbd>`;
+}
+window.addEventListener('keydown', (e) => {
+  if (e.repeat || !(e.key === 'e' || e.key === 'E' || e.key === 'ㄷ' || e.code === 'Space')) return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (/INPUT|TEXTAREA|SELECT|BUTTON/.test(tag) || !$('modalWrap').classList.contains('hidden') || !$('chatSheet').classList.contains('hidden')) return;
+  if (!$('interactBtn') || !$('interactBtn').classList.contains('show')) return;
+  e.preventDefault();
+  world.interact();
+});
 
 // ---------------- 🌿 쉼터 ----------------
 let parkSince = 0;

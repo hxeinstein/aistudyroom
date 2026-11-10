@@ -1340,6 +1340,50 @@ export function createWorld(container, opts = {}) {
     pendingOffice = { type: 'park-exit' };
   }
 
+  // ---------------- 상호작용 (오른쪽 단추 · E/스페이스 키) ----------------
+  let interaction = null, interactKey = '', interactT = 0;
+  const RIDE_NAME = { swing: ['🎠', '그네 타기'], seesaw: ['⚖️', '시소 타기'], merry: ['🎡', '뺑뺑이 타기'], slide: ['🛝', '미끄럼틀 타기'] };
+  function findInteraction() {
+    if (studying || trailWalk || player.slide || observer) return null;
+    const p = player.obj.position;
+    const near = (v, r) => Math.hypot(p.x - v.x, p.z - v.z) < r;
+    if (player.ride) return { key: 'stand', icon: '🚶', label: '일어나기', run: () => leaveRide() };
+    if (area.name === 'main') {
+      if (player.seat) return null;
+      if (nearDoor === 'enter') return { key: 'office', icon: '🏫', label: '교무실 들어가기', run: () => goToOffice() };
+      if (nearDoor === 'park') return { key: 'park', icon: '🌿', label: '쉼터 가기', run: () => goToPark() };
+      if (nearDoor === 'board') return { key: 'board', icon: '📌', label: '응원 게시판', run: () => opts.onSpot && opts.onSpot('board') };
+      if (nearDoor === 'suggest') return { key: 'suggest', icon: '📮', label: '건의함', run: () => opts.onSpot && opts.onSpot('suggest') };
+      let best = null, bd = 1.5;
+      for (const st of seats) { const d = Math.hypot(p.x - st.approach.x, p.z - st.approach.z); if (!st.occupant && d < bd) { bd = d; best = st; } }
+      if (best) return { key: 'seat' + best.idx, icon: '🪑', label: `${seatName(best.idx)} 앉기`, run: () => walkToSeat(best.idx) };
+      return null;
+    }
+    if (area.name === 'office') {
+      if (nearBot) { const b = bots.find((x) => x.id === nearBot); return { key: 'bot' + nearBot, icon: '🐾', label: `${b ? b.name : ''}에게 질문`, run: () => opts.onBot && opts.onBot(nearBot) }; }
+      if (nearDoor === 'exit') return { key: 'exit', icon: '🚪', label: '나가기', run: () => goOutOfOffice() };
+      return null;
+    }
+    if (area.name === 'park') {
+      if (nearDoor === 'vend') return { key: 'vend', icon: '🥤', label: '간식 고르기', run: () => opts.onVend && opts.onVend() };
+      if (nearDoor === 'park-exit') return { key: 'pexit', icon: '🏠', label: '독서실로', run: () => goOutOfPark() };
+      let best = null, bd = 1.9;
+      for (const r of rides) {
+        if (r.occ) continue;
+        const d = Math.hypot(p.x - r.approach.x, p.z - r.approach.z);
+        if (d < bd) { bd = d; best = r; }
+      }
+      if (!best) return null;
+      const [icon, label] = best.type === 'bench' ? [best.stretch ? '🧘' : '🪑', best.stretch ? '스트레칭 벤치' : '벤치에 앉기'] : RIDE_NAME[best.type];
+      return { key: 'ride' + best.id, icon, label, run: () => (best.type === 'slide' ? (walkTo(best.approach), (pendingOffice = { type: 'slide' })) : (walkTo(best.approach), (pendingOffice = { type: 'ride', ride: best }))) };
+    }
+    return null;
+  }
+  function interact() {
+    const it = interaction || findInteraction();
+    if (it) { it.run(); interactT = 0; }
+  }
+
   // ---------------- 길찾기 (격자 A*) ----------------
   const GS = 0.25;
   const R = 0.28;
@@ -2073,6 +2117,15 @@ export function createWorld(container, opts = {}) {
         : Math.hypot(p.x - VEND_SPOT.x, p.z - VEND_SPOT.z) < 1.2 ? 'vend' : null)
       : (Math.hypot(p.x - EXIT_SPOT.x, p.z - EXIT_SPOT.z) < 1.3 ? 'exit' : null);
     if (door !== nearDoor) { nearDoor = door; opts.onNearDoor && opts.onNearDoor(door); }
+    // 상호작용 단추: 가까이 있는 것 하나 (0.2초마다)
+    interactT -= dt;
+    if (interactT <= 0) {
+      interactT = 0.2;
+      const it = findInteraction();
+      const key = it ? it.key : '';
+      if (key !== interactKey) { interactKey = key; interaction = it; opts.onInteract && opts.onInteract(it ? { icon: it.icon, label: it.label } : null); }
+      else interaction = it;
+    }
 
     stepRemotes(dt);
     stepPark(dt, t);
@@ -2214,6 +2267,7 @@ export function createWorld(container, opts = {}) {
     setBanner,
     // 쉼터
     goToPark,
+    interact,
     tapRide,
     goOutOfPark,
     get onRide() { return player.ride ? player.ride.type : player.slide ? 'slide' : null; },

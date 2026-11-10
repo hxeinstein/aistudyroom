@@ -489,3 +489,19 @@ body.in-park .study-panel { display: none; }
 .modal h2 { color: var(--brown); }
 .toast { border-radius: 20px; }
 body.on-trail .actionbar, body.on-trail .joy { display: none !important; }
+
+/* 상호작용 단추: 오른쪽 아래 (왼쪽 조이스틱과 짝) */
+.interact-btn {
+  position: fixed; right: calc(env(safe-area-inset-right) + 18px); bottom: calc(env(safe-area-inset-bottom) + 108px); z-index: 5;
+  min-width: 104px; max-width: 150px; min-height: 104px; border: 0; border-radius: 52px; padding: 10px 12px;
+  background: var(--green); color: #fff; box-shadow: 0 5px 0 var(--green-d), 0 10px 22px rgba(40, 60, 30, 0.28);
+  display: none; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-family: var(--font);
+  animation: pop .18s ease-out;
+}
+.interact-btn.show { display: flex; }
+.interact-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--green-d); }
+.interact-btn .ib-ic { font-size: 34px; line-height: 1.05; }
+.interact-btn .ib-tx { font-size: 14px; font-weight: 700; line-height: 1.2; text-align: center; word-break: keep-all; }
+.interact-btn kbd { display: none; font: 700 11px var(--font); background: rgba(255,255,255,.25); border-radius: 6px; padding: 0 6px; margin-top: 2px; }
+@media (pointer: fine) { .interact-btn kbd { display: inline-block; } }
+body.studying .interact-btn, body.on-trail .interact-btn, body.observer .interact-btn { display: none !important; }
