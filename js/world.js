@@ -1034,27 +1034,46 @@ export function createWorld(container, opts = {}) {
   el.addEventListener('pointerdown', (e) => {
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
-      // 두 손가락: 확대·축소
+      // 두 손가락: 확대·축소 (선생님은 비틀어서 돌리기도)
       const [a, b] = [...pointers.values()];
-      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: zoomTarget };
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: zoomTarget, ang: Math.atan2(b.y - a.y, b.x - a.x), yaw: yawTarget };
       down = null;
       return;
     }
-    down = { x: e.clientX, y: e.clientY, yaw: yawTarget, pitch: pitchTarget, drag: false };
+    // 선생님(구경 시점)은 지도 앱처럼: 왼쪽 끌기 = 화면 옮기기, 오른쪽 끌기(또는 Ctrl+끌기) = 돌리기
+    const pan = observer && e.button !== 2 && !e.ctrlKey && !e.metaKey;
+    const p0 = player.obj.position;
+    down = { x: e.clientX, y: e.clientY, yaw: yawTarget, pitch: pitchTarget, drag: false, pan, fx: p0.x, fz: p0.z };
   });
+  // 선생님 화면에서는 오른쪽 클릭 메뉴 대신 돌리기
+  el.addEventListener('contextmenu', (e) => { if (observer) e.preventDefault(); });
   window.addEventListener('pointermove', (e) => {
     if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pinch && pointers.size >= 2) {
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
       if (d > 10) setZoom(pinch.zoom * (pinch.d / d));
+      if (observer) {
+        const ang = Math.atan2(b.y - a.y, b.x - a.x);
+        yawTarget = pinch.yaw - (ang - pinch.ang);
+      }
       return;
     }
     if (!down) return;
     const dx = e.clientX - down.x;
     const dy = e.clientY - down.y;
     if (Math.abs(dx) > 8 || Math.abs(dy) > 8) down.drag = true;
-    if (down.drag && !studying) {
+    if (down.drag && down.pan) {
+      // 손바닥으로 끌듯이 화면 옮기기: 끈 방향으로 바닥이 따라옴
+      // 화면 1픽셀이 바닥에서 몇 칸인지 (끈 손가락에 바닥이 붙어 움직이게)
+      const k = (2 * zoom * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, container.clientHeight);
+      const ky = k / Math.max(0.35, Math.sin(pitch));   // 위아래는 비스듬히 보이는 만큼 더
+      const c = Math.cos(yaw), sn = Math.sin(yaw);
+      const B = area.bounds;
+      path = []; pendingSeat = null; pendingBot = null; pendingOffice = null;
+      player.obj.position.x = clamp(down.fx - dx * c * k - dy * sn * ky, B.x0 - 2, B.x1 + 2);
+      player.obj.position.z = clamp(down.fz + dx * sn * k - dy * c * ky, B.z0 - 2, B.z1 + 2);
+    } else if (down.drag && !studying) {
       // 끌면 캐릭터를 중심으로 360° 돌아보기 (가로: 빙글, 세로: 높낮이)
       yawTarget = down.yaw - dx * 0.008;
       pitchTarget = clamp(down.pitch + dy * 0.005, 0.12, 1.35);
@@ -1250,8 +1269,8 @@ export function createWorld(container, opts = {}) {
     const dist = close ? 2.2 : Math.cos(pitch) * zoom;
     const hgt = close ? 2.9 : Math.sin(pitch) * zoom;
     const desired = new THREE.Vector3(focus.x + Math.sin(cy) * dist, focus.y + hgt, focus.z + Math.cos(cy) * dist);
-    camPos.lerp(desired, Math.min(1, dt * 3));
-    camLook.lerp(focus, Math.min(1, dt * 4));
+    camPos.lerp(desired, Math.min(1, dt * (observer ? 9 : 3)));
+    camLook.lerp(focus, Math.min(1, dt * (observer ? 10 : 4)));
     camera.position.copy(camPos);
     camera.lookAt(camLook);
 
@@ -1358,6 +1377,7 @@ export function createWorld(container, opts = {}) {
     getPlayerState,
     setObserver,
     get observer() { return observer; },
+    get view() { return { yaw: yawTarget, pitch: pitchTarget, zoom: zoomTarget, x: player.obj.position.x, z: player.obj.position.z }; },
     setTeacher(id) { myTeacherId = id || null; officeDesks.forEach((d) => { d.teacher = { ...(d.teacher || {}), _force: Math.random() }; }); },
     sitAtMyDesk() {
       const desk = officeDesks.find((d) => d.teacher && d.teacher.id === myTeacherId);
