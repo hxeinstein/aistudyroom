@@ -598,6 +598,7 @@ function boardHandle_(body) {
     if (a === 'suggest.post') return suggestPost_(body);
     if (a === 'suggest.list') return suggestList_(body);
     if (a === 'suggest.mark') return suggestMark_(body);
+    if (a === 'book.import') return bookImport_(body);
   } catch (e) {
     console.error(e);
     return { error: '잠시 문제가 생겼어요. 조금 뒤에 다시 해 주세요.' };
@@ -707,4 +708,52 @@ function suggestMark_(b) {
   if (!(row >= 2)) return { error: '잘못된 요청이에요.' };
   suggestSheet_().getRange(row, 5).setValue(status);
   return { ok: true };
+}
+
+/* ---------- 교과서 넣기 (관리자) ----------
+ * 독서실 사이트의 '교과서 넣기' 페이지(book.html)가 PDF에서 뽑은 쪽별 글자를 몇 쪽씩 보내 줘요.
+ * body = { token, tab, start(첫 묶음이면 true → 탭을 새로 만들거나 비움), rows: [[쪽, 대단원, 소단원, 내용], ...],
+ *          register?: { name, room, bot } (마지막 묶음에서 '과목' 탭에 교과 등록) }
+ */
+const RESERVED_TABS = ['과목', '교사', '차단', '게시판', '건의함', '프롬프트', '기록'];
+function bookImport_(b) {
+  const t = teacherByToken_(b.token);
+  if (!t) return { error: '다시 로그인해 주세요.', relogin: true };
+  if (!isAdmin_(t)) return { error: '관리자만 교과서를 넣을 수 있어요.' };
+  const tab = String(b.tab || '').trim();
+  if (!/^[가-힣A-Za-z0-9 _()\-]{1,30}$/.test(tab) || RESERVED_TABS.indexOf(tab) >= 0) return { error: '탭 이름을 다시 정해 주세요. (한글·영어·숫자, 30자 이내, 과목·교사 같은 이름은 안 돼요)' };
+  const ss = SpreadsheetApp.getActive();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    let sh = ss.getSheetByName(tab);
+    if (b.start) {
+      if (!sh) sh = ss.insertSheet(tab);
+      sh.clearContents();
+      sh.getRange(1, 1, 1, 4).setValues([['쪽', '대단원', '소단원', '내용']]);
+      sh.setFrozenRows(1);
+    }
+    if (!sh) return { error: '먼저 처음부터 다시 넣어 주세요.' };
+    const rows = (b.rows || []).filter((r) => Array.isArray(r) && r.length >= 4)
+      .map((r) => [Number(r[0]) || '', String(r[1] || '').slice(0, 60), String(r[2] || '').slice(0, 60), String(r[3] || '').slice(0, 20000)]);
+    if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, 4).setValues(rows);
+    let registered = false;
+    if (b.register && b.register.name) {
+      const sub = ss.getSheetByName('과목') || (setupSubjects(), ss.getSheetByName('과목'));
+      const name = String(b.register.name).trim().slice(0, 30);
+      const data = sub.getDataRange().getValues();
+      let row = 0;
+      for (let i = 1; i < data.length; i++) if (String(data[i][1]).trim() === name) { row = i + 1; break; }
+      if (row) {
+        sub.getRange(row, 4).setValue(tab);
+      } else {
+        sub.appendRow([true, name, String(b.register.room || '').slice(0, 80), tab, '', DEFAULT_GREETING, '', String(b.register.bot || '').slice(0, 20), '']);
+        sub.getRange(sub.getLastRow(), 1).insertCheckboxes().check();
+      }
+      registered = true;
+    }
+    return { ok: true, total: sh.getLastRow() - 1, registered: registered };
+  } finally {
+    lock.releaseLock();
+  }
 }

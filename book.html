@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>교과서 넣기</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    html, body { overflow: auto; background: var(--cream); }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
+    .card { background: #fff; border-radius: 20px; padding: 18px; box-shadow: var(--shadow); margin-top: 16px; }
+    h1 { color: var(--brown); font-size: 24px; margin: 0; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 560px) { .row2 { grid-template-columns: 1fr; } }
+    .prog { height: 12px; background: #F0E2C8; border-radius: 999px; overflow: hidden; margin-top: 10px; }
+    .prog > div { height: 100%; width: 0; background: var(--green); transition: width .2s; }
+    .stat { font-size: 14px; color: var(--ink); margin-top: 8px; }
+    .preview { font-size: 13px; background: var(--cream); border-radius: 12px; padding: 10px; max-height: 180px; overflow: auto; white-space: pre-wrap; margin-top: 8px; }
+    .warn { color: #B4401A; font-size: 14px; margin-top: 8px; }
+    .ok { color: var(--green-d); font-weight: 800; margin-top: 8px; }
+    select.field { appearance: auto; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>📚 교과서 넣기 <small style="font-size:14px;color:var(--muted)">(관리자)</small></h1>
+    <p class="desc">교과서 PDF에서 쪽마다 글자를 뽑아 챗봇이 쓰는 구글 시트에 새 탭으로 넣어요.
+      PDF는 <b>이 컴퓨터 브라우저 안에서만</b> 읽고, 어디에도 올리지 않아요. 그래서 용량이 커도 괜찮아요.</p>
+    <div class="warn" id="loginWarn" hidden></div>
+
+    <div class="card">
+      <label class="lbl">1. 교과서 PDF 고르기 (학생용 교과서 추천)</label>
+      <input class="field" type="file" id="pdf" accept="application/pdf" />
+      <div class="stat" id="pdfInfo"></div>
+    </div>
+
+    <div class="card">
+      <label class="lbl">2. 이름 정하기</label>
+      <div class="row2">
+        <div><label class="lbl">교과 이름 (학생에게 보여요)</label><input class="field" id="subject" placeholder="예: 통합과학1" /></div>
+        <div><label class="lbl">시트 탭 이름</label><input class="field" id="tab" placeholder="예: 교과서_통합과학1" /></div>
+        <div><label class="lbl">연결 낱말 (쉼표로)</label><input class="field" id="room" placeholder="예: 통합과학, 과학" /></div>
+        <div><label class="lbl">맡을 챗봇</label><select class="field" id="bot"></select></div>
+      </div>
+      <label class="glasses-tg" style="margin:12px 0 0"><input type="checkbox" id="register" checked /> '과목' 탭에 이 교과를 바로 등록하기</label>
+    </div>
+
+    <div class="card">
+      <label class="lbl">3. 쪽 번호 맞추기</label>
+      <p class="hint" style="margin-top:0">PDF의 장 번호와 교과서에 인쇄된 쪽 번호가 다를 수 있어요 (표지·차례 때문에). 쪽수 안내가 정확하려면 맞춰 주세요.</p>
+      <div class="row2">
+        <div><label class="lbl">PDF의 몇 번째 장이</label><input class="field" id="pdfPage" type="number" min="1" value="1" /></div>
+        <div><label class="lbl">교과서 몇 쪽인가요?</label><input class="field" id="bookPage" type="number" value="1" /></div>
+      </div>
+      <div class="stat" id="offsetInfo"></div>
+      <div class="preview" id="pagePreview">PDF를 고르면 그 장의 글자를 미리 보여 드려요.</div>
+      <label class="lbl">목차 (선택) — 한 줄에 "시작 쪽 | 대단원 | 소단원"</label>
+      <textarea class="field" id="toc" placeholder="10 | Ⅰ 시공간과 운동 | 01. 시간과 공간&#10;20 | Ⅰ 시공간과 운동 | 02. 뉴턴 운동 법칙" style="min-height:110px"></textarea>
+      <p class="hint">목차를 적으면 챗봇이 "어느 단원인지"까지 안내할 수 있어요. 비워 두어도 쪽수 안내는 돼요.</p>
+    </div>
+
+    <div class="card">
+      <label class="lbl">4. 뽑아서 시트에 넣기</label>
+      <div class="row2">
+        <button class="btn soft" id="extract" type="button" disabled>① 글자 뽑기</button>
+        <button class="btn primary" id="upload" type="button" disabled>② 시트에 넣기</button>
+      </div>
+      <div class="prog"><div id="bar"></div></div>
+      <div class="stat" id="status"></div>
+      <div class="warn" id="warn"></div>
+      <div class="ok" id="done"></div>
+    </div>
+    <p class="hint center"><a href="./">← 독서실로 돌아가기</a></p>
+  </div>
+  <script type="module" src="js/book.js"></script>
+</body>
+</html>

@@ -231,7 +231,7 @@ function doPost(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) {}
   let out;
-  if (/^(board|suggest)\./.test(String(body.action || ''))) {
+  if (/^(board|suggest|book)\./.test(String(body.action || ''))) {
     out = boardHandle_(body);    // 응원 게시판 · 건의함 (Office.gs)
   } else if (body.action === 'room.sync') {
     out = roomSync_(body);       // 공부방 자리 공유 (Office.gs)
