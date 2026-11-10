@@ -4,7 +4,7 @@ import * as THREE from '../vendor/three.module.min.js';
 import { makeAnimal, animateAnimal, animalSpeed } from './animals.js';
 export { makeAnimal };
 
-const FONT = '"Do Hyeon", "Sunflower", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
+const FONT = '"Gowun Dodum", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
 const BANNER_FONT = '"Do Hyeon", "Sunflower", "Noto Sans KR", sans-serif';   // 학교 이름 가랜드
 const DECK_Y = 0.3;
 const BOUNDS = { x0: -9.2, x1: 9.2, z0: -6.4, z1: 7.4 };
@@ -404,22 +404,21 @@ export function createWorld(container, opts = {}) {
     for (const [lx, lz] of [[-0.25, -0.22], [0.25, -0.22], [-0.25, 0.22], [0.25, 0.22]]) chair.add(mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.36, 6), '#5A7F96', { x: lx, y: 0.18, z: lz }));
     g.add(chair);
     // 좌석 번호
-    const tagTex = canvasTex(128, 64, (c, w, h) => {
-      c.fillStyle = '#FFF8E3'; c.beginPath(); c.roundRect(2, 2, w - 4, h - 4, 18); c.fill();
-      c.fillStyle = '#7A4E28'; c.font = `800 38px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText(seatName(seats.length), w / 2, h / 2 + 2);
-    });
-    const tag = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.18), new THREE.MeshBasicMaterial({ map: tagTex, transparent: true }));
+    // 책상 이름표: 평소엔 자리 번호, D-day를 정한 학생이 앉으면 '수능 D-9'
+    const tagCanvas = document.createElement('canvas'); tagCanvas.width = 256; tagCanvas.height = 72;
+    const tagTex = new THREE.CanvasTexture(tagCanvas); tagTex.colorSpace = THREE.SRGBColorSpace; tagTex.anisotropy = 4;
+    const tag = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.18), new THREE.MeshBasicMaterial({ map: tagTex, transparent: true }));
     tag.position.set(0, 1.0, -0.42);
     g.add(tag);
 
     const idx = seats.length;
     g.traverse((o) => { o.userData.seat = idx; });
     scene.add(g);
-    seats.push({ idx, group: g, bulb, f, chairPos: new THREE.Vector3(x, DECK_Y, z + b * 0.82), approach: new THREE.Vector3(x, DECK_Y, z + b * 1.45), occupant: null });
+    seats.push({ idx, group: g, bulb, f, tagCanvas, tagTex, chairPos: new THREE.Vector3(x, DECK_Y, z + b * 0.82), approach: new THREE.Vector3(x, DECK_Y, z + b * 1.45), occupant: null });
     addObs(x, z, 1.9, 1.05);
     addObs(x, z + b * 0.82, 0.6, 0.55);
   }));
+  seats.forEach((st) => drawSeatTag(st, ''));
 
   // 나무, 꽃, 구름
   const treeGreens = ['#6CBF5A', '#7FCF63', '#5DAE55', '#93D46F'];
@@ -514,9 +513,25 @@ export function createWorld(container, opts = {}) {
   // 질문 챗봇들은 교무실 앞쪽 '질문 코너'에 (아래 교무실 만들 때 배치)
   const bots = [];
 
+  function drawSeatTag(seat, text) {
+    const t = text || seatName(seat.idx);
+    if (seat.tagText === t) return;
+    seat.tagText = t;
+    const c = seat.tagCanvas.getContext('2d'), W = 256, H = 72;
+    c.clearRect(0, 0, W, H);
+    const dday = !!text;
+    c.font = `800 ${dday ? 34 : 40}px ${FONT}`;
+    const tw = Math.min(W - 8, c.measureText(t).width + 34);
+    c.fillStyle = dday ? '#FFE9EE' : '#FFF8E3';
+    c.beginPath(); c.roundRect((W - tw) / 2, 4, tw, H - 8, 20); c.fill();
+    c.fillStyle = dday ? '#B83F5A' : '#7A4E28'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(t, W / 2, H / 2 + 2, W - 20);
+    seat.tagTex.needsUpdate = true;
+  }
   function sitActor(a, seat) {
     seat.occupant = a;
     a.seat = seat;
+    drawSeatTag(seat, a.me ? player.dday : a.dday);
     const u = a.obj.userData;
     const sc = u.scale || 1;
     // 쥐·햄스터처럼 작은 동물은 방석을 쌓아야 책상에 겨우 닿음
@@ -1352,6 +1367,7 @@ export function createWorld(container, opts = {}) {
   }
   function freeSeat(seat) {
     seat.occupant = null;
+    drawSeatTag(seat, '');
     clearCushions(seat);
     seat.bulb.material.emissiveIntensity = 0;
   }
@@ -1428,10 +1444,13 @@ export function createWorld(container, opts = {}) {
         if (wantSeat >= 0) {
           const seat = seats[wantSeat];
           if (seat.occupant && seat.occupant.npc) hideNpc(seat.occupant);
+          r.a.dday = typeof x.dd === 'string' ? x.dd.slice(0, 16) : '';
           if (!seat.occupant) { sitActor(r.a, seat); r.seatIdx = wantSeat; }
         }
       }
       if (r.seatIdx >= 0) {
+        const dd = typeof x.dd === 'string' ? x.dd.slice(0, 16) : '';
+        if (dd !== (r.a.dday || '')) { r.a.dday = dd; drawSeatTag(seats[r.seatIdx], dd); }
         const live = x.st && !x.ps;
         r.a.mode = live ? 'study' : 'sit';
         seats[r.seatIdx].bulb.material.emissiveIntensity = live ? 1.4 : 0;
@@ -1553,6 +1572,7 @@ export function createWorld(container, opts = {}) {
     clearCushions(s);
     s.bulb.material.emissiveIntensity = 0;
     player.seat = null;
+    drawSeatTag(s, '');
     player.obj.position.copy(s.approach);
     player.mode = 'idle';
     myLabel();
@@ -2086,6 +2106,8 @@ export function createWorld(container, opts = {}) {
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus, goal: look ? '' : baseGoal });
     },
     walkToBot: tapBot,
+    /** 내 D-day 문구 (앉은 책상 이름표에 보여요) */
+    setMyDday(t) { player.dday = t || ''; if (player.seat) drawSeatTag(player.seat, player.dday); },
     setBanner,
     // 쉼터
     goToPark,

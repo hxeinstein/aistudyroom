@@ -20,7 +20,7 @@ export async function ensureFonts() {
         document.fonts.load(f(400, 16), '가나다ABC'),
         document.fonts.load(f(700, 16), '가나다ABC'),
         document.fonts.load(f(900, 16), 'ABC'),
-        document.fonts.load('16px "Do Hyeon"', '가나다'),   // 주간·월간 리포트
+        document.fonts.load('16px "Gowun Dodum"', '가나다'),   // 주간·월간 리포트
       ]),
       new Promise((r) => setTimeout(r, 2500)),
     ]);

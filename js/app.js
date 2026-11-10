@@ -55,6 +55,7 @@ function boot(skipOnboarding = false) {
     confirmClosedOffice: () => Office.confirmClosed(),
   });
   initJoystick(world);
+  world.setMyDday(ddayText());
   world.setBanner(Sch.schoolName() || '숲속 독서실');   // 우리 학교 이름 가랜드
   if (Sch.schoolName()) $('roomName').textContent = Sch.schoolName();
   initWeather(world, () => toast('❄️ 첫눈이에요! 쉼터에 나가 볼까?', 6000));
@@ -113,7 +114,7 @@ function boot(skipOnboarding = false) {
         n: st.profile?.name || '학생', a: st.profile?.animal || 'bear',
         sj: s ? S.subjectById(s.subject).name : '', st: !!s, ps: S.isPaused(), el: Math.floor(el / 60000) * 60000, // 1분 단위
         td: Math.floor(S.totalMs() / 60000) * 60000,   // 오늘 공부 시간 (순위용)
-        rk: S.showInRank(), gl: S.getGoal(), sk: S.streak(),
+        rk: S.showInRank(), gl: S.getGoal(), sk: S.streak(), dd: ddayText(),
       };
     },
   });
@@ -341,6 +342,18 @@ function openOnboarding() {
   };
 }
 
+
+// 책상 이름표에 보일 D-day: '수능 D-9' / 'D-DAY', 안 정했거나 지났으면 '' (자리 번호가 보여요)
+function ddayText() {
+  const ex = st.exam;
+  if (!ex || !ex.date) return '';
+  const [y, m, d] = ex.date.split('-').map(Number);
+  const now = new Date();
+  const n = Math.round((new Date(y, m - 1, d) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+  if (n < 0 || n > 999) return '';
+  const name = badWord(ex.name || '') ? '시험' : String(ex.name || '시험').slice(0, 6);
+  return `${name} ${n === 0 ? 'D-DAY' : 'D-' + n}`;
+}
 
 // ---------------- 지금 접속 중 (오른쪽 위 👥) ----------------
 function fmtMin(ms) { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`; }
@@ -618,6 +631,7 @@ function openSettings() {
     const name = p.name || randomName();
     S.setProfile({ name, animal });
     S.setExam({ name: m.querySelector('#sExam').value.trim() || '시험', date: m.querySelector('#sDate').value });
+    world.setMyDday(ddayText());
     const goal = m.querySelector('#sGoal').value.trim();
     if (badWord(goal)) return toast('목표에 쓸 수 없는 말이 있어요');
     S.setGoal(goal);
@@ -1051,7 +1065,7 @@ async function takePhoto() {
     g.fillStyle = '#FFF8E9'; g.fillRect(0, 0, c.width, c.height);
     g.save(); g.beginPath(); g.roundRect(padP, padP, W, H, 18 * k); g.clip(); g.drawImage(src, padP, padP); g.restore();
     const box = $('world').getBoundingClientRect();
-    g.font = `700 ${Math.round(13 * k)}px "Do Hyeon", "Sunflower", "Noto Sans KR", sans-serif`; g.textBaseline = 'middle';
+    g.font = `700 ${Math.round(13 * k)}px "Gowun Dodum", "Noto Sans KR", sans-serif`; g.textBaseline = 'middle';
     document.querySelectorAll('.name-tag').forEach((el) => {
       if (el.style.display === 'none' || el.classList.contains('hidden')) return;
       const r = el.getBoundingClientRect();
@@ -1061,9 +1075,9 @@ async function takePhoto() {
       g.fillStyle = '#3B2F25'; g.textAlign = 'center'; g.fillText(el.textContent.replace(/^나/, '나 ').slice(0, 40), x + w / 2, y + h / 2 + 1);
     });
     const d = new Date();
-    g.fillStyle = '#6B4A2E'; g.textAlign = 'left'; g.font = `900 ${Math.round(22 * k)}px "Do Hyeon", "Sunflower", "Noto Sans KR", sans-serif`;
+    g.fillStyle = '#6B4A2E'; g.textAlign = 'left'; g.font = `900 ${Math.round(22 * k)}px "Gowun Dodum", "Noto Sans KR", sans-serif`;
     g.fillText(`🌳 숲속 독서실 ${world.area === 'park' ? '쉼터' : ''}`, padP, H + padP + cap / 2 + padP / 2);
-    g.textAlign = 'right'; g.fillStyle = '#7A6A5A'; g.font = `700 ${Math.round(16 * k)}px "Do Hyeon", "Sunflower", "Noto Sans KR", sans-serif`;
+    g.textAlign = 'right'; g.fillStyle = '#7A6A5A'; g.font = `700 ${Math.round(16 * k)}px "Gowun Dodum", "Noto Sans KR", sans-serif`;
     g.fillText(`${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`, c.width - padP, H + padP + cap / 2 + padP / 2);
     const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
     const name = `forest-photo-${d.getTime()}.png`;
@@ -1140,7 +1154,7 @@ async function start() {
   // 3D 팻말·이름표에 쓸 폰트를 먼저 받아 둠 (오래 걸리면 1.5초만 기다림)
   try {
     if (document.fonts && document.fonts.load) await Promise.race([
-      Promise.all(['500 40px "Sunflower"', '700 40px "Sunflower"', '40px "Do Hyeon"'].map((f) => document.fonts.load(f, '가나다'))),
+      Promise.all(['40px "Gowun Dodum"', '40px "Do Hyeon"'].map((f) => document.fonts.load(f, '가나다'))),
       new Promise((r) => setTimeout(r, 1500)),
     ]);
   } catch (e) {}

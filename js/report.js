@@ -1,7 +1,7 @@
 // 주간 · 월간 리포트 (학생, 이 기기 기록으로) — 사진으로 저장할 수 있는 한 장짜리 그림
 import * as S from './store.js';
 
-const FONT = '"Do Hyeon", "Sunflower", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
+const FONT = '"Gowun Dodum", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
 const C = { bg: '#FFF8E9', card: '#FFFFFF', ink: '#3B2F25', sub: '#7A6A5A', muted: '#A8998A', grid: '#EFE4D2', bar: '#5FA55A', today: '#3F7F3B', brown: '#6B4A2E' };
 const pad = (n) => String(n).padStart(2, '0');
 const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
