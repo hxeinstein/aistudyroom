@@ -1,5 +1,5 @@
 // 실제 날씨 → 독서실 하늘 (Open-Meteo: 무료, 열쇠 없음). 위치는 config.js의 WEATHER
-import { CONFIG } from './config.js';
+import { school } from './school.js';
 
 // WMO 날씨 코드 → clear | cloudy | rain | snow
 export function kindFor(code, cloud) {
@@ -13,8 +13,8 @@ export function initWeather(world, onFirstSnow) {
   // 시험용: 주소 뒤에 ?weather=snow 처럼 붙이면 그 날씨로
   const forced = new URLSearchParams(location.search).get('weather');
   if (forced) { world.setWeather(forced); return; }
-  const w = CONFIG.WEATHER;
-  if (!w || w.off) return;
+  const w = school() && school().weather;   // 시트 '학교' 탭의 위도·경도 (없으면 맑은 하늘)
+  if (!w || !w.lat || !w.lon) return;
   const load = async () => {
     try {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${w.lat}&longitude=${w.lon}&current=weather_code,cloud_cover&timezone=auto`;

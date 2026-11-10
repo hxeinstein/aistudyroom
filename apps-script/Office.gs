@@ -7,7 +7,7 @@
  *   (메일 알림 권한 승인 창이 뜨면 허용) 그 뒤 '배포 → 배포 관리 → 새 버전'으로 다시 배포하세요.
  *   초대코드가 더 필요하면 makeTeacherInvite 를 실행하거나, 시트 위쪽 메뉴 [🐾 독서실 → 교사 초대코드 만들기]
  *
- * [교사 탭]  A 사용 | B 초대코드 | C 닉네임 | D 비밀번호(암호화) | E 알림 이메일 | F 자리(1~10) | G 캐릭터 | H 등록일 | I 문 닫음 | J 로그인 기기
+ * [교사 탭]  A 사용 | B 초대코드 | C 닉네임 | D 비밀번호(암호화) | E 알림 이메일 | F 자리(1~10) | G 캐릭터 | H 등록일 | I 문 닫음 | J 로그인 기기 | K 학교 코드 | L 관리자(체크)
  *   - 처음 등록: 초대코드 + 닉네임 + 비밀번호. 그다음 로그인은 닉네임 + 비밀번호만.
  *   - 초대코드 칸(B)은 바꾸지 마세요 (비밀번호 암호화와 관리자 확인에 쓰여요). 바꾸려면 관리자 메뉴의 '비밀번호 초기화' 뒤 새 코드로 등록. 한 번 로그인한 기기는 로그아웃할 때까지 계속 로그인돼 있어요 (J칸에 암호화된 기기 열쇠, 최대 5대)
  *   - 모든 기기에서 로그아웃시키려면 J칸을 지우세요
@@ -36,16 +36,17 @@ const STUDYROOM_URL = 'https://hxeinstein.github.io/aistudyroom/';
 function setupOffice() {
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName('교사');
-  const header = [['사용', '초대코드', '닉네임', '비밀번호(암호화)', '알림 이메일', '자리', '캐릭터', '등록일', '문 닫음', '로그인 기기', '학교 코드 (비우면 기본 학교)']];
+  const header = [['사용', '초대코드', '닉네임', '비밀번호(암호화)', '알림 이메일', '자리', '캐릭터', '등록일', '문 닫음', '로그인 기기', '학교 코드 (비우면 기본 학교)', '관리자']];
   if (!sh) {
     sh = ss.insertSheet('교사');
-    sh.getRange(1, 1, 1, 11).setValues(header);
+    sh.getRange(1, 1, 1, 12).setValues(header);
     sh.setFrozenRows(1);
     sh.getRange('A2:A30').insertCheckboxes();
     sh.getRange('I2:I30').insertCheckboxes();
     for (let i = 0; i < 3; i++) makeTeacherInvite();
   } else {
-    sh.getRange(1, 1, 1, 11).setValues(header);   // 예전 탭이면 머리글만 최신으로
+    sh.getRange(1, 1, 1, 12).setValues(header);   // 예전 탭이면 머리글만 최신으로
+    sh.getRange('L2:L30').insertCheckboxes();
     sh.getRange('I2:I30').insertCheckboxes();
   }
   if (!ss.getSheetByName('차단')) {
@@ -83,6 +84,7 @@ function onOpen() {
       .addItem('과목 탭 만들기/머리글 갱신', 'setupSubjects')
       .addItem('빈 학교 칸을 기본 학교 코드로 채우기', 'fillSchoolCodes')
       .addItem('학교 코드 바꾸기', 'changeSchoolCode')
+      .addItem('관리자 지정하기', 'setAdminByCode')
       .addToUi();
   } catch (e) { /* 편집기에서 실행 시 무시 */ }
 }
@@ -127,6 +129,7 @@ function teachers_() {
     closed: r[8] === true,
     keys: parseKeys_(r[9]),
     school: scOf_(r[10]),
+    admin: r[11] === true,
   })).filter((t) => t.code);
 }
 /** 캐릭터: {"a":"deer","c":"#B79CE8","g":1} (예전 값은 동물 이름만) */
@@ -574,15 +577,15 @@ function officeCall_(b) {
 /* ---------- 응원 게시판 · 건의함 ----------
  * '게시판' 탭: A 번호 | B 시각 | C 쓴 사람 | D 받는 친구 | E 내용 | F 색 | G 기기(암호화) | H 신고 수 | I 숨김
  * '건의함' 탭: A 시각 | B 쓴 사람 | C 내용 | D 기기(암호화) | E 상태(새 건의/확인함/반영함)
- * 관리자(ADMIN_CODES의 초대코드로 등록한 선생님)만 독서실 안에서 건의함을 볼 수 있어요. 시트에서도 바로 볼 수 있어요.
+ * 관리자('교사' 탭 L칸 '관리자'에 체크된 선생님)만 독서실 안에서 건의함을 볼 수 있어요. 시트에서도 바로 볼 수 있어요.
+ * 코드 안에는 개인정보·초대코드·학교 코드·위치를 적지 않아요. 모두 시트에만 있어요.
  */
-const ADMIN_CODES = ['T-ADMIN0'];
 const BOARD_KEEP_DAYS = 30;      // 게시판에 보여 줄 기간
 const BOARD_MAX = 60;            // 한 번에 보여 줄 포스트잇 수
 const BAD_WORDS = ['시발', '씨발', 'ㅅㅂ', 'ㅆㅂ', '병신', 'ㅂㅅ', '개새', '좆', '존나', 'ㅈㄴ', '꺼져', '죽어', '닥쳐', '미친놈', '미친년', '애미', '느금', 'fuck', 'shit', 'bitch'];
 const NOTE_COLORS = ['#FFF3A3', '#FFD3E0', '#CDEFD0', '#CFE3FF', '#FFE0B8', '#E6D7FF'];
 
-const isAdmin_ = (t) => !!t && ADMIN_CODES.indexOf(t.code) >= 0;
+const isAdmin_ = (t) => !!t && t.admin === true;
 const devHash_ = (device) => sha_('dev:' + String(device || '')).slice(0, 16);
 function hasBadWord_(s) {
   const t = String(s || '').toLowerCase().replace(/[\s.\-_~!?,·]/g, '');
@@ -614,7 +617,7 @@ function boardHandle_(body) {
     if (a === 'book.import') return bookImport_(body);
     if (a === 'stat.day') return statDay_(body);
     if (a === 'notice.get') return noticeGet_(body);
-    if (a === 'school.check') { const s = schoolInfo_(String(body.code || '').trim().toUpperCase()); return s && s.on ? { ok: true, code: s.code, name: s.name, def: s.code === defaultSchool_() } : { error: '학교 코드가 맞지 않아요. 선생님께 다시 물어봐 줘.' }; }
+    if (a === 'school.check') { const s = schoolInfo_(String(body.code || '').trim().toUpperCase()); return s && s.on ? { ok: true, code: s.code, name: s.name, def: s.code === defaultSchool_(), weather: s.lat && s.lon ? { lat: s.lat, lon: s.lon } : null } : { error: '학교 코드가 맞지 않아요. 선생님께 다시 물어봐 줘.' }; }
   } catch (e) {
     console.error(e);
     return { error: '잠시 문제가 생겼어요. 조금 뒤에 다시 해 주세요.' };
@@ -1045,7 +1048,7 @@ function noticeSet_(b, me) {
 
 
 /* ---------- 학교 (같은 독서실을 여러 학교가 나눠 쓰기) ----------
- * '학교' 탭: A 학교 코드 | B 학교 이름 | C 사용 | D 만든 날
+ * '학교' 탭: A 학교 코드 | B 학교 이름 | C 사용 | D 만든 날 | E 날씨 위도 | F 날씨 경도 (실제 날씨 연동, 비우면 맑음)
  * - 학생은 처음 들어올 때 학교 코드를 넣거나, 주소 뒤 ?school=코드 링크로 들어와요
  * - 공부방(실시간)·게시판·건의함·공지·통계·교무실 선생님·챗봇 교과가 학교별로 나뉘어요
  * - 기본 학교(defaultSchool_())는 예전부터 쓰던 기록 (학교 칸이 빈 줄)
@@ -1059,7 +1062,7 @@ function schoolSheet_() {
   let sh = ss.getSheetByName('학교');
   if (!sh) {
     sh = ss.insertSheet('학교');
-    sh.getRange(1, 1, 1, 4).setValues([['학교 코드', '학교 이름', '사용', '만든 날']]);
+    sh.getRange(1, 1, 1, 6).setValues([['학교 코드', '학교 이름', '사용', '만든 날', '날씨 위도', '날씨 경도']]);
     const code = 'S' + Utilities.getUuid().replace(/[^A-Z0-9]/gi, '').slice(0, 5).toUpperCase();
     sh.getRange(2, 1, 1, 4).setValues([[code, '우리 학교', true, new Date()]]);
     sh.getRange(2, 3).insertCheckboxes().check();
@@ -1072,7 +1075,7 @@ function schools_() {
   const hit = cache.get('schools');
   if (hit) { try { return JSON.parse(hit); } catch (e) {} }
   const list = schoolSheet_().getDataRange().getValues().slice(1)
-    .map((r, i) => ({ row: i + 2, code: String(r[0] || '').trim().toUpperCase(), name: String(r[1] || '').trim(), on: r[2] === true }))
+    .map((r, i) => ({ row: i + 2, code: String(r[0] || '').trim().toUpperCase(), name: String(r[1] || '').trim(), on: r[2] === true, lat: Number(r[4]) || 0, lon: Number(r[5]) || 0 }))
     .filter((x) => x.code);
   cache.put('schools', JSON.stringify(list), 60);   // 시트에서 바꾸면 1분 안에 반영
   return list;
@@ -1139,4 +1142,19 @@ function fillSchoolCodes() {
     sh.getRange(2, col, n, 1).setValues(out);
   });
   try { SpreadsheetApp.getUi().alert('빈 학교 칸을 ' + defaultSchool_() + '로 채웠어요. 각 탭에서 [데이터 → 필터 만들기]로 학교별로 볼 수 있어요.'); } catch (e) {}
+}
+
+
+/** '교사' 탭 L칸 '관리자' 체크: 시트 메뉴 [🐾 독서실 → 관리자 지정하기]에서 초대코드를 넣으면 그 선생님을 관리자로 */
+function setAdminByCode() {
+  const ui = SpreadsheetApp.getUi();
+  const a = ui.prompt('관리자 지정하기', '관리자로 정할 선생님의 초대코드를 적어 주세요', ui.ButtonSet.OK_CANCEL);
+  if (a.getSelectedButton() !== ui.Button.OK) return;
+  const code = a.getResponseText().trim().toUpperCase();
+  const sh = SpreadsheetApp.getActive().getSheetByName('교사');
+  const t = teachers_().filter((x) => x.code === code)[0];
+  if (!sh || !t) return ui.alert('그 초대코드를 찾지 못했어요.');
+  sh.getRange(1, 12).setValue('관리자');
+  sh.getRange(t.row, 12).insertCheckboxes().check();
+  ui.alert((t.name || code) + ' 선생님을 관리자로 정했어요. (관리자를 빼려면 L칸 체크를 풀면 돼요)');
 }

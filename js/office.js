@@ -48,7 +48,7 @@ export const isTeacher = () => !!teacher;
 /** 교무실 선생님 현황 (접속 여부 포함) */
 export const teacherSeats = () => seats;
 export const teacherToken = () => (teacher ? teacher.token : '');
-/** 관리자 선생님 (초대코드가 Office.gs ADMIN_CODES에 있는 선생님) */
+/** 관리자 선생님 (시트 '교사' 탭 L칸 '관리자'에 체크된 선생님) */
 export const isAdmin = () => !!(teacher && teacher.me && teacher.me.admin);
 /** 선생님이 아무도 없을 때 문을 누르면 */
 export function confirmClosed() {

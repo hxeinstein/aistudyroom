@@ -9,9 +9,7 @@ export const CONFIG = {
     { id: 'dodeokhu', name: '도덕후', img: 'assets/dodeokhu.png', desc: '도덕 질문' },
   ],
 };
-// 실제 날씨 연동: 이 위치의 지금 날씨에 맞춰 비·눈·흐림·맑음 (off: true면 끄기)
-// 위도·경도는 학교 근처로 바꿔 주세요 (지도 앱에서 학교를 길게 누르면 나와요)
-CONFIG.WEATHER = { name: '우리 지역', lat: 0, lon: 0 };
+// 실제 날씨 연동: 위치는 코드에 적지 않고 시트 '학교' 탭 E·F칸(위도·경도)에서 학교별로 받아요
 
 // 특별한 날 (쉼터 이벤트): 수능 날엔 밤하늘에 별똥별이 많이
 CONFIG.EVENTS = { suneung: ['2026-11-19', '2027-11-18'] };
