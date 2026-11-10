@@ -1,6 +1,7 @@
 // 뭉치 박사 질문 챗봇 창 — 선생님의 Apps Script(힌트 코치)를 불러서 사용
 // 대화는 이 화면(메모리)에만 있고, 새로고침하거나 '새 문제'를 누르면 사라짐.
 import { CONFIG } from './config.js';
+import { schoolCode } from './school.js';
 
 const DEFAULT_GREETING = '어떤 문제를 풀어 볼까? 문제를 글로 쓰거나 사진으로 올려 줘!';
 const $ = (id) => document.getElementById(id);
@@ -137,7 +138,7 @@ async function call(body) {
     method: 'POST',
     // text/plain → 브라우저의 미리 확인 요청(CORS preflight) 없이 Apps Script로 보낼 수 있음
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ school: schoolCode(), ...body }),
   });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();

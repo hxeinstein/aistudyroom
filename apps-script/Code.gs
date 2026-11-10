@@ -97,12 +97,15 @@ function studyroomPersona_(botName) {
  * - D칸에 적은 탭이 없으면 그 교과는 쓸 수 없음
  * - G칸(수업 코드)이 있으면 그 코드를 넣은 학생만 교과서 연동 (없으면 교과서 없이 힌트)
  */
-function loadSubjects_() {
+function loadSubjects_(school) {
   const ss = SpreadsheetApp.getActive();
   const sh = ss.getSheetByName('과목');
   if (!sh) return null;
+  // J칸(학교 코드): 비우면 기본 학교만, '*'면 모든 학교, 코드를 적으면 그 학교만
+  const sc = schoolCode_(school);
+  const forSchool = (r) => { const j = String(r[9] || '').trim().toUpperCase(); return j === '*' || (j ? j.split(/[,\s]+/).indexOf(sc) >= 0 : sc === DEFAULT_SCHOOL); };
   return sh.getDataRange().getValues().slice(1)
-    .filter(r => r[0] === true && String(r[1]).trim())
+    .filter(r => r[0] === true && String(r[1]).trim() && forSchool(r))
     .map(r => ({
       name: String(r[1]).trim(),
       room: String(r[2] || '').trim(),
@@ -125,14 +128,14 @@ const NO_BOOK_NOTE = [
 ].join('\n');
 
 /** 교과 이름으로 찾기. 이름이 없으면(기존 웹앱) 첫 번째 교과 */
-function findSubject_(name) {
-  const list = loadSubjects_();
+function findSubject_(name, school) {
+  const list = loadSubjects_(school);
   if (list === null) return { name: '', room: '과학, 물리, 역학', tab: '교과서', prompt: '', greeting: DEFAULT_GREETING, code: getProp_('ACCESS_CODE') };
   if (!name) return list[0] || null;
   return list.filter(x => x.name === name)[0] || null;
 }
 
-const SUBJECT_HEADER = ['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름 (비우면 교과서 없이)', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)', '수업 코드 (넣은 학생만 교과서 쪽수 안내, 비우면 누구나)', '챗봇 (비우면 뭉치 박사)', '담당 선생님 (닉네임, 비우면 목록에서 고르기)'];
+const SUBJECT_HEADER = ['사용', '교과 이름', '연결 낱말 (학생 과목 이름에 들어가면 연결, 쉼표로 여러 개)', '교과서 탭 이름 (비우면 교과서 없이)', '프롬프트 (비우면 프롬프트 탭 A1)', '첫 인사 (비우면 기본)', '수업 코드 (넣은 학생만 교과서 쪽수 안내, 비우면 누구나)', '챗봇 (비우면 뭉치 박사)', '담당 선생님 (닉네임, 비우면 목록에서 고르기)', '학교 코드 (비우면 기본 학교, *는 모든 학교)'];
 
 /** 처음 한 번 편집기에서 실행: '과목' 탭을 만들고 지금의 역학과 에너지를 첫 줄로 등록 (이미 있으면 머리글만 최신으로) */
 function setupSubjects() {
@@ -168,8 +171,8 @@ function getConfig() {
 }
 
 /** 교과의 수업 코드 확인 (교과 이름이 없으면 기존 웹앱: 첫 번째 교과) */
-function checkCode(code, subjectName) {
-  const sub = findSubject_(subjectName || '');
+function checkCode(code, subjectName, school) {
+  const sub = findSubject_(subjectName || '', school);
   const saved = sub ? sub.code : '';
   return !saved || String(code || '').trim() === saved;
 }
@@ -178,7 +181,7 @@ function checkCode(code, subjectName) {
  * payload = { code, history: [{ role:'user'|'model', text, image?:{mimeType, data} }] }
  */
 function chat(payload, extraSystem, saveLog) {
-  let subject = findSubject_(payload && payload.subject);
+  let subject = findSubject_(payload && payload.subject, payload && payload.school);
   if (!subject) return { error: '이 교과는 아직 연결되지 않았어요. 선생님께 알려 주세요.' };
   // 수업 코드가 있는 교과: 코드가 없거나 틀려도 질문은 되고, 교과서 쪽수 안내만 빠짐 (우리 학교 학생만 교과서 연동)
   let codeWrong = false;
@@ -203,7 +206,7 @@ function chat(payload, extraSystem, saveLog) {
   const hits = ranked.slice().sort((a, b) => a.page - b.page);
   // 질문 통계 (관리자 화면용): 교과 + 가장 관련 있는 교과서 쪽만 세요. 질문 내용은 남기지 않아요.
   if (history.length && history[history.length - 1].role === 'user') {
-    try { recordQuestion_(subject.name, ranked[0] || null); } catch (e) { console.error(e); }
+    try { recordQuestion_(subject.name, ranked[0] || null, payload && payload.school); } catch (e) { console.error(e); }
   }
 
   const extra = typeof extraSystem === 'function' ? extraSystem(subject) : (extraSystem || '');
@@ -250,7 +253,8 @@ function doPost(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) {}
   let out;
-  if (/^(board|suggest|book|stat|notice)\./.test(String(body.action || ''))) {
+  body.school = schoolCode_(body.school);   // 학교 코드 (없으면 기본 학교) — Office.gs
+  if (/^(board|suggest|book|stat|notice|school)\./.test(String(body.action || ''))) {
     out = boardHandle_(body);    // 응원 게시판 · 건의함 (Office.gs)
   } else if (body.action === 'room.sync') {
     out = roomSync_(body);       // 공부방 자리 공유 (Office.gs)
@@ -259,16 +263,16 @@ function doPost(e) {
   } else if (String(body.action || '').indexOf('office.') === 0) {
     out = officeHandle_(body);   // 교무실 (Office.gs)
   } else if (body.action === 'config') {
-    const list = loadSubjects_() || [findSubject_('')];
+    const list = loadSubjects_(body.school) || [findSubject_('')];
     out = {
       name: MASCOT_NAME,
       subjects: list.map(x => ({ name: x.name, room: x.room, greeting: x.greeting, needCode: !!x.code, book: !!x.tab, bot: x.bot || MASCOT_NAME, teacher: x.teacher }))
     };
   } else if (body.action === 'checkCode') {
-    out = { ok: checkCode(body.code, body.subject) };
+    out = { ok: checkCode(body.code, body.subject, body.school) };
   } else if (body.action === 'chat') {
     const limited = checkLimit_(String(body.device || '').slice(0, 64));
-    out = limited || chat({ subject: body.subject, code: body.code, history: body.history }, (sub) => studyroomPersona_(sub.bot), STUDYROOM_SAVE_LOG);
+    out = limited || chat({ subject: body.subject, code: body.code, history: body.history, school: body.school }, (sub) => studyroomPersona_(sub.bot), STUDYROOM_SAVE_LOG);
   } else {
     out = { error: '알 수 없는 요청이에요.' };
   }

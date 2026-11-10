@@ -1,5 +1,6 @@
 // 교과서 넣기 (관리자) — PDF를 이 브라우저 안에서만 읽어 쪽마다 글자를 뽑고, 몇 쪽씩 나눠 시트에 넣어요.
 import { CONFIG } from './config.js';
+import { schoolCode, schoolName } from './school.js';
 import * as pdfjs from '../vendor/pdfjs/pdf.min.mjs';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdfjs/pdf.worker.min.mjs', import.meta.url).href;
@@ -234,7 +235,7 @@ el.extract.addEventListener('click', async () => {
 
 /* ---------- ② 시트에 넣기 ---------- */
 async function api(body) {
-  const res = await fetch(CONFIG.CHATBOT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  const res = await fetch(CONFIG.CHATBOT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ school: schoolCode(), ...body }) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }

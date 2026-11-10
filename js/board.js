@@ -1,5 +1,6 @@
 // 📌 응원 게시판 · 📮 건의함 (Apps Script Office.gs의 board.* / suggest.*)
 import { CONFIG } from './config.js';
+import { schoolCode } from './school.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -18,7 +19,7 @@ function deviceId() {
   return id;
 }
 async function api(body) {
-  const res = await fetch(CONFIG.CHATBOT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  const res = await fetch(CONFIG.CHATBOT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ school: schoolCode(), ...body }) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }

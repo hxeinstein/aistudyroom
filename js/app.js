@@ -9,6 +9,7 @@ import * as Room from './room.js';
 import * as Board from './board.js';
 import { initJoystick } from './joystick.js';
 import { badWord } from './words.js';
+import * as Sch from './school.js';
 import { initWeather } from './weather.js';
 import { drawReport, saveReportImage, shiftAnchor, periodDays } from './report.js';
 
@@ -20,7 +21,7 @@ let world;
 let wakeLock = null;
 
 // ---------------- 시작 ----------------
-function boot() {
+function boot(skipOnboarding = false) {
   const profile = st.profile || { name: '', animal: 'bear' };
   world = createWorld($('world'), {
     animal: profile.animal,
@@ -72,7 +73,7 @@ function boot() {
     }
   }
 
-  if (!st.profile) openOnboarding();
+  if (!st.profile && !skipOnboarding) openOnboarding();
   renderBar();
   refreshHud();
   setInterval(refreshHud, 1000);
@@ -440,7 +441,7 @@ function renderPeople() {
 
 // ---------------- 공부 통계 보내기 (관리자 요약용, 이름 없이 기기 번호만) ----------------
 async function post(body) {
-  const res = await fetch(CONFIG.CHATBOT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  const res = await fetch(CONFIG.CHATBOT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ school: Sch.schoolCode(), ...body }) });
   return res.json();
 }
 function deviceId() {
@@ -554,7 +555,8 @@ function openTeacherSettings() {
     <button class="btn primary block" id="tsInbox" type="button">📥 받은 대화</button>
     ${admin ? `
     <label class="lbl">관리자</label>
-    <button class="btn soft block" id="tsSummary" type="button">📈 독서실 요약 · 질문 통계</button>
+    <button class="btn soft block" id="tsSchools" type="button">🏫 학교 관리 <small>(지금: ${esc(Sch.schoolName() || Sch.schoolCode())})</small></button>
+    <button class="btn soft block" id="tsSummary" type="button" style="margin-top:8px">📈 독서실 요약 · 질문 통계</button>
     <button class="btn soft block" id="tsNotice" type="button" style="margin-top:8px">📢 공지 띄우기</button>
     <button class="btn soft block" id="tsAdmin" type="button" style="margin-top:8px">🛠️ 관리자 메뉴 (신고 · 차단 · 선생님)</button>
     <button class="btn soft block" id="tsSuggest" type="button" style="margin-top:8px">📮 건의함 보기</button>
@@ -569,6 +571,7 @@ function openTeacherSettings() {
   if (admin) {
     m.querySelector('#tsAdmin').onclick = () => Office.openAdminMenu();
     m.querySelector('#tsSummary').onclick = () => openSummary();
+    m.querySelector('#tsSchools').onclick = () => openSchools();
     m.querySelector('#tsNotice').onclick = () => openNoticeEditor();
     m.querySelector('#tsSuggest').onclick = () => Board.openSuggestAdmin();
     m.querySelector('#tsBook').onclick = () => window.open('book.html', '_blank', 'noopener');
@@ -595,6 +598,7 @@ function openSettings() {
     <input class="field" id="sGoal" maxlength="24" placeholder="예: 수학 3시간, 영단어 100개" value="${esc(S.getGoal())}" />
     <label class="glasses-tg" style="margin:10px 0 0"><input type="checkbox" id="sRank" ${S.showInRank() ? 'checked' : ''} /> 🏆 오늘 순위에 내 이름 보이기</label>
     <button class="btn soft block" id="sSubjects" type="button" style="margin-top:14px">📚 내 과목 관리</button>
+    ${CONFIG.CHATBOT_URL ? `<button class="btn ghost block" id="sSchool" type="button" style="margin-top:6px">🏫 ${esc(Sch.schoolName() || Sch.schoolCode())} · 학교 바꾸기</button>` : ''}
     <button class="btn soft block" id="sTeacher" type="button" style="margin-top:8px">${Office.isTeacher() ? `📥 ${esc(Office.teacherName())} 선생님 · 받은 대화` : '👩‍🏫 선생님 로그인'}</button>
     <div class="foot">
       <button class="btn ghost" id="sClose">닫기</button>
@@ -606,6 +610,7 @@ function openSettings() {
   m.querySelector('#sClose').onclick = closeModal;
   m.querySelector('#sSubjects').onclick = () => openSubjects();
   m.querySelector('#sLeave').onclick = openLeave;
+  if (m.querySelector('#sSchool')) m.querySelector('#sSchool').onclick = () => openSchoolGate(true);
   m.querySelector('#sTeacher').onclick = () => (Office.isTeacher() ? Office.openInbox() : Office.openTeacherLogin());
   m.querySelector('#sSave').onclick = () => {
     const name = p.name || randomName();
@@ -642,7 +647,7 @@ function openLeave() {
     m.querySelector('#lvGo').disabled = true;
     try { await Room.releaseSeat(); } catch (e) {}
     if (Office.isTeacher()) Office.logout(true);
-    ['aistudyroom.v1', 'aistudyroom.chatCodes', 'aistudyroom.device', 'aistudyroom.teacher'].forEach((k) => {
+    ['aistudyroom.v1', 'aistudyroom.chatCodes', 'aistudyroom.device', 'aistudyroom.teacher', 'aistudyroom.school'].forEach((k) => {
       try { localStorage.removeItem(k); } catch (e) {}
     });
     location.replace(location.pathname);
@@ -1128,4 +1133,102 @@ async function keepAwake(on) {
   } catch (e) { /* 지원 안 함 */ }
 }
 
-boot();
+// ---------------- 학교 정하기 (처음 한 번, 또는 ?school=코드 링크) ----------------
+async function start() {
+  if (!CONFIG.CHATBOT_URL) return boot();
+  const want = (new URLSearchParams(location.search).get('school') || '').trim().toUpperCase();
+  if (want && want !== (Sch.school() && Sch.school().code)) {
+    let r = null;
+    try { r = await post({ action: 'school.check', code: want }); } catch (e) {}
+    if (r && r.ok) {
+      if (Sch.school() && Sch.school().code !== r.code) resetStudent();   // 다른 학교로 바꾸면 이 기기 기록은 새로
+      Sch.setSchool({ code: r.code, name: r.name });
+      location.replace(location.pathname + location.hash);
+      return;
+    }
+  }
+  if (!Sch.school()) {
+    // 예전부터 쓰던 기기는 기본 학교로
+    if (st.profile) Sch.setSchool({ code: Sch.DEFAULT_SCHOOL, name: '우리 학교' });
+    else { boot(true); openSchoolGate(false); return; }
+  }
+  boot();
+}
+function resetStudent() {
+  ['aistudyroom.v1', 'aistudyroom.chatCodes', 'aistudyroom.goal'].forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
+}
+/** 학교 코드 넣기 (canCancel: 설정에서 바꿀 때) */
+function openSchoolGate(canCancel) {
+  const m = openModal(`
+    <div class="big-emoji">🏫</div>
+    <h2 class="center">학교 코드를 넣어 주세요</h2>
+    <p class="desc center">선생님이 알려 준 학교 코드예요.<br/>같은 학교 친구들끼리만 공부방에서 만나요.</p>
+    <input class="field" id="scCode" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="예: SCHOOL" style="text-align:center;font-size:20px;letter-spacing:2px" />
+    <p class="c-gate-msg" id="scMsg"></p>
+    <div class="foot">${canCancel ? '<button class="btn ghost" id="scCancel" type="button">그대로 둘래요</button>' : ''}<button class="btn primary" id="scGo" type="button">들어가기</button></div>
+    ${canCancel ? '<p class="hint center">다른 학교로 바꾸면 이 기기의 공부 기록은 새로 시작해요.</p>' : ''}`, { dismiss: !!canCancel });
+  const go = async () => {
+    const code = m.querySelector('#scCode').value.trim().toUpperCase();
+    if (!code) return;
+    m.querySelector('#scMsg').textContent = '확인 중…';
+    let r = null;
+    try { r = await post({ action: 'school.check', code }); } catch (e) { m.querySelector('#scMsg').textContent = '연결하지 못했어요. 인터넷을 확인해 주세요.'; return; }
+    if (!r || !r.ok) { m.querySelector('#scMsg').textContent = (r && r.error) || '학교 코드가 맞지 않아요.'; return; }
+    if (Sch.school() && Sch.school().code !== r.code) resetStudent();
+    Sch.setSchool({ code: r.code, name: r.name });
+    location.reload();
+  };
+  m.querySelector('#scGo').onclick = go;
+  m.querySelector('#scCode').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) go(); });
+  if (canCancel) m.querySelector('#scCancel').onclick = closeModal;
+  setTimeout(() => m.querySelector('#scCode').focus(), 50);
+}
+// 관리자: 학교 관리
+async function openSchools() {
+  const m = openModal(`<h2>🏫 학교 관리</h2><div id="schBody"><p class="hint">불러오는 중…</p></div>
+    <label class="lbl">새 학교 추가</label>
+    <div class="row"><input class="field" id="schName" maxlength="30" placeholder="학교 이름 (예: 한빛고)" /><input class="field" id="schCode" maxlength="8" placeholder="코드 (비우면 자동)" style="max-width:130px" autocapitalize="characters" /></div>
+    <button class="btn soft block" id="schAdd" type="button" style="margin-top:8px">➕ 학교 만들기</button>
+    <p class="hint">학교마다 공부방·게시판·건의함·공지·통계·교무실 선생님·챗봇 교과가 따로예요. 챗봇 교과는 시트 '과목' 탭 J칸에 학교 코드를 적으면 그 학교에 보여요 (비우면 ${esc(Sch.DEFAULT_SCHOOL)}, *는 모든 학교). 그 학교 선생님 초대코드는 그 학교로 바꾼 뒤 🛠️ 관리자 메뉴 → 선생님에서 만들어요.</p>
+    <div class="foot"><button class="btn primary" id="schClose" type="button">닫기</button></div>`, { wide: true });
+  m.querySelector('#schClose').onclick = closeModal;
+  const base = location.origin + location.pathname;
+  const load = async () => {
+    let r;
+    try { r = await post({ action: 'office.admin', op: 'schools', token: Office.teacherToken() }); } catch (e) { r = { error: '연결하지 못했어요' }; }
+    const box = m.querySelector('#schBody');
+    if (!box) return;
+    if (r.error) { box.innerHTML = `<p class="warn">${esc(r.error)}</p>`; return; }
+    box.innerHTML = r.schools.map((s) => `
+      <div class="adm-card ${s.on ? '' : 'off'} ${s.code === Sch.schoolCode() ? 'new' : ''}">
+        <div class="adm-top"><b>${esc(s.name)}</b> <code>${esc(s.code)}</code>${s.code === Sch.schoolCode() ? '<span class="adm-st">지금 보는 학교</span>' : ''}</div>
+        <div class="hint" style="margin:4px 0;word-break:break-all">${esc(base)}?school=${esc(s.code)}</div>
+        <div class="adm-act">
+          <button class="btn soft adm-mini" data-copy="${esc(s.code)}" type="button">🔗 링크 복사</button>
+          ${s.code === Sch.schoolCode() ? '' : `<button class="btn soft adm-mini" data-view="${esc(s.code)}" data-name="${esc(s.name)}" type="button">👀 이 학교로 보기</button>`}
+          ${s.code === Sch.DEFAULT_SCHOOL ? '' : `<button class="btn soft adm-mini" data-tog="${esc(s.code)}" data-on="${s.on ? 0 : 1}" type="button">${s.on ? '끄기' : '다시 켜기'}</button>`}
+        </div>
+      </div>`).join('');
+    box.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText(`${base}?school=${b.dataset.copy}`); toast('링크를 복사했어요'); } catch (e) { toast('복사하지 못했어요. 위 주소를 길게 눌러 복사해 주세요'); } }));
+    box.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => { Sch.setSchool({ code: b.dataset.view, name: b.dataset.name }); location.reload(); }));
+    box.querySelectorAll('[data-tog]').forEach((b) => (b.onclick = async () => {
+      const on = b.dataset.on === '1';
+      if (!on && !confirm('이 학교를 끌까요? 그 학교 코드로는 들어올 수 없게 돼요.')) return;
+      const r2 = await post({ action: 'office.admin', op: 'toggleSchool', token: Office.teacherToken(), code: b.dataset.tog, on }).catch(() => ({ error: '연결하지 못했어요' }));
+      if (r2.error) return toast(r2.error);
+      load();
+    }));
+  };
+  m.querySelector('#schAdd').onclick = async () => {
+    const name = m.querySelector('#schName').value.trim();
+    if (!name) return toast('학교 이름을 적어 주세요');
+    const r = await post({ action: 'office.admin', op: 'addSchool', token: Office.teacherToken(), name, code: m.querySelector('#schCode').value.trim() }).catch(() => ({ error: '연결하지 못했어요' }));
+    if (r.error) return toast(r.error);
+    toast(`'${r.name}' 학교를 만들었어요 · 코드 ${r.code}`);
+    m.querySelector('#schName').value = ''; m.querySelector('#schCode').value = '';
+    load();
+  };
+  load();
+}
+
+start();

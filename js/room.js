@@ -7,7 +7,8 @@ import {
 } from '../vendor/firebase.js';
 import { FIREBASE } from './config.js';
 
-const ROOM = 'room1';
+import { roomId } from './school.js';
+let ROOM = 'room1';   // 학교마다 다른 방 (initRoom에서 정함)
 const GONE_MS = 90 * 1000;       // 이만큼 신호가 없으면 화면에서 뺌 (앱이 갑자기 꺼진 경우 대비)
 const SEND_MS = 200;             // 움직일 때 최대 초당 5번 보냄
 
@@ -30,6 +31,7 @@ export const ready = () => !!uid;
 
 export async function initRoom(c) {
   ctx = c;
+  ROOM = roomId();
   if (!FIREBASE || !FIREBASE.apiKey) return;
   try {
     const app = initializeApp(FIREBASE);

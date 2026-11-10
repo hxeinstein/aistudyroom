@@ -1,6 +1,7 @@
 // 교무실 — 학생 ↔ 선생님, 선생님 ↔ 선생님 1:1 대화 (Apps Script Office.gs)
 // 대화는 서버의 임시 저장소에만 있고, 어느 한쪽이 '끝내기'를 누르면 바로 지워짐.
 import { CONFIG } from './config.js';
+import { schoolCode, setSchool } from './school.js';
 import * as Room from './room.js';
 import { animalById, ANIMALS } from './store.js';
 
@@ -36,7 +37,7 @@ function deviceId() {
 
 async function api(body) {
   if (!CONFIG.CHATBOT_URL) throw new Error('no url');
-  const res = await fetch(CONFIG.CHATBOT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  const res = await fetch(CONFIG.CHATBOT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ school: schoolCode(), ...body }) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const out = await res.json();
   if (out && out.relogin && teacher) { logout(true); ctx.toast('선생님 로그인이 끝났어요. 다시 로그인해 주세요.'); }
@@ -514,6 +515,8 @@ export function openTeacherLogin() {
     if (r.error) { msg.textContent = r.error; return; }
     teacher = { token: r.token, me: r.me };
     lsSet('aistudyroom.teacher', teacher);
+    // 선생님 학교로 이 기기를 맞춤 (관리자는 지금 보던 학교 그대로)
+    if (r.me.school && !r.me.admin && r.me.school !== schoolCode()) { setSchool({ code: r.me.school, name: r.me.schoolName }); location.reload(); return; }
     ctx.world.setTeacher(r.me.id);
     ctx.world.setObserver(true);
     ctx.closeModal();
