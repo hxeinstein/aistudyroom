@@ -10,6 +10,7 @@ import * as Board from './board.js';
 import { initJoystick } from './joystick.js';
 import { badWord } from './words.js';
 import { initWeather } from './weather.js';
+import { drawReport, saveReportImage, shiftAnchor, periodDays } from './report.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -742,6 +743,7 @@ async function openPlanner(key, autoSave = false) {
     <div class="todo-edit" id="pTodos"></div>
     <div class="foot">
       <button class="btn ghost" id="pClose">닫기</button>
+      <button class="btn soft" id="pReport">📊 주간·월간</button>
       <button class="btn blue" id="pSave">📸 사진으로 저장</button>
     </div>
     ${st.exam && st.exam.date ? '' : '<p class="hint center">⚙️ 설정에서 시험 이름과 날짜를 넣으면 D-day가 나와요.</p>'}
@@ -757,6 +759,7 @@ async function openPlanner(key, autoSave = false) {
   m.querySelector('#pNext').onclick = () => shift(1);
   m.querySelector('#pClose').onclick = closeModal;
   m.querySelector('#pSave').onclick = () => doSave(key);
+  m.querySelector('#pReport').onclick = () => openReport('week', key);
 
   const img = m.querySelector('#pImg');
   const canvas = document.createElement('canvas');
@@ -793,6 +796,36 @@ async function doSave(key) {
     toast('저장에 실패했어요. 이미지를 길게 눌러 저장해 보세요');
     console.error(e);
   }
+}
+
+// ---------------- 주간 · 월간 리포트 ----------------
+async function openReport(mode = 'week', anchor = S.dayKey()) {
+  const m = openModal(`
+    <div class="tabs"><button type="button" class="tab ${mode === 'week' ? 'on' : ''}" data-m="week">주간</button><button type="button" class="tab ${mode === 'month' ? 'on' : ''}" data-m="month">월간</button></div>
+    <div class="planner-nav">
+      <button class="icon-btn" id="rPrev" aria-label="이전">◀</button>
+      <strong id="rTitle"></strong>
+      <button class="icon-btn" id="rNext" aria-label="다음">▶</button>
+    </div>
+    <img class="planner-img" id="rImg" alt="공부 리포트" />
+    <div class="foot">
+      <button class="btn ghost" id="rBack">📒 플래너</button>
+      <button class="btn blue" id="rSave">📸 사진으로 저장</button>
+    </div>
+    <p class="hint center">이 기기에 저장된 기록으로 만들어요.</p>`, { wide: true });
+  const days = periodDays(mode, anchor);
+  m.querySelector('#rTitle').textContent = mode === 'week' ? `${days[0].slice(5).replace('-', '/')} ~ ${days[6].slice(5).replace('-', '/')}` : `${days[0].slice(0, 7).replace('-', '년 ')}월`;
+  m.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => openReport(b.dataset.m, anchor)));
+  m.querySelector('#rPrev').onclick = () => openReport(mode, shiftAnchor(mode, anchor, -1));
+  const next = shiftAnchor(mode, anchor, 1);
+  m.querySelector('#rNext').disabled = periodDays(mode, next)[0] > S.dayKey();
+  m.querySelector('#rNext').onclick = () => openReport(mode, next);
+  m.querySelector('#rBack').onclick = () => openPlanner(S.dayKey());
+  m.querySelector('#rSave').onclick = async () => {
+    try { const r = await saveReportImage(mode, anchor); if (r === 'downloaded') toast('리포트 사진을 저장했어요 📸'); } catch (e) { toast('저장에 실패했어요. 이미지를 길게 눌러 저장해 보세요'); }
+  };
+  await ensureFonts();
+  m.querySelector('#rImg').src = drawReport(document.createElement('canvas'), mode, anchor, 2).toDataURL('image/png');
 }
 
 // ---------------- 화면 꺼짐 방지 ----------------
