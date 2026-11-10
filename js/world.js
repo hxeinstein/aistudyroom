@@ -1880,7 +1880,7 @@ export function createWorld(container, opts = {}) {
     }
     // 뭉치 박사 근처인지 (하단 '질문' 버튼 표시용)
     let nb = null;
-    if (area.name === 'office' && !player.officeDesk) for (const bt of bots) if (Math.hypot(p.x - bt.obj.position.x, p.z - bt.obj.position.z) < 1.7) nb = bt.id;
+    if (area.name === 'office' && !player.officeDesk) for (const bt of bots) if (Math.hypot(p.x - bt.obj.position.x, p.z - bt.obj.position.z) < 2.1 && (!nb || Math.abs(p.x - bt.obj.position.x) < 1.3)) nb = bt.id;
     if (nb !== nearBot) { nearBot = nb; opts.onNearBot && opts.onNearBot(nb); }
     // 교무실 문 근처인지
     const door = area.name === 'main'
