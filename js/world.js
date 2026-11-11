@@ -1150,7 +1150,7 @@ export function createWorld(container, opts = {}) {
     if (r.occ && r.occ !== player) { opts.onToast && opts.onToast('방금 친구가 탔어요'); return; }
     if (player.ride) leaveRide(true);
     r.occ = player; player.ride = r; player.mode = 'sit';
-    if (r.type === 'bench') { yaw = yawTarget = 0; pitchTarget = moodName === 'night' ? 0.6 : 0.3; setZoom(ZOOM_MIN); opts.onToast && opts.onToast('화면을 끌면 하늘을 둘러볼 수 있어요 · 확대·축소도 돼요'); }
+    if (r.type === 'bench') { yaw = yawTarget = 0; pitchTarget = moodName === 'night' ? 0.6 : 0.3; setZoom(ZOOM_MIN); opts.onToast && opts.onToast('화면을 끌면 하늘을 둘러봐요 · 내 쪽으로 돌리면 내 모습도 보여요 📸'); }
     opts.onSfx && opts.onSfx(r.type === 'bench' ? 'sit' : 'creak');
     opts.onRide && opts.onRide(r);
   }
@@ -1442,7 +1442,7 @@ export function createWorld(container, opts = {}) {
     const came = new Map();
     const fsc = new Map([[key(sx, sz), Math.hypot(tx - sx, tz - sz)]]);
     let guard = 0;
-    while (open.length && guard++ < 6000) {
+    while (open.length && guard++ < 30000) {
       let bi = 0;
       for (let i = 1; i < open.length; i++) if (fsc.get(key(...open[i])) < fsc.get(key(...open[bi]))) bi = i;
       const [cx, cz] = open.splice(bi, 1)[0];
@@ -2146,13 +2146,16 @@ export function createWorld(container, opts = {}) {
       const h = bench.rot + yaw;
       const e = clamp(pitch - 0.05, 0.05, 1.3);            // 올려다보는 각도 (아래로 끌면 하늘 쪽으로)
       const look = new THREE.Vector3(Math.sin(h) * Math.cos(e), Math.sin(e), Math.cos(h) * Math.cos(e));
-      // 확대하면 내 눈높이(머리 앞)에서, 축소하면 뒤로 물러나 내 캐릭터와 하늘을 같이
-      const ud = player.obj.userData, headY = (ud.height || 1.4) * (ud.scale || 1) * 0.85;
-      const d = clamp((zoom - ZOOM_MIN) * 0.7, 0, 9) - 0.45;
-      const eye = bench.seat.clone().add(new THREE.Vector3(0, headY + Math.max(0, d) * 0.45, 0)).addScaledVector(look, -d);
+      // 내 캐릭터를 가운데 두고 빙 도는 3인칭 시점: 앞쪽을 보면 하늘·숲, 내 쪽으로 돌리면 앉은 내 모습 (사진 찍기 좋게)
+      const ud = player.obj.userData, headY = (ud.height || 1.4) * (ud.scale || 1) * 0.8;
+      const target = bench.seat.clone().add(new THREE.Vector3(0, headY, 0));
+      const d = clamp((zoom - ZOOM_MIN) * 0.7 + 2.0, 2.0, 9);
+      const eye = target.clone().addScaledVector(look, -d);
       eye.y = Math.max(eye.y, DECK_Y + 0.35);
       camPos.lerp(eye, Math.min(1, dt * 4));
-      camLook.lerp(eye.clone().addScaledVector(look, 10), Math.min(1, dt * 4));
+      // 앞을 볼 땐 먼 하늘을, 내 쪽으로 돌리면 내 캐릭터를 화면 가운데에
+      const ahead = 0.6 + 5.4 * Math.max(0, Math.cos(yaw));
+      camLook.lerp(target.clone().addScaledVector(look, ahead), Math.min(1, dt * 4));
     } else {
       const sc = player.obj.userData.scale || 1;
       // 가까이 볼수록 캐릭터 얼굴 높이를 바라봄 (작은 동물도 잘 보이게)

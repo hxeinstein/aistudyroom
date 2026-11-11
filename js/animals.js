@@ -208,7 +208,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
   else if (L.tail === 'bushy' || L.tail === 'ringed') {
     tail = new THREE.Group();
     tail.position.set(0, 0.3, -0.2);
-    tail.rotation.x = -0.9;
+    tail.rotation.x = 0.9;   // 뒤쪽(-z)으로 뻗게 (예전엔 몸을 뚫고 앞으로 나왔어요)
     for (let i = 0; i < 4; i++) {
       const c = L.tail === 'ringed' ? (i % 2 ? L.tailRing : L.fur) : (i === 3 && L.tailTip ? L.tailTip : L.fur);
       tail.add(mesh(S(0.09 + (L.tail === 'bushy' ? 0.02 * Math.min(i, 2) : 0), 10, 8), c, { y: -i * 0.09 }));
@@ -216,7 +216,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
   } else if (L.tail === 'long' || L.tail === 'thin' || L.tail === 'tuft') {
     tail = new THREE.Group();
     tail.position.set(0, 0.3, -0.2);
-    tail.rotation.x = -1.0;
+    tail.rotation.x = 1.0;   // 뒤쪽(-z)으로
     const r = L.tail === 'long' ? 0.045 : 0.022;
     tail.add(mesh(new THREE.CapsuleGeometry(r, L.tail === 'thin' && L.scale < 1 ? 0.5 : 0.3, 4, 8), tc, { y: -0.18 }));
     if (L.tail === 'tuft') tail.add(mesh(S(0.06, 8, 8), L.mane || tc, { y: -0.38 }));
