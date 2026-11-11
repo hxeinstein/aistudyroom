@@ -18,14 +18,14 @@
  *
  * [규칙]
  *   - 학생 ↔ 교사, 교사 ↔ 교사만 대화 가능 (학생끼리는 대화를 열 수 없음)
- *   - 대화는 시트에 저장하지 않음. 임시 저장소(캐시)에만 있고, 어느 한쪽이 대화를 끝내면 바로 지워짐 (늦어도 6시간 뒤 자동 삭제)
+ *   - 대화는 시트에 저장하지 않음. 임시 저장소(캐시 + 스크립트 속성)에만 있고, 어느 한쪽이 대화를 끝내면 바로 지워짐 (늦어도 마지막 메시지에서 12시간 뒤 자동 삭제)
  *   - 신고: 선생님이 대화창에서 [관리자에게 알리기]를 누르면 '신고' 탭에 그 학생의 최근 메시지(5개까지)가 남고 관리자에게 메일이 가요
  *   - 관리자 메뉴(독서실 안): 신고 처리 · 차단 풀기 · 선생님 초대코드 만들기/끄기/비밀번호 초기화
  *   - 차단: 관리자가 차단하면 그 기기는 교무실 대화를 열 수 없음 ('차단' 탭에 기기 번호만 남음, 대화 내용은 안 남음)
  */
 
 const OFFICE_SEATS = 10;
-const OFFICE_TTL = 6 * 60 * 60;          // 대화 최대 보관 6시간 (캐시 최대치)
+const OFFICE_TTL = 6 * 60 * 60;          // 캐시 보관 6시간 (캐시 최대치, 그 뒤는 스크립트 속성에서 12시간까지)
 const ONLINE_MS = 70 * 1000;             // 70초 안에 신호가 있으면 '상담 가능'
 const MAIL_GAP = 10 * 60;                // 같은 대화 메일 알림은 10분에 한 번
 const MAX_MSGS = 60;                     // 대화당 최근 메시지 수
@@ -260,20 +260,70 @@ function countOk_(key, max, sec) {
 // 대화 정보: conv_<id> = { a: 참여자, b: 참여자(항상 교사), msgs: [...], seen: {a, b}, n }
 // 참여자 = { type: 'student', device, nick, animal, key } 또는 { type: 'teacher', id, name, animal }
 
+/* 대화 보관: 캐시(빠름, 최대 6시간) + 스크립트 속성(시트 아님, 마지막 메시지부터 12시간 뒤 자동 삭제)
+ * 밤에 보낸 질문이 아침까지 남아 있게. 대화를 끝내면 둘 다 바로 지워요. */
+const CONV_KEEP_MS = 12 * 60 * 60 * 1000;
+const PART = 8000;   // 속성 한 칸 크기 제한(9KB) 때문에 나눠 저장
+function storeSave_(key, obj) {
+  const p = PropertiesService.getScriptProperties();
+  const txt = JSON.stringify(obj);
+  const n = Math.ceil(txt.length / PART) || 1;
+  const old = Number(String(p.getProperty(key) || '').split('|')[1] || 0);
+  const all = {};
+  all[key] = (Date.now() + CONV_KEEP_MS) + '|' + n;
+  for (let i = 0; i < n; i++) all[key + '_' + i] = txt.slice(i * PART, (i + 1) * PART);
+  p.setProperties(all);
+  for (let i = n; i < old; i++) p.deleteProperty(key + '_' + i);
+}
+function storeLoad_(key) {
+  const p = PropertiesService.getScriptProperties();
+  const meta = p.getProperty(key);
+  if (!meta) return null;
+  const [exp, n] = meta.split('|').map(Number);
+  if (Date.now() > exp) { storeDel_(key); return null; }
+  let txt = '';
+  for (let i = 0; i < n; i++) txt += p.getProperty(key + '_' + i) || '';
+  try { return JSON.parse(txt); } catch (e) { return null; }
+}
+function storeDel_(key) {
+  const p = PropertiesService.getScriptProperties();
+  const n = Number(String(p.getProperty(key) || '').split('|')[1] || 0);
+  p.deleteProperty(key);
+  for (let i = 0; i < n; i++) p.deleteProperty(key + '_' + i);
+}
+/** 기한이 지난 보관 대화 정리 (가끔) */
+function storeSweep_() {
+  const p = PropertiesService.getScriptProperties(), all = p.getProperties(), now = Date.now();
+  Object.keys(all).forEach((k) => { if (/^(cv|ib)_[^_]+$/.test(k) && Number(String(all[k]).split('|')[0]) < now) storeDel_(k); });
+}
 function getConv_(id) {
   const raw = CacheService.getScriptCache().get('conv_' + id);
-  return raw ? JSON.parse(raw) : null;
+  if (raw) return JSON.parse(raw);
+  const c = storeLoad_('cv_' + id);
+  if (c) CacheService.getScriptCache().put('conv_' + id, JSON.stringify(c), OFFICE_TTL);
+  return c;
 }
 function putConv_(id, c) {
-  // 캐시 한 칸은 100KB까지라 오래된 메시지부터 덜어냄
-  while (c.msgs.length > MAX_MSGS || (JSON.stringify(c).length > 90000 && c.msgs.length > 1)) c.msgs.shift();
+  // 오래된 메시지부터 덜어냄 (보관 칸 크기 제한)
+  while (c.msgs.length > MAX_MSGS || (JSON.stringify(c).length > 40000 && c.msgs.length > 1)) c.msgs.shift();
   CacheService.getScriptCache().put('conv_' + id, JSON.stringify(c), OFFICE_TTL);
+  storeSave_('cv_' + id, c);
+  if (Math.random() < 0.05) storeSweep_();
+}
+function delConv_(id) {
+  CacheService.getScriptCache().remove('conv_' + id);
+  storeDel_('cv_' + id);
 }
 function inbox_(tid) {
   const raw = CacheService.getScriptCache().get('inbox_' + tid);
-  return raw ? JSON.parse(raw) : [];
+  if (raw) return JSON.parse(raw);
+  return storeLoad_('ib_' + tid) || [];
 }
-function setInbox_(tid, list) { CacheService.getScriptCache().put('inbox_' + tid, JSON.stringify(list.slice(-30)), OFFICE_TTL); }
+function setInbox_(tid, list) {
+  const l = list.slice(-30);
+  CacheService.getScriptCache().put('inbox_' + tid, JSON.stringify(l), OFFICE_TTL);
+  storeSave_('ib_' + tid, l);
+}
 
 /** 요청한 사람이 이 대화의 어느 쪽인지 ('a' | 'b' | null) */
 function side_(c, b, teacher) {
@@ -361,7 +411,7 @@ function notifyByMail_(convId, c, who) {
   try {
     MailApp.sendEmail(t.email, '🐾 숲속 독서실 교무실: ' + from + '이(가) 메시지를 보냈어요',
       from + '이(가) 교무실에서 메시지를 보냈어요.\n\n교무실에서 확인해 주세요: ' + STUDYROOM_URL + '#office\n\n' +
-      '(대화 내용은 메일에 넣지 않아요. 대화는 어느 한쪽이 끝내거나 6시간이 지나면 지워져요.)');
+      '(대화 내용은 메일에 넣지 않아요. 대화는 어느 한쪽이 끝내거나 마지막 메시지에서 12시간이 지나면 지워져요.)');
     cache.put('mail_' + convId + '_' + other.id, '1', MAIL_GAP);
   } catch (e) { console.error(e); }
 }
@@ -427,7 +477,7 @@ function officeClose_(b) {
   const c = getConv_(b.conv);
   if (!c) return { ok: true };
   if (!side_(c, b, teacher)) return { error: '이 대화에 참여할 수 없어요.' };
-  CacheService.getScriptCache().remove('conv_' + b.conv);
+  delConv_(b.conv);
   return { ok: true };
 }
 
@@ -440,7 +490,7 @@ function officeBlock_(b) {
   if (!c || side_(c, b, teacher) !== 'b' || c.a.type !== 'student') return { error: '차단할 수 없어요.' };
   const sh = SpreadsheetApp.getActive().getSheetByName('차단');
   if (sh) sh.appendRow([c.a.device, c.a.nick, teacher.name, new Date()]);
-  CacheService.getScriptCache().remove('conv_' + b.conv);
+  delConv_(b.conv);
   return { ok: true };
 }
 
