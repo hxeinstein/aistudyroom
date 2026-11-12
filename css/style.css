@@ -297,6 +297,12 @@ body.studying .zoom-ctl { display: none; }
 .sg-btns { display: flex; gap: 6px; }
 .sg-btns button { border: 1.5px solid #EADBC2; background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; color: var(--brown); }
 .sg-btns button.on { background: var(--green); border-color: var(--green); color: #fff; }
+.sg-h { font-size: 15px; margin: 16px 0 8px; color: var(--brown); }
+.sg-list { display: flex; flex-direction: column; gap: 8px; max-height: 38vh; overflow-y: auto; }
+.sg-reply { margin-top: 6px; background: #F1F8EC; border-radius: 10px; padding: 7px 10px; font-size: 13.5px; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+.sg-rep { margin: 8px 0 6px; min-height: 54px; font-size: 13px; }
+.sg-pub { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; color: var(--brown); margin-right: auto; }
+.sg-btns { align-items: center; }
 
 /* 화면 조이스틱 (터치 기기에서만, 학생 시점) */
 .joy {

@@ -36,6 +36,44 @@ export function initBoard(c) {
   if (!CONFIG.CHATBOT_URL) return;
   refresh();
   setInterval(refresh, 90000);
+  setTimeout(checkMine, 5000);
+  setInterval(checkMine, 10 * 60 * 1000);
+}
+
+/* 내 건의에 선생님이 답하면 알려 주기 (이 기기로 건의를 넣은 적이 있을 때만 확인) */
+const LS_SUG = 'aistudyroom.sug', LS_SEEN = 'aistudyroom.sugseen';
+const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const sig = (x) => x.status + '|' + x.reply;
+let mine = [];
+async function checkMine() {
+  if (!lsGet(LS_SUG, 0)) return;
+  let r;
+  try { r = await api({ action: 'suggest.mine', device: deviceId() }); } catch (e) { return; }
+  if (!r || !Array.isArray(r.items)) return;
+  mine = r.items;
+  const seen = lsGet(LS_SEEN, {});
+  const fresh = mine.filter((x) => seen[x.id] !== undefined && seen[x.id] !== sig(x) && (x.reply || x.status === '반영함'));
+  for (const x of mine) if (seen[x.id] === undefined) seen[x.id] = sig(x);   // 처음 본 건 그냥 기억
+  lsSet(LS_SEEN, seen);
+  if (fresh.length) {
+    fresh.forEach((x) => (x.isNew = true));
+    const done = fresh.some((x) => x.status === '반영함');
+    ctx.toast(done ? '📮 내 건의가 반영됐어요! 건의함에서 선생님 댓글을 확인해 보세요' : '📮 선생님이 내 건의에 댓글을 달았어요! 건의함에서 확인해 보세요', 8000);
+  }
+}
+function markMineSeen() {
+  const seen = lsGet(LS_SEEN, {});
+  for (const x of mine) { seen[x.id] = sig(x); x.isNew = false; }
+  lsSet(LS_SEEN, seen);
+}
+const STATUS_ICON = { '새 건의': '📨 전달됨', '확인함': '👀 확인함', '반영함': '✅ 반영함', '보류': '⏸️ 보류' };
+function sgCard(x, { me } = {}) {
+  return `<div class="sg-item ${x.isNew ? 'new' : ''}">
+    <div class="sg-head">${me ? '내 건의' : `<b>${esc(x.from)}</b>`} · ${ago(x.t)} <span class="sg-status">${esc(STATUS_ICON[x.status] || x.status)}</span></div>
+    <div class="sg-text">${esc(x.text)}</div>
+    ${x.reply ? `<div class="sg-reply">🧑‍🏫 ${esc(x.reply)}</div>` : ''}
+  </div>`;
 }
 async function refresh() {
   try {
@@ -132,16 +170,35 @@ export function openSuggest() {
       <button class="btn ghost" id="sgCancel" type="button">닫기</button>
       <button class="btn primary" id="sgGo" type="button">📮 넣기</button>
     </div>
-    ${ctx.isAdmin() ? '<button class="btn soft block" id="sgAdmin" type="button" style="margin-top:10px">🗂️ 관리자: 건의함 열어 보기</button>' : ''}`);
+    ${ctx.isAdmin() ? '<button class="btn soft block" id="sgAdmin" type="button" style="margin-top:10px">🗂️ 관리자: 건의함 열어 보기</button>' : ''}
+    <div id="sgMine"></div>
+    <div id="sgPublic"><p class="hint">불러오는 중…</p></div>`);
   m.querySelector('#sgCancel').onclick = ctx.closeModal;
   if (m.querySelector('#sgAdmin')) m.querySelector('#sgAdmin').onclick = openSuggestAdmin;
   m.querySelector('#sgGo').onclick = async () => {
     const r = await api({ action: 'suggest.post', device: deviceId(), nick: ctx.getProfile().name, text: m.querySelector('#sgText').value })
       .catch(() => ({ error: '연결하지 못했어요. 인터넷을 확인해 주세요.' }));
     if (r.error) { m.querySelector('#sgMsg').textContent = r.error; return; }
+    lsSet(LS_SUG, 1);
     ctx.closeModal();
-    ctx.toast('📮 건의를 넣었어요. 고마워요!');
+    ctx.toast('📮 건의를 넣었어요. 선생님이 답하면 알려 줄게요!');
+    setTimeout(checkMine, 2500);
   };
+  // 내 건의 · 공개된 건의 (선생님이 시트에서 '공개'에 체크한 것)
+  const showMine = () => {
+    const box = m.querySelector('#sgMine');
+    if (!box || !mine.length) return;
+    box.innerHTML = `<h3 class="sg-h">📬 내 건의</h3><div class="sg-list">${mine.map((x) => sgCard(x, { me: true })).join('')}</div>`;
+    markMineSeen();
+  };
+  showMine();
+  if (lsGet(LS_SUG, 0)) checkMine().then(showMine);
+  api({ action: 'suggest.public' }).then((r) => {
+    const box = m.querySelector('#sgPublic');
+    if (!box) return;
+    const items = (r && r.items) || [];
+    box.innerHTML = items.length ? `<h3 class="sg-h">📢 친구들의 건의와 선생님 답</h3><div class="sg-list">${items.map((x) => sgCard(x)).join('')}</div>` : '';
+  }).catch(() => { const box = m.querySelector('#sgPublic'); if (box) box.innerHTML = ''; });
   setTimeout(() => m.querySelector('#sgText').focus(), 50);
 }
 
@@ -149,7 +206,7 @@ export function openSuggest() {
 export async function openSuggestAdmin() {
   const m = ctx.openModal(`
     <h2>🗂️ 건의함 (관리자)</h2>
-    <p class="desc">시트의 '건의함' 탭에서도 볼 수 있어요.</p>
+    <p class="desc">시트의 '건의함' 탭에서도 볼 수 있어요. '모두에게 공개'(시트 G칸)에 체크하면 건의와 댓글(H칸)이 학생들 건의함 화면에 보여요.</p>
     <div class="todo-pick" id="sgList"><p class="hint">불러오는 중…</p></div>
     <div class="foot"><button class="btn ghost" id="saClose" type="button">닫기</button></div>`, { wide: true });
   m.querySelector('#saClose').onclick = ctx.closeModal;
@@ -163,7 +220,17 @@ export async function openSuggestAdmin() {
         <div class="sg-head"><b>${esc(x.from)}</b> · ${ago(x.t)} <span class="sg-status">${esc(x.status)}</span></div>
         <div class="sg-text">${esc(x.text)}</div>
         <div class="sg-btns">${['확인함', '반영함', '보류'].map((st) => `<button type="button" data-row="${x.row}" data-st="${st}" class="${x.status === st ? 'on' : ''}">${st}</button>`).join('')}</div>
+        <textarea class="field sg-rep" data-rrow="${x.row}" maxlength="500" placeholder="선생님 댓글 (학생에게 알림이 가요)">${esc(x.reply || '')}</textarea>
+        <div class="sg-btns"><label class="sg-pub"><input type="checkbox" data-prow="${x.row}" ${x.pub ? 'checked' : ''}> 모두에게 공개</label><button type="button" data-save="${x.row}">💾 저장</button></div>
       </div>`).join('') : '<p class="hint">아직 들어온 건의가 없어요</p>';
+    box.querySelectorAll('[data-save]').forEach((b) => (b.onclick = async () => {
+      const row = b.dataset.save;
+      b.textContent = '저장 중…';
+      const r2 = await api({ action: 'suggest.reply', token: ctx.teacherToken(), row: Number(row), reply: box.querySelector(`[data-rrow="${row}"]`).value, pub: box.querySelector(`[data-prow="${row}"]`).checked }).catch(() => ({ error: '연결하지 못했어요' }));
+      if (r2.error) { ctx.toast(r2.error); b.textContent = '💾 저장'; return; }
+      ctx.toast('저장했어요');
+      load();
+    }));
     box.querySelectorAll('[data-row]').forEach((b) => (b.onclick = async () => {
       await api({ action: 'suggest.mark', token: ctx.teacherToken(), row: Number(b.dataset.row), status: b.dataset.st }).catch(() => {});
       load();

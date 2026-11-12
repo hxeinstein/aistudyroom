@@ -626,8 +626,9 @@ function officeCall_(b) {
 
 /* ---------- 응원 게시판 · 건의함 ----------
  * '게시판' 탭: A 번호 | B 시각 | C 쓴 사람 | D 받는 친구 | E 내용 | F 색 | G 기기(암호화) | H 신고 수 | I 숨김
- * '건의함' 탭: A 시각 | B 쓴 사람 | C 내용 | D 기기(암호화) | E 상태(새 건의/확인함/반영함)
- * 관리자('교사' 탭 L칸 '관리자'에 체크된 선생님)만 독서실 안에서 건의함을 볼 수 있어요. 시트에서도 바로 볼 수 있어요.
+ * '건의함' 탭: A 시각 | B 쓴 사람 | C 내용 | D 기기(암호화) | E 상태(새 건의/확인함/반영함/보류) | F 학교 | G 공개 | H 선생님 댓글
+ * 관리자('교사' 탭 L칸 '관리자'에 체크된 선생님)만 독서실 안에서 건의함 전체를 볼 수 있어요. 시트에서도 바로 볼 수 있어요.
+ * G칸 '공개'에 체크한 건의는 학생 건의 + H칸 선생님 댓글이 건의함 화면에서 모두에게 보여요 (어떤 건의가 반영됐는지 알 수 있게).
  * 코드 안에는 개인정보·초대코드·학교 코드·위치를 적지 않아요. 모두 시트에만 있어요.
  */
 const BOARD_KEEP_DAYS = 30;      // 게시판에 보여 줄 기간
@@ -652,7 +653,15 @@ function sheet_(name, header) {
   return sh;
 }
 const boardSheet_ = () => sheet_('게시판', ['번호', '시각', '쓴 사람', '받는 친구', '내용', '색', '기기(암호화)', '신고 수', '숨김', '학교']);
-const suggestSheet_ = () => sheet_('건의함', ['시각', '쓴 사람', '내용', '기기(암호화)', '상태', '학교']);
+const SUG_HEAD = ['시각', '쓴 사람', '내용', '기기(암호화)', '상태', '학교', '공개', '선생님 댓글'];
+function suggestSheet_() {
+  const sh = sheet_('건의함', SUG_HEAD);
+  if (sh.getLastColumn() < SUG_HEAD.length) {   // 예전 탭: 공개 · 선생님 댓글 칸 붙이기
+    sh.getRange(1, 7, 1, 2).setValues([SUG_HEAD.slice(6)]);
+    if (sh.getLastRow() >= 2) sh.getRange(2, 7, sh.getLastRow() - 1, 1).insertCheckboxes();
+  }
+  return sh;
+}
 
 function boardHandle_(body) {
   const a = String(body.action || '');
@@ -664,6 +673,9 @@ function boardHandle_(body) {
     if (a === 'suggest.post') return suggestPost_(body);
     if (a === 'suggest.list') return suggestList_(body);
     if (a === 'suggest.mark') return suggestMark_(body);
+    if (a === 'suggest.public') return suggestPublic_(body);
+    if (a === 'suggest.reply') return suggestReply_(body);
+    if (a === 'suggest.mine') return suggestMine_(body);
     if (a === 'book.import') return bookImport_(body);
     if (a === 'stat.day') return statDay_(body);
     if (a === 'notice.get') return noticeGet_(body);
@@ -739,7 +751,10 @@ function suggestPost_(b) {
   if (text.length < 2) return { error: '건의 내용을 적어 주세요.' };
   const dh = devHash_(b.device);
   if (!countOk_('sug_' + dh, 5, 3600)) return { error: '건의를 너무 많이 보냈어요. 조금 뒤에 다시 보내 줘.' };
-  suggestSheet_().appendRow([new Date(), from, text, dh, '새 건의', b.school]);
+  const sh = suggestSheet_();
+  sh.appendRow([new Date(), from, text, dh, '새 건의', b.school, false, '']);
+  sh.getRange(sh.getLastRow(), 7).insertCheckboxes();
+  CacheService.getScriptCache().remove('sugmine_' + dh);
   const cache = CacheService.getScriptCache();
   if (!cache.get('sug_mail')) {
     const admins = teachers_().filter((t) => isAdmin_(t) && t.email);
@@ -763,7 +778,7 @@ function suggestList_(b) {
   for (let i = rows.length - 1; i >= 1 && items.length < 80; i--) {
     const r = rows[i];
     if (!r[2] || scOf_(r[5]) !== b.school) continue;
-    items.push({ row: i + 1, t: new Date(r[0]).getTime(), from: String(r[1]), text: String(r[2]), status: String(r[4] || '새 건의') });
+    items.push({ row: i + 1, t: new Date(r[0]).getTime(), from: String(r[1]), text: String(r[2]), status: String(r[4] || '새 건의'), pub: r[6] === true, reply: String(r[7] || '') });
   }
   return { items: items, fresh: items.filter((x) => x.status === '새 건의').length };
 }
@@ -775,8 +790,61 @@ function suggestMark_(b) {
   const status = ['새 건의', '확인함', '반영함', '보류'].indexOf(b.status) >= 0 ? b.status : '확인함';
   const row = Number(b.row);
   if (!(row >= 2)) return { error: '잘못된 요청이에요.' };
-  suggestSheet_().getRange(row, 5).setValue(status);
+  const sh = suggestSheet_();
+  sh.getRange(row, 5).setValue(status);
+  CacheService.getScriptCache().removeAll(['sugpub_' + b.school, 'sugmine_' + String(sh.getRange(row, 4).getValue())]);
   return { ok: true };
+}
+
+/** 관리자: 공개 여부 · 선생님 댓글 (시트 G·H칸에 바로 써도 돼요) */
+function suggestReply_(b) {
+  const t = teacherByToken_(b.token);
+  if (!t) return { error: '다시 로그인해 주세요.', relogin: true };
+  if (!isAdmin_(t)) return { error: '관리자만 바꿀 수 있어요.' };
+  const row = Number(b.row);
+  if (!(row >= 2)) return { error: '잘못된 요청이에요.' };
+  const sh = suggestSheet_();
+  if (scOf_(sh.getRange(row, 6).getValue()) !== b.school) return { error: '다른 학교의 건의예요.' };
+  sh.getRange(row, 7, 1, 2).setValues([[b.pub === true, String(b.reply || '').trim().slice(0, 500)]]);
+  CacheService.getScriptCache().removeAll(['sugpub_' + b.school, 'sugmine_' + String(sh.getRange(row, 4).getValue())]);
+  return { ok: true };
+}
+
+/** 학생: 이 기기로 넣은 내 건의의 상태 · 선생님 댓글 (같은 기기면 같은 사람으로 봐요, 최근 10개) */
+function suggestMine_(b) {
+  const dh = devHash_(b.device);
+  if (!b.device) return { items: [] };
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('sugmine_' + dh);
+  if (hit) return JSON.parse(hit);
+  const rows = suggestSheet_().getDataRange().getValues();
+  const items = [];
+  for (let i = rows.length - 1; i >= 1 && items.length < 10; i--) {
+    const r = rows[i];
+    if (!r[2] || String(r[3]) !== dh) continue;
+    items.push({ id: i + 1, t: new Date(r[0]).getTime(), text: String(r[2]), status: String(r[4] || '새 건의'), reply: String(r[7] || '') });
+  }
+  const out = { items: items };
+  try { cache.put('sugmine_' + dh, JSON.stringify(out), 120); } catch (e) {}
+  return out;
+}
+
+/** 누구나: 공개로 체크한 건의 + 선생님 댓글 (같은 학교만, 최근 30개) */
+function suggestPublic_(b) {
+  const cache = CacheService.getScriptCache();
+  const key = 'sugpub_' + b.school;
+  const hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+  const rows = suggestSheet_().getDataRange().getValues();
+  const items = [];
+  for (let i = rows.length - 1; i >= 1 && items.length < 30; i--) {
+    const r = rows[i];
+    if (!r[2] || r[6] !== true || scOf_(r[5]) !== b.school) continue;
+    items.push({ t: new Date(r[0]).getTime(), from: String(r[1]), text: String(r[2]), status: String(r[4] || '새 건의'), reply: String(r[7] || '') });
+  }
+  const out = { items: items };
+  try { cache.put(key, JSON.stringify(out), 60); } catch (e) {}
+  return out;
 }
 
 /* ---------- 교과서 넣기 (관리자) ----------
