@@ -564,7 +564,7 @@ export function createWorld(container, opts = {}) {
   player.lookKey = 's:' + player.animal;
   let teacherLook = null;
   let baseAnimal = player.animal, baseName = opts.name || '', baseStatus = '', baseGoal = '';
-  const playerSpeed = () => animalSpeed(player.animal);
+  const playerSpeed = () => animalSpeed(player.animal) * (area.name === 'park' && pondDepth(player.obj.position.x, player.obj.position.z) > 0.05 ? 0.55 : 1);
   player.obj.position.set(0, DECK_Y, 6.2);
   player.obj.rotation.y = Math.PI;
   let path = [];
@@ -906,7 +906,68 @@ export function createWorld(container, opts = {}) {
   for (const [x, z] of [[-3.1, 0.9], [-5.1, -0.1], [-4.3, 1.2]]) {
     const pad = mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.02, 14), '#6CBF5A', { x: PX + x, y: DECK_Y + 0.035, z, cast: false }); scene.add(pad);
   }
-  pObs(-4, 0.4, 4.6, 3.2);
+  // 연못에는 들어갈 수 있어요: 들어가면 몸이 물에 잠기고, 천천히 걷고, 물결이 퍼짐
+  const POND = { x: PX - 4, z: 0.4, rx: 2.05, rz: 1.38 };
+  const pondDepth = (x, z) => {   // 0(물가) ~ 1(한가운데)
+    const q = ((x - POND.x) / POND.rx) ** 2 + ((z - POND.z) / POND.rz) ** 2;
+    return q < 1 ? 1 - q : 0;
+  };
+  const sinkAt = (a) => {
+    if (a.area !== undefined && a.area !== 'park') return 0;
+    const d = pondDepth(a.obj.position.x, a.obj.position.z);
+    return d ? Math.min(0.26, 0.05 + d * 0.32) * (a.obj.userData.scale || 1) : 0;
+  };
+  const SWIM_DEPTH = 0.3;   // 이보다 깊으면 수영
+  /** 수영 자세: 몸을 앞으로 눕혀 물 위에 뜨게 (y는 바닥 기준 높이 조정값을 돌려줌) */
+  function swimPose(a, on, moving, dt) {
+    const o = a.obj;
+    if (o.rotation.order !== 'YXZ') o.rotation.order = 'YXZ';   // 바라보는 방향 기준으로 눕기
+    const want = on ? 1.3 : 0;
+    o.rotation.x += (want - o.rotation.x) * Math.min(1, dt * 6);
+    o.userData.swimFast = !!moving;
+    const s = o.userData.scale || 1;
+    return on ? -0.16 * s : 0;
+  }
+  const wakeGeo = new THREE.RingGeometry(0.22, 0.3, 28);
+  const wakes = [];
+  function addWake(x, z, big) {
+    let w = wakes.find((k) => !k.on);
+    if (!w) { if (wakes.length > 24) return; w = { m: new THREE.Mesh(wakeGeo, new THREE.MeshBasicMaterial({ color: '#F2FBFF', transparent: true, opacity: 0.7, depthWrite: false })) }; w.m.rotation.x = -Math.PI / 2; scene.add(w.m); wakes.push(w); }
+    w.on = true; w.t = 0; w.big = !!big; w.m.visible = true; w.m.position.set(x, DECK_Y + 0.035, z);
+  }
+  // 털 때 튀는 물방울
+  const dropGeo = new THREE.SphereGeometry(0.035, 6, 5), dropMat = new THREE.MeshBasicMaterial({ color: '#BFE6FF' });
+  const drops = [];
+  function shakeOff(a) {
+    a.obj.userData.shakeT = 1.4;
+    const s = a.obj.userData.scale || 1, o = a.obj.position;
+    for (let i = 0; i < 16; i++) {
+      let d = drops.find((k) => !k.on);
+      if (!d) { if (drops.length > 64) break; d = { m: new THREE.Mesh(dropGeo, dropMat), v: new THREE.Vector3() }; scene.add(d.m); drops.push(d); }
+      const ang = Math.random() * Math.PI * 2;
+      d.on = true; d.t = 0; d.delay = Math.random() * 0.9; d.m.visible = false;
+      d.m.position.set(o.x, o.y + (0.55 + Math.random() * 0.5) * s, o.z);
+      d.v.set(Math.cos(ang) * (1.4 + Math.random()), 1.2 + Math.random() * 1.4, Math.sin(ang) * (1.4 + Math.random()));
+    }
+  }
+  function stepDrops(dt) {
+    for (const d of drops) {
+      if (!d.on) continue;
+      if (d.delay > 0) { d.delay -= dt; continue; }
+      d.m.visible = true; d.t += dt;
+      d.v.y -= 7 * dt; d.m.position.addScaledVector(d.v, dt);
+      if (d.m.position.y < DECK_Y || d.t > 1) { d.on = false; d.m.visible = false; }
+    }
+  }
+  function stepWakes(dt) {
+    for (const w of wakes) {
+      if (!w.on) continue;
+      w.t += dt / (w.big ? 1.3 : 0.9);
+      if (w.t >= 1) { w.on = false; w.m.visible = false; continue; }
+      w.m.scale.setScalar(1 + w.t * (w.big ? 4.2 : 3));
+      w.m.material.opacity = (w.big ? 0.85 : 0.6) * (1 - w.t);
+    }
+  }
 
   // 탈 것 (벤치 · 그네 · 시소 · 뺑뺑이): occ = 앉은 캐릭터, approach = 걸어갈 곳
   const rides = [];
@@ -995,6 +1056,7 @@ export function createWorld(container, opts = {}) {
   const MERRY_BASE = 1.3, MERRY_MAX = 6.5;
   const merry = { disc, w: 0, boost: 0, maxT: 0 };
   const SLUMP_SEC = 10;
+  let wasWet = false, pondTold = false, wakeT = 0;
   [0, 1, 2].forEach((k) => {
     const a = (k / 3) * Math.PI * 2 + Math.PI / 3;
     addRide({ id: 'merry' + k, type: 'merry', group: 'merry', a, approach: P(2.0 + Math.sin(a) * 1.75, DECK_Y, 1.5 + Math.cos(a) * 1.75), occ: null });
@@ -1255,6 +1317,26 @@ export function createWorld(container, opts = {}) {
     if (player.ride && (player.ride.type === 'swing' || player.ride.type === 'merry') && creakT <= 0) { creakT = player.ride.type === 'swing' ? 1.37 : Math.max(0.6, 2.2 * MERRY_BASE / Math.max(MERRY_BASE, merry.w)); opts.onSfx && opts.onSfx('creak'); }
     stepSlide(dt);
     if (area.name !== 'park') return;
+    // 연못: 들어갈 때 첨벙, 물속에서 움직이면 물결
+    stepWakes(dt);
+    const wet = pondDepth(player.obj.position.x, player.obj.position.z) > 0;
+    if (wet && !wasWet) { addWake(player.obj.position.x, player.obj.position.z, true); opts.onSfx && opts.onSfx('splash'); if (!pondTold) { pondTold = true; opts.onToast && opts.onToast('첨벙! 연못에 들어왔어요 💦 물속에선 천천히 걸어요'); } }
+    if (!wet && wasWet) { shakeOff(player); opts.onSfx && opts.onSfx('slosh'); }
+    wasWet = wet;
+    for (const r of remotes.values()) {   // 친구도 물에서 나오면 털기
+      const w = r.a.area === 'park' && pondDepth(r.a.obj.position.x, r.a.obj.position.z) > 0;
+      if (r.wet && !w) shakeOff(r.a);
+      r.wet = w;
+    }
+    stepDrops(dt);
+    wakeT -= dt;
+    if (wakeT <= 0) {
+      wakeT = 0.32;
+      for (const a of [player, ...[...remotes.values()].map((r) => r.a)]) {
+        if ((a.mode !== 'walk' && a.mode !== 'swim') || (a.area && a.area !== 'park' && a !== player)) continue;
+        if (pondDepth(a.obj.position.x, a.obj.position.z) > 0) { addWake(a.obj.position.x, a.obj.position.z); if (a === player) opts.onSfx && opts.onSfx('slosh'); }
+      }
+    }
     // 연못 물결
     const rk = (t * 0.5) % 1;
     ripple.scale.setScalar(1 + rk * 5); ripple.material.opacity = 0.55 * (1 - rk);
@@ -1638,7 +1720,7 @@ export function createWorld(container, opts = {}) {
   function stepRemotes(dt) {
     for (const r of remotes.values()) {
       r.a.obj.visible = r.a.area === area.name;
-      if (r.seatIdx >= 0 || r.onRide) continue;
+      if (r.seatIdx >= 0 || r.onRide) { r.a.obj.rotation.x = 0; continue; }
       r.a.obj.rotation.z = 0;
       const p = r.a.obj.position;
       const d = Math.hypot(r.target.x - p.x, r.target.z - p.z);
@@ -1655,7 +1737,11 @@ export function createWorld(container, opts = {}) {
         let diff = Math.atan2(Math.sin(r.ry - r.a.obj.rotation.y), Math.cos(r.ry - r.a.obj.rotation.y));
         r.a.obj.rotation.y += diff * Math.min(1, dt * 6);
       }
-      p.y = r.a.mode === 'slump' ? DECK_Y - 0.2 * (r.a.obj.userData.scale || 1) : DECK_Y;
+      const swim = r.a.area === 'park' && r.a.mode !== 'slump' && pondDepth(p.x, p.z) > SWIM_DEPTH;
+      const rMoving = r.a.mode === 'walk';
+      if (swim) r.a.mode = 'swim';
+      const lift = swimPose(r.a, swim, rMoving, dt);
+      p.y = swim ? DECK_Y + lift : (r.a.mode === 'slump' ? DECK_Y - 0.2 * (r.a.obj.userData.scale || 1) : DECK_Y) - sinkAt(r.a);
     }
   }
   /** 응원 이모지: 머리 위에 잠깐 떠오름 (uid가 null이면 나) */
@@ -1916,7 +2002,7 @@ export function createWorld(container, opts = {}) {
         walkToSeat(s);
         return;
       }
-      if (h.object === deck || h.object === grass || h.object === rug || h.object === rug2 || h.object === officeFloor || h.object === parkGround || h.object === pathRing || h.object === sand || h.object === entryPath) {
+      if (h.object === deck || h.object === grass || h.object === rug || h.object === rug2 || h.object === officeFloor || h.object === parkGround || h.object === pond || h.object === pathRing || h.object === sand || h.object === entryPath) {
         const p = h.point;
         const B = area.bounds;
         const t = new THREE.Vector3(clamp(p.x, B.x0, B.x1), DECK_Y, clamp(p.z, B.z0, B.z1));
@@ -2122,8 +2208,12 @@ export function createWorld(container, opts = {}) {
       }
     }
     if (!player.seat && !player.officeDesk && !player.ride && !player.slide && !walkingTrail) {
-      player.mode = player.slumpT > 0 ? 'slump' : moving ? 'walk' : 'idle';
-      p.y = player.slumpT > 0 ? DECK_Y - 0.2 * (player.obj.userData.scale || 1) : DECK_Y;
+      const swim = area.name === 'park' && !(player.slumpT > 0) && pondDepth(p.x, p.z) > SWIM_DEPTH;
+      player.mode = player.slumpT > 0 ? 'slump' : swim ? 'swim' : moving ? 'walk' : 'idle';
+      const lift = swimPose(player, swim, moving, dt);
+      p.y = swim ? DECK_Y + lift : (player.slumpT > 0 ? DECK_Y - 0.2 * (player.obj.userData.scale || 1) : DECK_Y) - sinkAt(player);
+    } else if (player.obj.rotation.x) {
+      player.obj.rotation.x = 0;
     }
     // 뭉치 박사 근처인지 (하단 '질문' 버튼 표시용)
     let nb = null;

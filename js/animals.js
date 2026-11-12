@@ -357,7 +357,28 @@ export function animateAnimal(a, mode, t, dt) {
     return;
   }
   if (u.tail) u.tail.rotation.z = Math.sin(t * (mode === 'walk' ? 8 : 3) * slow) * 0.25;
+  // 물에서 나오면 강아지처럼 부르르 털기 (머리 도리도리 + 몸 비틀기)
+  if (u.shakeT > 0) {
+    u.shakeT = Math.max(0, u.shakeT - dt);
+    const k = Math.sin(u.shakeT * 38) * Math.min(1, u.shakeT * 2.2);
+    u.body.rotation.y = k * 0.45; u.head.rotation.y = k * 0.9;
+  } else if (u.body.rotation.y || u.head.rotation.y) { u.body.rotation.y = 0; u.head.rotation.y = 0; }
   if (u.dizzyEyes) for (const e of u.dizzyEyes) { e.visible = !!u.dizzy; if (u.dizzy) e.rotation.z -= dt * 9; }
+  if (mode === 'swim') {
+    // 수영: (몸 전체는 world.js에서 앞으로 눕힘) 고개는 들고, 팔은 번갈아 젓고, 다리는 파닥파닥
+    const sp = u.swimFast ? 7 : 3.2;
+    u.armL.rotation.x = -1.6 + Math.sin(t * sp) * 1.3;
+    u.armR.rotation.x = -1.6 - Math.sin(t * sp) * 1.3;
+    u.armL.rotation.z = 0.25; u.armR.rotation.z = -0.25;
+    u.legL.rotation.x = 0.3 + Math.sin(t * sp * 1.6) * 0.45;
+    u.legR.rotation.x = 0.3 - Math.sin(t * sp * 1.6) * 0.45;
+    u.body.position.y = by + Math.sin(t * 2) * 0.015;
+    u.body.rotation.z = Math.sin(t * sp * 0.5) * 0.08;
+    u.head.position.y = hy;
+    u.head.rotation.x = -1.3;   // 몸은 눕고 머리는 앞을 봄
+    u.head.rotation.z = Math.sin(t * sp * 0.5) * 0.08;
+    return;
+  }
   if (mode === 'slump') {
     // 어지러워서 털썩 주저앉음: 다리는 앞으로, 팔은 축, 머리는 빙글빙글
     u.legL.rotation.x = u.legR.rotation.x = -1.45;

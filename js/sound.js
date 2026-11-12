@@ -160,7 +160,7 @@ function noise(sec) {
   const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   const s = ctx.createBufferSource(); s.buffer = b; return s;
 }
-/** kind: creak(그네·뺑뺑이) | whoosh(미끄럼틀) | thunk(시소) | vend(자판기) | shutter(사진) | sit | step */
+/** kind: creak(그네·뺑뺑이) | whoosh(미끄럼틀) | thunk(시소) | vend(자판기) | shutter(사진) | sit | step | splash(연못 첨벙) | slosh(물속 걸음) */
 export function sfx(kind) {
   if (!ready()) return;
   try {
@@ -184,6 +184,14 @@ export function sfx(kind) {
     } else if (kind === 'shutter') {
       const n = noise(0.08), f = ctx.createBiquadFilter(), g = ctx.createGain();
       f.type = 'highpass'; f.frequency.value = 2500; env(g, t0, 0.002, 0.06, 0.08); n.connect(f).connect(g).connect(out); n.start(t0);
+    } else if (kind === 'splash' || kind === 'slosh') {
+      const big = kind === 'splash';
+      const n = noise(big ? 0.5 : 0.18), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      f.type = 'bandpass'; f.Q.value = 0.9; f.frequency.setValueAtTime(big ? 1800 : 1100, t0); f.frequency.exponentialRampToValueAtTime(big ? 500 : 600, t0 + (big ? 0.45 : 0.16));
+      env(g, t0, 0.005, big ? 0.42 : 0.15, big ? 0.07 : 0.025); n.connect(f).connect(g).connect(out); n.start(t0);
+      const o = ctx.createOscillator(), g2 = ctx.createGain();   // 뽀글
+      o.frequency.setValueAtTime(big ? 500 : 700, t0); o.frequency.exponentialRampToValueAtTime(big ? 1100 : 1300, t0 + 0.08);
+      env(g2, t0, 0.003, 0.08, big ? 0.03 : 0.012); o.connect(g2).connect(out); o.start(t0); o.stop(t0 + 0.12);
     } else if (kind === 'sit' || kind === 'step') {
       const n = noise(0.1), f = ctx.createBiquadFilter(), g = ctx.createGain();
       f.type = 'lowpass'; f.frequency.value = 700; env(g, t0, 0.005, 0.08, 0.04); n.connect(f).connect(g).connect(out); n.start(t0);
