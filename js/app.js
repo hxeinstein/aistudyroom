@@ -8,6 +8,7 @@ import * as Office from './office.js';
 import * as Room from './room.js';
 import * as Board from './board.js';
 import * as Pond from './pond.js';
+import { pickerHTML, bindPicker } from './picker.js';
 import { initJoystick } from './joystick.js';
 import { badWord } from './words.js';
 import * as Sch from './school.js';
@@ -299,19 +300,8 @@ function openModal(html, { wide = false, dismiss = true } = {}) {
 }
 function closeModal() { $('modalWrap').classList.add('hidden'); }
 
-function animalPicker(cur) {
-  const a = S.animalById(cur);
-  return `<div class="animals">${S.ANIMALS.map((x) => `<button type="button" class="animal-btn ${x.id === cur ? 'on' : ''}" data-a="${x.id}">${x.emoji}<small>${x.name}</small></button>`).join('')}</div>
-    <div class="animal-trait" id="animalTrait">${a.emoji} <b>${a.name}</b> · ${a.trait}</div>`;
-}
-function bindAnimalPicker(root, onPick) {
-  root.querySelectorAll('.animal-btn').forEach((b) => (b.onclick = () => {
-    root.querySelectorAll('.animal-btn').forEach((x) => x.classList.toggle('on', x === b));
-    const a = S.animalById(b.dataset.a);
-    root.querySelector('#animalTrait').innerHTML = `${a.emoji} <b>${a.name}</b> · ${a.trait}`;
-    onPick(b.dataset.a);
-  }));
-}
+function animalPicker(cur) { return pickerHTML(cur); }
+function bindAnimalPicker(root, onPick) { bindPicker(root, { cur: root.querySelector('.pk-item.on')?.dataset.a || st.profile?.animal || 'bear', onPick }); }
 
 // 처음 들어오면 닉네임·캐릭터를 무작위로 (닉네임은 바꿀 수 없고, 캐릭터는 설정에서 바꿔요)
 const NAME_A = ['졸린', '반짝', '열공', '느긋한', '새벽', '부지런', '조용한', '말랑', '씩씩한', '꼼꼼', '포근한', '용감한', '차분한', '든든한', '상큼한', '집중'];

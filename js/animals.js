@@ -78,9 +78,8 @@ export const LOOKS = {
   otter: { fur: '#8A5F3F', muzzle: '#E8D2B8', ear: 'tiny', tail: 'long', whiskers: true, scale: 0.85, speed: 1.1 },
   penguin: { fur: '#2F3542', muzzle: '#FFFFFF', ear: 'none', beak: '#F5A23C', face: '#FFFFFF', tail: 'none', waddle: true, limbs: '#F5A23C', speed: 0.8 },
   capybara: { fur: '#9C7B5B', muzzle: '#8F6F51', ear: 'tiny', earColor: '#7E6047', tail: 'none', capy: true, bodyW: 1.2, scale: 1.05, speed: 0.8, yuzu: true },
-  splitgray: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#8E949E', inner: '#F7B3B8', split: '#8E949E', tail: 'long', tailColor: '#8E949E', whiskers: true },
-  splitblack: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#34353B', inner: '#F7B3B8', split: '#34353B', tail: 'long', tailColor: '#34353B', whiskers: true },
-  splitcheese: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#E9A04F', inner: '#F7B3B8', split: '#E9A04F', tail: 'long', tailColor: '#E9A04F', whiskers: true },
+  graycat: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#8E949E', inner: '#F7B3B8', split: '#8E949E', tail: 'long', tailColor: '#8E949E', whiskers: true },
+  cheesecat: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#E9A04F', inner: '#F7B3B8', split: '#E9A04F', tail: 'long', tailColor: '#E9A04F', whiskers: true },
   bun: { fur: '#FFF8EE', muzzle: '#FFFDF8', ear: 'none', tail: 'none', bun: true, limbs: '#F6EBDD', cheekColor: '#FFC2CF' },
   deer: { fur: '#C98F57', muzzle: '#F6E5CF', ear: 'side', antlers: '#8A5A33', tail: 'puff', tailColor: '#FFFFFF', speed: 1.25 },
 };

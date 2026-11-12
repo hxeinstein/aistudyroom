@@ -4,6 +4,7 @@ import { CONFIG } from './config.js';
 import { schoolCode, setSchool } from './school.js';
 import * as Room from './room.js';
 import { animalById, ANIMALS } from './store.js';
+import { pickerHTML, bindPicker } from './picker.js';
 
 const TEACHER_COLORS = ['#B79CE8', '#7FB3E8', '#9ED28C', '#F59FB4', '#F7C96B', '#5E6B7D'];
 const lookOf = (me) => ({ animal: me.animal || 'bear', color: me.color || '#B79CE8', glasses: !!me.glasses, name: me.name });
@@ -451,22 +452,20 @@ function notify(title, body) {
 /** 선생님 캐릭터 고르기 (동물 · 옷 색 · 안경) */
 function lookPicker(look) {
   return `
-    <div class="animals small">${ANIMALS.map((x) => `<button type="button" class="animal-btn ${x.id === look.animal ? 'on' : ''}" data-a="${x.id}">${x.emoji}<small>${x.name}</small></button>`).join('')}</div>
+    ${pickerHTML(look.animal)}
     <label class="lbl">옷 색</label>
     <div class="swatches">${TEACHER_COLORS.map((c) => `<button type="button" class="sw-btn ${c === look.color ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="옷 색"></button>`).join('')}
       <label class="glasses-tg"><input type="checkbox" id="lkGlasses" ${look.glasses ? 'checked' : ''}/> 👓 안경</label></div>
     <p class="hint">선생님 캐릭터는 <b>교사증 목걸이</b>를 걸고 있어서 학생과 구분돼요.</p>`;
 }
 function bindLookPicker(root, look) {
-  root.querySelectorAll('.animal-btn').forEach((b) => (b.onclick = () => {
-    look.animal = b.dataset.a;
-    root.querySelectorAll('.animal-btn').forEach((x) => x.classList.toggle('on', x === b));
-  }));
+  const pk = bindPicker(root, { cur: look.animal, onPick: (a) => { look.animal = a; }, look: () => ({ clothes: look.color, glasses: look.glasses, teacher: true }) });
   root.querySelectorAll('.sw-btn').forEach((b) => (b.onclick = () => {
     look.color = b.dataset.c;
     root.querySelectorAll('.sw-btn').forEach((x) => x.classList.toggle('on', x === b));
+    pk.refresh();
   }));
-  root.querySelector('#lkGlasses').onchange = (e) => { look.glasses = e.target.checked; };
+  root.querySelector('#lkGlasses').onchange = (e) => { look.glasses = e.target.checked; pk.refresh(); };
 }
 
 export function openTeacherLogin() {
