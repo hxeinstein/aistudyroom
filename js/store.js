@@ -51,8 +51,8 @@ export const ANIMALS = [
   { id: 'fox', name: '여우', emoji: '🦊', trait: '끝이 하얀 복슬 꼬리' , group: 'unique' },
   { id: 'panda', name: '판다', emoji: '🐼', trait: '까만 눈 무늬와 까만 팔다리' , group: 'cozy' },
   { id: 'frog', name: '개구리', emoji: '🐸', trait: '머리 위 동그란 눈 · 폴짝폴짝' , group: 'unique' },
-  { id: 'mouse', name: '생쥐', emoji: '🐭', trait: '아주 작아서 방석을 쌓고 겨우 앉아요' , group: 'cozy' },
-  { id: 'hamster', name: '햄스터', emoji: '🐹', trait: '작고 볼이 빵빵 · 방석 필요' , group: 'cozy' },
+  { id: 'mouse', name: '생쥐', emoji: '🐭', trait: '아주 작아서 방석을 쌓고 겨우 앉아요' , group: 'small' },
+  { id: 'hamster', name: '햄스터', emoji: '🐹', trait: '작고 볼이 빵빵 · 방석 필요' , group: 'small' },
   { id: 'elephant', name: '코끼리', emoji: '🐘', trait: '덩치가 커서 엉덩이가 의자 밖으로!' , group: 'big' },
   { id: 'giraffe', name: '기린', emoji: '🦒', trait: '긴 목 · 칸막이 너머까지 보여요' , group: 'big' },
   { id: 'lion', name: '사자', emoji: '🦁', trait: '풍성한 갈기와 끝이 둥근 꼬리' , group: 'cat' },
@@ -62,7 +62,7 @@ export const ANIMALS = [
   { id: 'sloth', name: '나무늘보', emoji: '🦥', trait: '모든 게 느릿느릿 (걸음도 느려요)' , group: 'unique' },
   { id: 'hippo', name: '하마', emoji: '🦛', trait: '큰 주둥이 · 엉덩이가 튀어나와요' , group: 'big' },
   { id: 'raccoon', name: '너구리', emoji: '🦝', trait: '눈가 가면과 줄무늬 꼬리' , group: 'unique' },
-  { id: 'otter', name: '수달', emoji: '🦦', trait: '조금 작고 날렵 · 긴 꼬리' , group: 'unique' },
+  { id: 'otter', name: '수달', emoji: '🦦', trait: '조금 작고 날렵 · 긴 꼬리' , group: 'small' },
   { id: 'penguin', name: '펭귄', emoji: '🐧', trait: '부리와 날개 · 뒤뚱뒤뚱 걸어요' , group: 'unique' },
   { id: 'deer', name: '사슴', emoji: '🦌', trait: '사슴뿔 · 가볍고 빠른 걸음' , group: 'big' },
   { id: 'capybara', name: '카피바라', emoji: '🍊', trait: '느긋한 표정 · 머리 위에 귤 하나' , group: 'big' },
@@ -72,7 +72,8 @@ export const ANIMALS = [
 ];
 // 캐릭터 고르기 화면의 분류 탭
 export const ANIMAL_GROUPS = [
-  { id: 'cozy', name: '포근한 친구', emoji: '🐻' },
+  { id: 'cozy', name: '포근 친구', emoji: '🐻' },
+  { id: 'small', name: '작은 친구', emoji: '🐭' },
   { id: 'cat', name: '고양이과', emoji: '🐱' },
   { id: 'big', name: '큰 친구', emoji: '🦒' },
   { id: 'unique', name: '개성파', emoji: '🐸' },

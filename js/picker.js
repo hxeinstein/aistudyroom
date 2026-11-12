@@ -43,7 +43,7 @@ export function pickerHTML(cur) {
   return `
     <div class="pk">
       <div class="pk-stage" id="pkStage"><div class="pk-name" id="pkName"><b>${esc(a.name)}</b><small>${esc(a.trait)}</small></div></div>
-      <div class="pk-tabs" id="pkTabs">${ANIMAL_GROUPS.map((g) => `<button type="button" class="pk-tab ${g.id === a.group ? 'on' : ''}" data-g="${g.id}">${g.emoji} ${esc(g.name)}</button>`).join('')}</div>
+      <div class="pk-tabs" id="pkTabs">${ANIMAL_GROUPS.map((g) => `<button type="button" class="pk-tab ${g.id === a.group ? 'on' : ''}" data-g="${g.id}"><span>${g.emoji}</span>${esc(g.name)}</button>`).join('')}</div>
       <div class="pk-grid" id="pkGrid"></div>
     </div>`;
 }
