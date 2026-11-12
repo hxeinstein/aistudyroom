@@ -848,48 +848,50 @@ export function createWorld(container, opts = {}) {
 
   // ---------------- 🌿 쉼터: 산책로 + 놀이터 (x = PX 근처의 다른 구역) ----------------
   const PX = -36;   // 공부방 왼쪽 숲속 (교무실 반대쪽), 오솔길로 이어짐
-  areas.park = { name: 'park', bounds: { x0: PX - 12.5, x1: PX + 12.5, z0: -9.5, z1: 9.3 }, obs: [] };
+  areas.park = { name: 'park', bounds: { x0: PX - 16.5, x1: PX + 16.5, z0: -13, z1: 13 }, obs: [] };
   const pObs = (x, z, w, d) => areas.park.obs.push({ x0: PX + x - w / 2, x1: PX + x + w / 2, z0: z - d / 2, z1: z + d / 2 });
   const P = (x, y, z) => new THREE.Vector3(PX + x, y, z);
-  const PARK_ENTRY = P(0, DECK_Y, 7.9);
-  const PARK_EXIT = P(0, DECK_Y, 8.8);
+  const PARK_ENTRY = P(0, DECK_Y, 10.6);
+  const PARK_EXIT = P(0, DECK_Y, 12.3);
+  // 쉼터 크기: 산책로(타원) 반지름 · 꼬마 기차 선로
+  const RING = { r0: 11.55, r1: 12.85, sz: 0.78 }, TRACK = { rx: 14.3, rz: 11.45 };
   const MAIN_PARK_PORTAL = new THREE.Vector3(-9.0, DECK_Y, -0.2);   // 공부방 왼쪽 끝 (교무실 문과 반대쪽)
   // 땅 · 산책로
-  const parkGround = mesh(new THREE.CylinderGeometry(21, 21.5, 0.3, 48), '#9BD67A', { x: PX, y: DECK_Y - 0.15, cast: false, receive: true });
+  const parkGround = mesh(new THREE.CylinderGeometry(23, 23.5, 0.3, 64), '#9BD67A', { x: PX, y: DECK_Y - 0.15, cast: false, receive: true });
   scene.add(parkGround);
   // 산책로: 오솔길과 같은 갈색 흙길 + 진한 테두리 + 자갈
-  for (const [r0, r1] of [[7.5, 7.68], [8.92, 9.1]]) {
-    const edge = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 72), mat('#9C7046'));
-    edge.rotation.x = -Math.PI / 2; edge.scale.y = 0.75; edge.position.set(PX, DECK_Y + 0.011, 0); scene.add(edge);
+  for (const [r0, r1] of [[RING.r0 - 0.15, RING.r0 + 0.03], [RING.r1 - 0.03, RING.r1 + 0.15]]) {
+    const edge = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 96), mat('#9C7046'));
+    edge.rotation.x = -Math.PI / 2; edge.scale.y = RING.sz; edge.position.set(PX, DECK_Y + 0.011, 0); scene.add(edge);
   }
-  const pathRing = new THREE.Mesh(new THREE.RingGeometry(7.65, 8.95, 72), mat('#C69A68'));
-  pathRing.rotation.x = -Math.PI / 2; pathRing.scale.y = 0.75; pathRing.position.set(PX, DECK_Y + 0.012, 0); pathRing.receiveShadow = true;
+  const pathRing = new THREE.Mesh(new THREE.RingGeometry(RING.r0, RING.r1, 96), mat('#C69A68'));
+  pathRing.rotation.x = -Math.PI / 2; pathRing.scale.y = RING.sz; pathRing.position.set(PX, DECK_Y + 0.012, 0); pathRing.receiveShadow = true;
   scene.add(pathRing);
-  scene.add(mesh(new THREE.BoxGeometry(1.64, 0.018, 3.2), '#9C7046', { x: PX, y: DECK_Y + 0.009, z: 7.6, cast: false, receive: true }));
-  const entryPath = mesh(new THREE.BoxGeometry(1.32, 0.02, 3.2), '#C69A68', { x: PX, y: DECK_Y + 0.011, z: 7.6, cast: false, receive: true });
+  scene.add(mesh(new THREE.BoxGeometry(1.64, 0.018, 3.4), '#9C7046', { x: PX, y: DECK_Y + 0.009, z: 11.6, cast: false, receive: true }));
+  const entryPath = mesh(new THREE.BoxGeometry(1.32, 0.02, 3.4), '#C69A68', { x: PX, y: DECK_Y + 0.011, z: 11.6, cast: false, receive: true });
   { const prd2 = mulberry(77);
-    for (let i = 0; i < 90; i++) {
-      const a = prd2() * Math.PI * 2, r = 7.75 + prd2() * 1.1;
-      scene.add(mesh(new THREE.CylinderGeometry(0.05 + prd2() * 0.05, 0.06, 0.02, 6), prd2() < 0.5 ? '#B08658' : '#D8B98C', { x: PX + Math.cos(a) * r, y: DECK_Y + 0.025, z: Math.sin(a) * r * 0.75, cast: false }));
+    for (let i = 0; i < 140; i++) {
+      const a = prd2() * Math.PI * 2, r = RING.r0 + 0.1 + prd2() * 1.1;
+      scene.add(mesh(new THREE.CylinderGeometry(0.05 + prd2() * 0.05, 0.06, 0.02, 6), prd2() < 0.5 ? '#B08658' : '#D8B98C', { x: PX + Math.cos(a) * r, y: DECK_Y + 0.025, z: Math.sin(a) * r * RING.sz, cast: false }));
     } }
   scene.add(entryPath);
   // 나무 · 꽃
   const prnd = mulberry(21);
-  for (let i = 0; i < 40; i++) {
-    const a = prnd() * Math.PI * 2, r = 12.5 + prnd() * 7;
-    const x = Math.cos(a) * r, z = Math.sin(a) * r * 0.85;
-    if (z > 2.5 && x > -14) continue;   // 화면 앞쪽과 오솔길 쪽은 비워서 시야 확보
+  for (let i = 0; i < 64; i++) {
+    const a = prnd() * Math.PI * 2, r = 17 + prnd() * 6;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r * 0.82;
+    if (z > 2.5 && x > -18) continue;   // 화면 앞쪽과 오솔길 쪽은 비워서 시야 확보
     const g = new THREE.Group();
     tree(PX + x, z, 0.9 + prnd() * 0.7, prnd() < 0.4);
   }
-  for (let i = 0; i < 140; i++) {
-    const a = prnd() * Math.PI * 2, r = 9.6 + prnd() * 3;
-    scene.add(mesh(fGeo, flowerColors[i % 4], { x: PX + Math.cos(a) * r, y: DECK_Y + 0.08, z: Math.sin(a) * r * 0.78, cast: false }));
+  for (let i = 0; i < 220; i++) {
+    const a = prnd() * Math.PI * 2, r = 15.4 + prnd() * 1.6;
+    scene.add(mesh(fGeo, flowerColors[i % 4], { x: PX + Math.cos(a) * r, y: DECK_Y + 0.08, z: Math.sin(a) * r * 0.8, cast: false }));
   }
   // 가로등 (밤에 켜짐: 공부방 전구와 같은 빛)
   // 놀이터 쪽(10°, 320°) 가로등은 산책로 바깥으로 빼서 그네·시소를 가리지 않게
-  for (const [deg, k] of [[10, 1.29], [65, 1], [150, 1], [195, 1], [235, 1], [320, 1.29]]) {
-    const t = (deg * Math.PI) / 180, x = Math.cos(t) * 7.3 * k, z = Math.sin(t) * 5.45 * k;
+  for (const [deg, k] of [[20, 1], [150, 1], [210, 1], [250, 1], [285, 1], [350, 1]]) {
+    const t = (deg * Math.PI) / 180, x = Math.cos(t) * 10.9 * k, z = Math.sin(t) * 8.4 * k;
     const g = new THREE.Group(); g.position.set(PX + x, DECK_Y, z);
     g.add(mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.2, 8), '#5E4630', { y: 1.1 }));
     g.add(mesh(new THREE.CylinderGeometry(0.2, 0.12, 0.18, 10), '#5E4630', { y: 2.3 }));
@@ -907,22 +909,21 @@ export function createWorld(container, opts = {}) {
   for (const [x, z, r] of [[-1.8, -1.0, 0.3], [-5.9, 1.0, 0.28], [-3.2, -1.5, 0.24]]) {
     const pad = mesh(new THREE.CylinderGeometry(r, r, 0.02, 14), '#6CBF5A', { x: PX + x, y: DECK_Y + 0.035, z, cast: false }); scene.add(pad);
   }
-  // 낚시터 (연못 앞쪽으로 나온 나무 데크)
-  const PIER = { x0: -3.1, x1: -2.1, z0: 1.25, z1: 3.1 };
+  // 낚시터 (연못 왼쪽 옆에서 물 쪽으로 나온 나무 데크)
+  const PIER = { x0: -8.1, x1: -5.85, z0: -0.3, z1: 0.7 };
   const pier = new THREE.Group(); pier.position.set(PX + (PIER.x0 + PIER.x1) / 2, DECK_Y, (PIER.z0 + PIER.z1) / 2);
-  const pierLen = PIER.z1 - PIER.z0;
-  pier.add(mesh(new THREE.BoxGeometry(1.0, 0.06, pierLen), '#B98A57', { y: 0.05 }));
-  for (let k = 0; k < 6; k++) pier.add(mesh(new THREE.BoxGeometry(1.02, 0.015, 0.03), '#8A6238', { y: 0.085, z: -pierLen / 2 + 0.15 + k * (pierLen - 0.3) / 5, cast: false }));
-  for (const sx of [-0.45, 0.45]) for (const sz of [-pierLen / 2 + 0.1, 0]) pier.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 6), '#7A5530', { x: sx, y: 0.02, z: sz }));
+  const pierLen = PIER.x1 - PIER.x0;
+  pier.add(mesh(new THREE.BoxGeometry(pierLen, 0.06, 1.0), '#B98A57', { y: 0.05 }));
+  for (let k = 0; k < 7; k++) pier.add(mesh(new THREE.BoxGeometry(0.03, 0.015, 1.02), '#8A6238', { y: 0.085, x: -pierLen / 2 + 0.15 + k * (pierLen - 0.3) / 6, cast: false }));
+  for (const sz of [-0.45, 0.45]) for (const sx of [pierLen / 2 - 0.1, 0]) pier.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 6), '#7A5530', { x: sx, y: 0.02, z: sz }));
   scene.add(pier);
-  const pierTop = pier.children[0];
-  const FISH_SPOT = P(-2.6, DECK_Y, 1.5);
+  const FISH_SPOT = P(-6.15, DECK_Y, 0.2);
   const fishSign = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.22), new THREE.MeshBasicMaterial({ map: canvasTex(256, 64, (c, w, h) => {
     c.fillStyle = '#FFF8E3'; c.beginPath(); c.roundRect(2, 2, w - 4, h - 4, 14); c.fill();
     c.fillStyle = '#6B4A2E'; c.font = `800 30px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🎣 과학 낚시터', w / 2, h / 2 + 2);
   }), transparent: true }));
-  fishSign.position.set(PX - 1.75, DECK_Y + 0.75, 3.15); scene.add(fishSign);
-  scene.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6), '#7A5530', { x: PX - 1.75, y: DECK_Y + 0.35, z: 3.12 }));
+  fishSign.position.set(PX - 8.4, DECK_Y + 0.75, 1.15); scene.add(fishSign);
+  scene.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6), '#7A5530', { x: PX - 8.4, y: DECK_Y + 0.35, z: 1.12 }));
   pier.traverse((o) => { o.userData.fishSpot = true; });
   fishSign.userData.fishSpot = true;
   // 연못에는 들어갈 수 있어요: 들어가면 몸이 물에 잠기고, 천천히 걷고, 물결이 퍼짐
@@ -992,7 +993,7 @@ export function createWorld(container, opts = {}) {
   function startFishing() {
     if (player.ride) leaveRide(true);
     player.obj.position.set(FISH_SPOT.x, DECK_Y, FISH_SPOT.z);
-    player.obj.rotation.y = Math.PI;   // 연못 쪽(-z)을 봄
+    player.obj.rotation.y = Math.PI / 2;   // 연못 쪽(+x)을 봄
     if (!player.rig) makeRig(player);
     fishing = { t: 0, biteAt: 2.5 + Math.random() * 3.5, phase: 'wait', pull: 0, catch: null };
     opts.onSfx && opts.onSfx('whoosh');
@@ -1020,7 +1021,7 @@ export function createWorld(container, opts = {}) {
         f.phase = 'bite';
         showFx(null, '❗');
         opts.onSfx && opts.onSfx('splash');
-        addWake(player.obj.position.x, player.obj.position.z - 2.5);
+        addWake(player.obj.position.x + Math.sin(player.obj.rotation.y) * 2.5, player.obj.position.z + Math.cos(player.obj.rotation.y) * 2.5);
         if (opts.onFishBite) opts.onFishBite(); else fishResult(null);
       }
     } else if (f.phase === 'bite') {
@@ -1113,7 +1114,7 @@ export function createWorld(container, opts = {}) {
   const rides = [];
   const addRide = (r) => { rides.push(r); return r; };
   // 벤치: 숲 쪽을 바라봄. 하나는 스트레칭 벤치
-  const benches = [[-7.6, -4.2], [-2.5, -7.4], [3.0, -7.4, true], [9.3, -2.4]];
+  const benches = [[-9.7, -2.9], [-9.7, 2.9], [-5.2, -7.4], [10.3, 0.6, true], [9.0, 4.6]];
   benches.forEach(([x, z, stretch], i) => {
     const g = new THREE.Group(); g.position.set(PX + x, DECK_Y, z);
     const rot = Math.atan2(x, z); g.rotation.y = rot;   // 숲 쪽을 바라봄 (나무 너머 하늘)
@@ -1212,6 +1213,186 @@ export function createWorld(container, opts = {}) {
     scene.add(g);
     addRide({ id: 'pad' + k, type: 'pad', group: 'pad' + k, pad: g, face, approach: P(x + r + 0.4, DECK_Y, z + 0.15), occ: null });
   });
+
+  // ================= 새 놀이기구 =================
+  const rotd = (m, ax, v) => { m.rotation[ax] = v; return m; };
+  // 🤸 트램펄린: 꾹 누르면 점점 높이, 높이 뛰면 가끔 공중제비
+  const TR = { x: -5.6, z: 5.4, r: 1.15 };
+  { const g = new THREE.Group(); g.position.set(PX + TR.x, DECK_Y, TR.z);
+    const rim = mesh(new THREE.TorusGeometry(TR.r, 0.1, 8, 36), '#4D8FD1', { y: 0.42 }); rim.rotation.x = -Math.PI / 2; g.add(rim);
+    for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; g.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.42, 6), '#3A3A3A', { x: Math.cos(a) * TR.r, y: 0.21, z: Math.sin(a) * TR.r })); }
+    g.traverse((o) => { o.userData.ride = 'tramp'; });
+    scene.add(g); }
+  const trampMat = mesh(new THREE.CylinderGeometry(TR.r - 0.04, TR.r - 0.04, 0.02, 36), '#2F3A44', { x: PX + TR.x, y: DECK_Y + 0.42, z: TR.z, cast: false });
+  trampMat.userData.ride = 'tramp'; scene.add(trampMat);
+  pObs(TR.x, TR.z, 2.4, 2.4);
+  addRide({ id: 'tramp', type: 'tramp', group: 'tramp', approach: P(TR.x, DECK_Y, TR.z + 1.7), occ: null });
+  const tramp = { boost: 0, ph: 0, flip: false, dip: 0 };
+
+  // 💪 철봉 (낮은 것 · 중간 · 높은 것)
+  const BAR = { x: -2.1, z: 6.0, hs: [1.15, 1.4, 1.65] };
+  { const g = new THREE.Group(); g.position.set(PX + BAR.x, DECK_Y, BAR.z);
+    const xs = [-1.5, -0.5, 0.5, 1.5];
+    xs.forEach((x, k) => { const h = Math.max(BAR.hs[Math.max(0, k - 1)], BAR.hs[Math.min(2, k)]); g.add(mesh(new THREE.CylinderGeometry(0.06, 0.07, h + 0.05, 8), '#F5C451', { x, y: (h + 0.05) / 2 })); });
+    BAR.hs.forEach((h, k) => { const b = mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.0, 8), '#C9CED4', { x: -1 + k, y: h }); b.rotation.z = Math.PI / 2; g.add(b); });
+    g.traverse((o) => { o.userData.ride = 'bar'; });
+    scene.add(g); }
+  pObs(BAR.x, BAR.z, 3.2, 0.5);
+  BAR.hs.forEach((h, k) => addRide({ id: 'bar' + k, type: 'bar', group: 'bar', h, bx: BAR.x - 1 + k, approach: P(BAR.x - 1 + k, DECK_Y, BAR.z + 0.9), occ: null }));
+  const bar = { boost: 0 };
+
+  // 🧗 정글짐 (꼭대기 네 귀퉁이에 올라앉기)
+  const JG = { x: 1.3, z: 5.2, s: 0.8, H: 1.6 };
+  { const g = new THREE.Group(); g.position.set(PX + JG.x, DECK_Y, JG.z);
+    const cols = ['#E2574C', '#F5C451', '#4D8FD1', '#81C784'];
+    const n = [-1, 0, 1].map((i) => i * JG.s), ys = [0, JG.s, JG.H];
+    for (const x of n) for (const z of n) g.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, JG.H, 6), cols[(Math.abs(x) + Math.abs(z)) % 4 | 0], { x, y: JG.H / 2, z }));
+    ys.slice(1).forEach((y, yi) => {
+      for (const z of n) { const b = mesh(new THREE.CylinderGeometry(0.03, 0.03, JG.s * 2, 6), cols[(yi + 1) % 4], { y, z }); b.rotation.z = Math.PI / 2; g.add(b); }
+      for (const x of n) { const b = mesh(new THREE.CylinderGeometry(0.03, 0.03, JG.s * 2, 6), cols[(yi + 2) % 4], { x, y }); b.rotation.x = Math.PI / 2; g.add(b); }
+    });
+    g.traverse((o) => { o.userData.ride = 'jungle'; });
+    scene.add(g); }
+  pObs(JG.x, JG.z, 1.9, 1.9);
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz], k) => addRide({
+    id: 'jg' + k, type: 'jungle', group: 'jungle', climb: 0,
+    top: P(JG.x + sx * JG.s, DECK_Y + JG.H + 0.2, JG.z + sz * JG.s), face: Math.atan2(sx, sz),
+    approach: P(JG.x + sx * (JG.s + 0.75), DECK_Y, JG.z + sz * (JG.s + 0.75)), occ: null }));
+
+  // 🐴 스프링 흔들말 (말 · 오리 · 돌고래)
+  const SPRINGS = [{ x: 4.7, z: 5.9, c: '#C98A5A', k: 'horse' }, { x: 6.1, z: 6.3, c: '#F5C451', k: 'duck' }, { x: 7.5, z: 5.7, c: '#6EC1E4', k: 'dolphin' }];
+  SPRINGS.forEach((sp, k) => {
+    const base = new THREE.Group(); base.position.set(PX + sp.x, DECK_Y, sp.z);
+    base.add(mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.06, 14), '#8A8F96', { y: 0.03 }));
+    for (let i = 0; i < 4; i++) { const c = mesh(new THREE.TorusGeometry(0.11, 0.025, 6, 14), '#C9CED4', { y: 0.1 + i * 0.07 }); c.rotation.x = Math.PI / 2; base.add(c); }
+    const rock = new THREE.Group(); rock.position.y = 0.36; base.add(rock);
+    const body = mesh(new THREE.SphereGeometry(0.26, 14, 10), sp.c, { y: 0.14 }); body.scale.set(0.8, 0.75, 1.35); rock.add(body);
+    const head = mesh(new THREE.SphereGeometry(0.17, 12, 10), sp.c, { y: sp.k === 'dolphin' ? 0.22 : 0.42, z: 0.32 }); rock.add(head);
+    if (sp.k === 'horse') { for (const sx of [-0.07, 0.07]) rock.add(mesh(new THREE.ConeGeometry(0.04, 0.1, 6), sp.c, { x: sx, y: 0.6, z: 0.3 })); rock.add(mesh(new THREE.BoxGeometry(0.05, 0.2, 0.2), '#6B4A2E', { y: 0.5, z: 0.18 })); }
+    if (sp.k === 'duck') rock.add(rotd(mesh(new THREE.ConeGeometry(0.06, 0.16, 8), '#F28C28', { y: 0.4, z: 0.5 }), 'x', Math.PI / 2));
+    if (sp.k === 'dolphin') { const f = mesh(new THREE.ConeGeometry(0.08, 0.2, 6), sp.c, { y: 0.36, z: -0.05 }); rock.add(f); }
+    for (const sx of [-0.12, 0.12]) rock.add(mesh(new THREE.SphereGeometry(0.03, 6, 6), '#2A2222', { x: sx, y: (sp.k === 'dolphin' ? 0.26 : 0.46), z: 0.46 }));
+    for (const sx of [-0.2, 0.2]) rock.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.22, 6), '#E2574C', { x: sx, y: 0.48, z: 0.2 }));   // 손잡이
+    base.traverse((o) => { o.userData.ride = 'spring' + k; });
+    scene.add(base); pObs(sp.x, sp.z, 0.7, 0.9);
+    addRide({ id: 'spring' + k, type: 'spring', group: 'spring' + k, rock, ph: k * 1.3, approach: P(sp.x + 0.75, DECK_Y, sp.z + 0.3), occ: null });
+  });
+
+  // 🪂 짚라인: 높은 망대에서 줄에 매달려 슝
+  const ZIP = { a: P(4.7, DECK_Y + 3.1, -7.6), b: P(10.4, DECK_Y + 1.75, -2.9), tower: P(4.7, DECK_Y, -7.6) };
+  { const g = new THREE.Group(); g.position.copy(ZIP.tower);
+    for (const sx of [-0.55, 0.55]) for (const sz of [-0.55, 0.55]) g.add(mesh(new THREE.CylinderGeometry(0.07, 0.08, 3.4, 8), '#8A5A33', { x: sx, y: 1.7, z: sz }));
+    g.add(mesh(new THREE.BoxGeometry(1.3, 0.1, 1.3), '#B98A57', { y: 2.55 }));
+    for (const sx of [-0.6, 0.6]) g.add(mesh(new THREE.BoxGeometry(0.05, 0.5, 1.3), '#8A5A33', { x: sx, y: 2.85 }));
+    g.add(mesh(new THREE.BoxGeometry(1.3, 0.5, 0.05), '#8A5A33', { y: 2.85, z: -0.62 }));
+    g.add(rotd(mesh(new THREE.ConeGeometry(1.05, 0.6, 4), '#E2574C', { y: 3.75 }), 'y', Math.PI / 4));
+    for (let i = 0; i < 8; i++) g.add(mesh(new THREE.BoxGeometry(0.5, 0.04, 0.05), '#6B4A2E', { y: 0.3 + i * 0.3, z: 0.68 }));   // 사다리
+    for (const sx of [-0.25, 0.25]) g.add(mesh(new THREE.BoxGeometry(0.05, 2.6, 0.05), '#6B4A2E', { x: sx, y: 1.3, z: 0.68 }));
+    g.traverse((o) => { o.userData.zip = true; });
+    scene.add(g); }
+  { const pole = mesh(new THREE.CylinderGeometry(0.08, 0.09, 2.0, 8), '#8A5A33', { x: ZIP.b.x + 0.35, y: DECK_Y + 1.0, z: ZIP.b.z + 0.25 }); pole.userData.zip = true; scene.add(pole);
+    const pad = mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.03, 20), '#EAD9B0', { x: ZIP.b.x - 0.6, y: DECK_Y + 0.015, z: ZIP.b.z - 0.5, cast: false, receive: true }); scene.add(pad);
+    const d = ZIP.b.clone().sub(ZIP.a), len = d.length();
+    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, len, 5), mat('#4A4A4A'));
+    cable.position.copy(ZIP.a).addScaledVector(d, 0.5); cable.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize()); scene.add(cable); }
+  const trolley = mesh(new THREE.BoxGeometry(0.12, 0.08, 0.16), '#E2574C', { cast: false }); trolley.visible = false; scene.add(trolley);
+  pObs(4.7, -7.6, 1.4, 1.3); pObs(ZIP.b.x - PX + 0.35, ZIP.b.z + 0.25, 0.3, 0.3);
+  const zipRide = addRide({ id: 'zip', type: 'zip', group: 'zip', approach: P(4.7, DECK_Y, -6.5), occ: null });
+
+  // 🎡 관람차 (시각으로 돌아서 누가 봐도 같은 모습)
+  const FW = { x: -1.4, z: -7.9, r: 3.2, hub: 4.0, n: 6, period: 56 };
+  const fwAngle = () => ((Date.now() / 1000) % FW.period) / FW.period * Math.PI * 2;
+  const fwWheel = new THREE.Group(); fwWheel.position.set(PX + FW.x, DECK_Y + FW.hub, FW.z); scene.add(fwWheel);
+  { for (const zz of [-0.35, 0.35]) {
+      const rim = mesh(new THREE.TorusGeometry(FW.r, 0.06, 8, 48), '#F5F0E6', { z: zz }); fwWheel.add(rim);
+      for (let k = 0; k < 12; k++) { const sp = mesh(new THREE.CylinderGeometry(0.025, 0.025, FW.r, 5), '#E8D9C0', { z: zz }); sp.rotation.z = (k / 12) * Math.PI * 2; sp.position.set(Math.sin(-sp.rotation.z) * FW.r / 2, Math.cos(sp.rotation.z) * FW.r / 2, zz); fwWheel.add(sp); }
+    }
+    const axle = mesh(new THREE.CylinderGeometry(0.16, 0.16, 1.0, 12), '#9AA4AE'); axle.rotation.x = Math.PI / 2; fwWheel.add(axle);
+    const legs = new THREE.Group(); legs.position.set(PX + FW.x, DECK_Y, FW.z);
+    for (const zz of [-0.55, 0.55]) for (const sx of [-1, 1]) {
+      const l = mesh(new THREE.CylinderGeometry(0.1, 0.12, Math.hypot(1.7, FW.hub), 8), '#E2574C', { x: sx * 0.85, y: FW.hub / 2, z: zz }); l.rotation.z = sx * Math.atan2(1.7, FW.hub); legs.add(l);
+    }
+    legs.add(mesh(new THREE.BoxGeometry(1.9, 0.25, 0.9), '#B98A57', { y: 0.12, z: 1.1 }));   // 타는 곳
+    legs.traverse((o) => { o.userData.ride = 'wheel'; }); scene.add(legs);
+    fwWheel.traverse((o) => { o.userData.ride = 'wheel'; }); }
+  const GONDOLA_COLORS = ['#E2574C', '#F5C451', '#81C784', '#4D8FD1', '#B39DDB', '#FF8A65'];
+  const gondolas = GONDOLA_COLORS.map((c, k) => {
+    const g = new THREE.Group();
+    g.add(mesh(new THREE.BoxGeometry(0.95, 0.08, 0.8), c, { y: -0.45 }));
+    for (const sx of [-0.45, 0.45]) g.add(mesh(new THREE.BoxGeometry(0.05, 0.42, 0.8), c, { x: sx, y: -0.22 }));
+    g.add(mesh(new THREE.BoxGeometry(0.95, 0.42, 0.05), c, { y: -0.22, z: -0.38 }));
+    g.add(rotd(mesh(new THREE.ConeGeometry(0.62, 0.3, 4), c, { y: 0.38 }), 'y', Math.PI / 4));
+    for (const sx of [-0.4, 0.4]) g.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 4), '#9AA4AE', { x: sx, y: 0.05 }));
+    g.traverse((o) => { o.userData.ride = 'wheel'; });
+    scene.add(g);
+    addRide({ id: 'wheel' + k, type: 'wheel', group: 'wheel', k, gondola: g, approach: P(FW.x, DECK_Y, FW.z + 1.9), occ: null });
+    return g;
+  });
+  pObs(FW.x, FW.z, 3.6, 1.6);
+  const gondolaAngle = (k) => fwAngle() + (k / FW.n) * Math.PI * 2;
+  const gondolaPos = (k, out = new THREE.Vector3()) => { const a = gondolaAngle(k); return out.set(PX + FW.x + Math.sin(a) * FW.r, DECK_Y + FW.hub - Math.cos(a) * FW.r, FW.z + 0.0); };
+  const nearBottom = (k) => { const a = ((gondolaAngle(k) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2); return Math.min(a, Math.PI * 2 - a) < 0.22; };
+
+  // 🚂 꼬마 기차 (선로를 따라 70초에 한 바퀴, 역에서 7초 쉼 · 시각으로 움직여서 누가 봐도 같은 자리)
+  const TRAIN = { lap: 70, stop: 7, st: Math.PI * 0.3, cars: 4, gap: 0.15 };
+  const trackPt = (th, f = 1, out = new THREE.Vector3()) => out.set(PX + Math.cos(th) * TRACK.rx * f, DECK_Y, Math.sin(th) * TRACK.rz * f);
+  { // 선로: 침목 + 레일 두 줄
+    const N = 260, sleeper = new THREE.BoxGeometry(0.85, 0.04, 0.12), sm = mat('#7A5530');
+    for (let i = 0; i < N; i++) {
+      const th = (i / N) * Math.PI * 2, p = trackPt(th), dx = -Math.sin(th) * TRACK.rx, dz = Math.cos(th) * TRACK.rz;
+      const m = new THREE.Mesh(sleeper, sm); m.position.set(p.x, DECK_Y + 0.02, p.z); m.rotation.y = Math.atan2(dx, dz) + Math.PI / 2; scene.add(m);
+    }
+    for (const off of [-0.28, 0.28]) {
+      const pts = []; for (let i = 0; i <= 200; i++) { const th = (i / 200) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(th) * (TRACK.rx + off), DECK_Y + 0.06, Math.sin(th) * (TRACK.rz + off))); }
+      const rail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 200, 0.025, 4, true), mat('#8A8F96'));
+      rail.position.x = PX; scene.add(rail);
+    }
+    // 역 (지붕 + 팻말)
+    const sp = trackPt(TRAIN.st, 0.89), g = new THREE.Group(); g.position.copy(sp);
+    const tang = Math.atan2(-Math.sin(TRAIN.st) * TRACK.rx, Math.cos(TRAIN.st) * TRACK.rz); g.rotation.y = tang;
+    g.add(mesh(new THREE.BoxGeometry(0.9, 0.18, 2.6), '#D9C7A6', { y: 0.09 }));
+    for (const sz of [-1.1, 1.1]) g.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.7, 6), '#8A5A33', { x: -0.3, y: 0.95, z: sz }));
+    g.add(mesh(new THREE.BoxGeometry(1.2, 0.08, 2.9), '#E2574C', { x: -0.15, y: 1.8 }));
+    const tag = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), new THREE.MeshBasicMaterial({ map: canvasTex(256, 64, (c, w, h) => {
+      c.fillStyle = '#FFF8E3'; c.beginPath(); c.roundRect(2, 2, w - 4, h - 4, 14); c.fill();
+      c.fillStyle = '#6B4A2E'; c.font = `800 30px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🚂 꼬마 기차역', w / 2, h / 2 + 2);
+    }), transparent: true, side: THREE.DoubleSide }));
+    tag.position.set(-0.3, 1.5, 0); tag.rotation.y = -Math.PI / 2; g.add(tag);
+    g.traverse((o) => { o.userData.ride = 'train'; });
+    scene.add(g); }
+  const STATION = trackPt(TRAIN.st, 0.89);
+  const trainCars = [];
+  for (let i = 0; i < TRAIN.cars; i++) {
+    const g = new THREE.Group();
+    if (i === 0) {   // 기관차
+      g.add(mesh(new THREE.BoxGeometry(0.75, 0.45, 1.2), '#E2574C', { y: 0.38 }));
+      g.add(rotd(mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.7, 14), '#3A3A3A', { y: 0.72, z: 0.15 }), 'x', Math.PI / 2));
+      g.add(mesh(new THREE.CylinderGeometry(0.08, 0.11, 0.35, 8), '#3A3A3A', { y: 1.1, z: 0.38 }));
+      g.add(mesh(new THREE.BoxGeometry(0.75, 0.6, 0.45), '#4D8FD1', { y: 0.9, z: -0.38 }));
+    } else {
+      const c = ['#F5C451', '#81C784', '#B39DDB'][(i - 1) % 3];
+      g.add(mesh(new THREE.BoxGeometry(0.75, 0.2, 1.2), c, { y: 0.28 }));
+      for (const sx of [-0.36, 0.36]) g.add(mesh(new THREE.BoxGeometry(0.04, 0.22, 1.2), c, { x: sx, y: 0.48 }));
+      for (const sz of [-0.58, 0.58]) g.add(mesh(new THREE.BoxGeometry(0.75, 0.22, 0.04), c, { y: 0.48, z: sz }));
+      for (const sz of [-0.28, 0.28]) g.add(mesh(new THREE.BoxGeometry(0.6, 0.12, 0.25), '#8A5A33', { y: 0.44, z: sz }));
+      for (let s2 = 0; s2 < 2; s2++) addRide({ id: 'train' + ((i - 1) * 2 + s2), type: 'train', group: 'train', car: i, seatZ: s2 ? -0.28 : 0.28, approach: STATION.clone(), occ: null });
+    }
+    for (const sx of [-0.38, 0.38]) for (const sz of [-0.4, 0.4]) g.add(rotd(mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.06, 12), '#2F3A44', { x: sx, y: 0.13, z: sz }), 'z', Math.PI / 2));
+    g.traverse((o) => { o.userData.ride = 'train'; });
+    scene.add(g); trainCars.push(g);
+  }
+  function trainTheta() {
+    const cyc = TRAIN.lap + TRAIN.stop, tau = (Date.now() / 1000) % cyc;
+    if (tau < TRAIN.stop) return { th: TRAIN.st, stopped: true, left: TRAIN.stop - tau };
+    const u = (tau - TRAIN.stop) / TRAIN.lap, e = u - Math.sin(u * Math.PI * 2) / (Math.PI * 2);   // 출발·도착은 천천히
+    return { th: TRAIN.st + e * Math.PI * 2, stopped: false, left: 0 };
+  }
+  const carPose = (th, i) => {
+    const t2 = th - i * TRAIN.gap, p = trackPt(t2);
+    return { p, ry: Math.atan2(-Math.sin(t2) * TRACK.rx, Math.cos(t2) * TRACK.rz) };
+  };
+  let trainWasStopped = true;
+
   // 자판기
   const vend = new THREE.Group(); vend.position.set(PX + 3.4, DECK_Y, 7.2);
   vend.add(mesh(new THREE.BoxGeometry(1.0, 1.8, 0.7), '#E2574C', { y: 0.9 }));
@@ -1225,7 +1406,7 @@ export function createWorld(container, opts = {}) {
   scene.add(vend); pObs(3.4, 7.2, 1.1, 0.8);
   const VEND_SPOT = P(3.4, DECK_Y, 8.0);
   // 나가는 길 표지판
-  const parkExitSign = new THREE.Group(); parkExitSign.position.set(PX - 1.3, DECK_Y, 8.6);
+  const parkExitSign = new THREE.Group(); parkExitSign.position.set(PX - 1.3, DECK_Y, 12.6);
   parkExitSign.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 8), '#8A5A33', { y: 0.7 }));
   const pes = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.36), new THREE.MeshBasicMaterial({ map: canvasTex(320, 96, (c, w, h) => {
     c.fillStyle = '#FFF8E3'; c.beginPath(); c.roundRect(3, 3, w - 6, h - 6, 18); c.fill();
@@ -1247,11 +1428,11 @@ export function createWorld(container, opts = {}) {
   // 오솔길: 공부방 왼쪽 끝에서 숲을 지나 쉼터 입구까지 (구불구불, 길가에 돌·꽃·작은 등)
   scene.add(mesh(new THREE.BoxGeometry(0.5, 0.15, 1.6), '#C48D52', { x: -10.05, y: 0.075, z: -0.2, receive: true }));   // 계단
   // 오솔길 높이: 풀밭(0)에서 쉼터 땅(DECK_Y) 위로 자연스럽게
-  const trailY = (p) => { const d = Math.hypot(p.x - PX, p.z); return 0.015 + (DECK_Y + 0.005 - 0.015) * Math.min(1, Math.max(0, (22.2 - d) / 1.6)); };
+  const trailY = (p) => { const d = Math.hypot(p.x - PX, p.z); return 0.015 + (DECK_Y + 0.005 - 0.015) * Math.min(1, Math.max(0, (24.2 - d) / 1.6)); };
   const trail = new THREE.CatmullRomCurve3([
     new THREE.Vector3(-10.2, 0, -0.2), new THREE.Vector3(-13, 0, 0.6), new THREE.Vector3(-16, 0, 2.6),
-    new THREE.Vector3(-19.5, 0, 5.4), new THREE.Vector3(-24, 0, 8.6), new THREE.Vector3(-29, 0, 10.6),
-    new THREE.Vector3(-33.5, 0, 11.2), new THREE.Vector3(PX, 0, 10.4), new THREE.Vector3(PX, 0, 9.2),
+    new THREE.Vector3(-19.5, 0, 5.4), new THREE.Vector3(-24, 0, 9.0), new THREE.Vector3(-29, 0, 12.6),
+    new THREE.Vector3(-33.5, 0, 13.8), new THREE.Vector3(PX, 0, 13.4), new THREE.Vector3(PX, 0, 12.4),
   ]);
   {
     // 흙길: 갈색 길 + 양옆 조금 더 진한 테두리 (쉼터 땅 위로 올라가는 부분은 그 높이에 맞춤)
@@ -1292,6 +1473,7 @@ export function createWorld(container, opts = {}) {
       const d = 2.6 + trnd() * 1.8;
       const a1 = [p.x - tg.z * d, p.z + tg.x * d], a2 = [p.x + tg.z * d, p.z - tg.x * d];
       const [tx, tz] = a1[1] < a2[1] ? a1 : a2;
+      if (Math.hypot(tx - PX, tz - 0.8) < 25) continue;   // 쉼터 땅 위(기차역·흔들말 앞)는 비움
       tree(tx, tz - 0.8, 0.8 + trnd() * 0.5, trnd() < 0.4);
     }
     for (const t of [0.15, 0.4, 0.65]) {
@@ -1306,13 +1488,13 @@ export function createWorld(container, opts = {}) {
   // 흩날리는 나뭇잎 (계절 색) · 반딧불 · 별 · 별똥별
   const month = new Date().getMonth() + 1;
   const leafColor = month >= 3 && month <= 5 ? '#FFC2D6' : month >= 9 && month <= 11 ? '#F2994A' : month >= 6 ? '#7FCF63' : null;
-  const LEAVES = 70;
+  const LEAVES = 100;
   const leaves = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.18, 0.11), new THREE.MeshLambertMaterial({ color: leafColor || '#FFFFFF', side: THREE.DoubleSide }), LEAVES);
-  const leafData = Array.from({ length: LEAVES }, () => ({ x: (Math.random() - 0.5) * 24, y: Math.random() * 7, z: (Math.random() - 0.5) * 18, s: 0.4 + Math.random() * 0.6, p: Math.random() * 10 }));
+  const leafData = Array.from({ length: LEAVES }, () => ({ x: (Math.random() - 0.5) * 30, y: Math.random() * 7, z: (Math.random() - 0.5) * 22, s: 0.4 + Math.random() * 0.6, p: Math.random() * 10 }));
   leaves.frustumCulled = false; scene.add(leaves);
-  const FLIES = 46;
+  const FLIES = 64;
   const flyPos = new Float32Array(FLIES * 3);
-  const flyData = Array.from({ length: FLIES }, () => ({ x: (Math.random() - 0.5) * 20, y: 0.4 + Math.random() * 1.8, z: (Math.random() - 0.5) * 15, p: Math.random() * 10 }));
+  const flyData = Array.from({ length: FLIES }, () => ({ x: (Math.random() - 0.5) * 28, y: 0.4 + Math.random() * 1.8, z: (Math.random() - 0.5) * 20, p: Math.random() * 10 }));
   const flyGeo = new THREE.BufferGeometry(); flyGeo.setAttribute('position', new THREE.BufferAttribute(flyPos, 3));
   const flies = new THREE.Points(flyGeo, new THREE.PointsMaterial({ color: '#FFF59A', size: 0.16, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
   flies.frustumCulled = false; scene.add(flies);
@@ -1356,17 +1538,36 @@ export function createWorld(container, opts = {}) {
   function tapRide(group, at) {
     if (studying || observer) return;
     if (group === 'slide') { walkTo(slideRide.approach); pendingOffice = { type: 'slide' }; return; }
+    if (group === 'zip') { walkTo(zipRide.approach); pendingOffice = { type: 'zip' }; return; }
     if (player.ride && player.ride.group === group) return;
     const r = freeRide(group, at);
     if (!r) { opts.onToast && opts.onToast('친구들이 다 타고 있어요. 조금 기다려 줘!'); return; }
     walkTo(r.approach);
     pendingOffice = { type: 'ride', ride: r };
   }
+  let waitRide = null;   // 기차·관람차를 기다리는 중 ('train' | 'wheel')
+  function readySeat(group) {
+    if (group === 'train') { const tt = trainTheta(); return tt.stopped && tt.left > 1.2 ? rides.find((x) => x.group === 'train' && !x.occ) : null; }
+    if (group === 'wheel') return rides.find((x) => x.group === 'wheel' && !x.occ && nearBottom(x.k)) || null;
+    return null;
+  }
   function mountRide(r) {
+    if (r.type === 'train' || r.type === 'wheel') {
+      const seat = readySeat(r.group);
+      if (!seat) {
+        if (waitRide !== r.group) opts.onToast && opts.onToast(r.type === 'train' ? '🚂 기차가 역에 올 때까지 기다려요…' : '🎡 빈 칸이 내려올 때까지 기다려요…');
+        waitRide = r.group; return;
+      }
+      r = seat;
+    }
+    waitRide = null;
     if (r.occ && r.occ !== player) { opts.onToast && opts.onToast('방금 친구가 탔어요'); return; }
     if (player.ride) leaveRide(true);
     r.occ = player; player.ride = r; player.mode = 'sit';
     if (r.type === 'merry') opts.onToast && opts.onToast('화면을 꾹 누르고 있으면 점점 빨라져요 🎡 · 내릴 땐 일어나기');
+    if (r.type === 'tramp') { tramp.boost = 0; tramp.ph = 0; opts.onToast && opts.onToast('화면을 꾹 누르면 점점 높이 뛰어요 🤸'); }
+    if (r.type === 'bar') { bar.boost = 0; opts.onToast && opts.onToast('꾹 누르면 크게 흔들흔들 💪'); }
+    if (r.type === 'jungle') r.climb = 0;
     if (r.type === 'bench') { yaw = yawTarget = 0; pitchTarget = moodName === 'night' ? 0.6 : 0.3; setZoom(ZOOM_MIN); opts.onToast && opts.onToast('화면을 끌면 하늘을 둘러봐요 · 내 쪽으로 돌리면 내 모습도 보여요 📸'); }
     opts.onSfx && opts.onSfx(r.type === 'bench' ? 'sit' : 'creak');
     opts.onRide && opts.onRide(r);
@@ -1377,11 +1578,133 @@ export function createWorld(container, opts = {}) {
     if (r.occ === player) r.occ = null;
     if (r.type === 'bench') { yawTarget = 0; pitchTarget = 0.65; setZoom(11.9); }
     player.ride = null; player.stretching = false;
-    player.obj.position.copy(r.approach); player.obj.position.y = DECK_Y;
-    player.obj.rotation.z = 0;
+    if (r.type === 'train') player.obj.position.copy(player.obj.position).lerp(new THREE.Vector3(PX, DECK_Y, 0), 0.1);   // 달리는 기차에서 내리면 선로 안쪽으로
+    else player.obj.position.copy(r.approach);
+    player.obj.position.y = DECK_Y;
+    player.obj.rotation.z = 0; player.obj.rotation.x = 0;
     player.mode = 'idle';
     if (player.dizzy) { player.slumpT = SLUMP_SEC; path = []; opts.onToast && opts.onToast('너무 어지러워서 털썩… 잠깐만 쉬었다 가요 💫'); }
     if (!silent) opts.onRide && opts.onRide(null);
+  }
+
+  // ---------- 새 놀이기구 움직임 ----------
+  const _p = new THREE.Vector3();
+  function stepNewRides(dt, t) {
+    const holding = !!player.ride && down && !down.drag && !pinch && pointers.size === 1;
+    // 기다리던 기차·관람차가 오면 타기
+    if (waitRide && !player.ride) {
+      const ap = waitRide === 'train' ? STATION : rides.find((x) => x.group === 'wheel').approach;
+      if (Math.hypot(player.obj.position.x - ap.x, player.obj.position.z - ap.z) > 1.2) waitRide = null;
+      else { const seat = readySeat(waitRide); if (seat) mountRide(seat); }
+    }
+    // 🤸 트램펄린
+    const tr = rides.find((x) => x.type === 'tramp');
+    tramp.dip = Math.max(0, tramp.dip - dt * 3);
+    if (tr.occ) {
+      const mine = tr.occ === player;
+      if (mine) tramp.boost = holding ? Math.min(2.2, tramp.boost + dt * 0.9) : Math.max(0, tramp.boost - dt * 0.25);
+      const h = mine ? 0.35 + tramp.boost : 0.7;
+      const prev = tramp.ph;
+      tramp.ph += dt / (0.42 + 0.42 * Math.sqrt(h));
+      if (Math.floor(tramp.ph) !== Math.floor(prev)) {   // 착지
+        tramp.dip = 0.12;
+        tramp.flip = h > 1.5 && Math.random() < 0.45;
+        if (mine) opts.onSfx && opts.onSfx('boing');
+      }
+      const u = tramp.ph % 1, y = h * (1 - (2 * u - 1) ** 2);
+      const o = tr.occ.obj;
+      if (o.rotation.order !== 'YXZ') o.rotation.order = 'YXZ';
+      o.position.set(PX + TR.x, DECK_Y + 0.43 + y - tramp.dip, TR.z);
+      o.rotation.y = 0;
+      o.rotation.x = tramp.flip ? -u * Math.PI * 2 : 0;
+      tr.occ.mode = 'jump';
+    }
+    trampMat.position.y = DECK_Y + 0.42 - tramp.dip * 0.6;
+    // 💪 철봉: 매달려서 흔들흔들
+    for (const r of rides.filter((x) => x.type === 'bar' && x.occ)) {
+      const mine = r.occ === player;
+      if (mine) bar.boost = holding ? Math.min(0.85, bar.boost + dt * 0.5) : Math.max(0, bar.boost - dt * 0.2);
+      const amp = 0.08 + (mine ? bar.boost : 0.15);
+      const a = Math.sin(t * 2.6) * amp;
+      const o = r.occ.obj, L = 1.02 * (o.userData.scale || 1);
+      if (o.rotation.order !== 'YXZ') o.rotation.order = 'YXZ';
+      o.rotation.y = 0; o.rotation.x = a;
+      o.position.set(PX + r.bx, DECK_Y + r.h - L * Math.cos(a), BAR.z - L * Math.sin(a));
+      r.occ.mode = 'hang';
+    }
+    // 🧗 정글짐: 올라가서 꼭대기에 앉기
+    for (const r of rides.filter((x) => x.type === 'jungle')) {
+      if (r.occ !== r.lastOcc) { r.lastOcc = r.occ; r.climb = 0; }
+      if (!r.occ) continue;
+      r.climb = Math.min(1, r.climb + dt / 1.6);
+      const k = r.climb, o = r.occ.obj;
+      if (k < 1) {
+        _p.copy(r.approach).lerp(r.top, k); _p.y = DECK_Y + (JG.H + 0.0) * Math.min(1, k * 1.15);
+        o.position.copy(_p); o.rotation.y = r.face + Math.PI; r.occ.mode = 'hang';
+      } else placeRider(r.occ, r.top, r.face, 'sit');
+    }
+    // 🐴 흔들말
+    for (const r of rides.filter((x) => x.type === 'spring')) {
+      const rk = r.occ ? Math.sin(t * 3.4 + r.ph) * 0.3 : r.rock.rotation.x * 0.9;
+      r.rock.rotation.x = rk;
+      if (r.occ) {
+        r.rock.updateMatrixWorld(); _p.set(0, 0.42, -0.05).applyMatrix4(r.rock.matrixWorld);
+        placeRider(r.occ, _p, 0, 'sit');
+        const o = r.occ.obj; if (o.rotation.order !== 'YXZ') o.rotation.order = 'YXZ'; o.rotation.x = rk;
+      }
+    }
+    // 🎡 관람차
+    fwWheel.rotation.z = -fwAngle();
+    gondolas.forEach((g, k) => { gondolaPos(k, g.position); g.position.y += 0.0; g.rotation.z = Math.sin(t * 1.3 + k) * 0.03; });
+    for (const r of rides.filter((x) => x.type === 'wheel' && x.occ)) {
+      gondolaPos(r.k, _p); _p.y += -0.42 + 0.2; _p.z += 0.05;
+      placeRider(r.occ, _p, 0, 'sit');
+    }
+    // 🚂 꼬마 기차
+    const tt = trainTheta();
+    trainCars.forEach((g, i) => { const c = carPose(tt.th, i); g.position.copy(c.p); g.rotation.y = c.ry; });
+    if (trainWasStopped && !tt.stopped && area.name === 'park') opts.onSfx && opts.onSfx('toot');
+    trainWasStopped = tt.stopped;
+    for (const r of rides.filter((x) => x.type === 'train' && x.occ)) {
+      const g = trainCars[r.car];
+      g.updateMatrixWorld(); _p.set(0, 0.62, r.seatZ).applyMatrix4(g.matrixWorld);
+      placeRider(r.occ, _p, g.rotation.y, 'sit');
+    }
+  }
+  function startZip() {
+    if (player.ride) leaveRide(true);
+    player.slide = { t: 0, sfx: false, zip: true };
+  }
+  function stepZip(dt) {
+    const s = player.slide, p = player.obj.position, sc = player.obj.userData.scale || 1;
+    s.t += dt;
+    const L = 1.02 * sc;
+    if (s.t < 1.3) {   // 사다리 올라가기
+      const k = s.t / 1.3;
+      p.set(ZIP.tower.x, DECK_Y + 2.6 * k, ZIP.tower.z + 0.9 - 0.9 * Math.min(1, k * 1.4));
+      player.obj.rotation.y = Math.PI; player.mode = 'hang';
+      return;
+    }
+    const RIDE = 3.0, k = Math.min(1, (s.t - 1.5) / RIDE);
+    if (s.t < 1.5) { p.set(ZIP.tower.x, DECK_Y + 2.6, ZIP.tower.z); player.mode = 'idle'; faceDir(ZIP.b.x - ZIP.a.x, ZIP.b.z - ZIP.a.z, 1); return; }
+    if (k < 1) {
+      if (!s.sfx) { s.sfx = true; opts.onSfx && opts.onSfx('whoosh'); }
+      const e = k * k * (1.6 - 0.6 * k);   // 점점 빨라짐
+      _p.copy(ZIP.a).lerp(ZIP.b, e);
+      trolley.visible = true; trolley.position.copy(_p); trolley.position.y += 0.03;
+      p.set(_p.x, _p.y - L - 0.05, _p.z);
+      faceDir(ZIP.b.x - ZIP.a.x, ZIP.b.z - ZIP.a.z, 1);
+      player.obj.rotation.z = Math.sin(s.t * 9) * 0.05;
+      player.mode = 'hang';
+      return;
+    }
+    // 내려오기
+    const d = Math.min(1, (s.t - 1.5 - RIDE) / 0.35);
+    trolley.visible = false;
+    p.set(ZIP.b.x - 0.6, (ZIP.b.y - L - 0.05) * (1 - d) + DECK_Y * d, ZIP.b.z - 0.5);
+    player.obj.rotation.z = 0;
+    player.mode = d < 1 ? 'hang' : 'idle';
+    if (d >= 1) { if (!s.land) { s.land = true; opts.onSfx && opts.onSfx('thunk'); } if (s.t > 1.5 + RIDE + 0.6) { player.slide = null; player.mode = 'idle'; opts.onRide && opts.onRide(null); } }
   }
   function startSlide() {
     if (player.ride) leaveRide(true);
@@ -1392,6 +1715,7 @@ export function createWorld(container, opts = {}) {
   function stepSlide(dt) {
     const s = player.slide;
     if (!s) return;
+    if (s.zip) return stepZip(dt);
     s.t += dt;
     const p = player.obj.position;
     player.obj.rotation.y = 0;
@@ -1416,7 +1740,7 @@ export function createWorld(container, opts = {}) {
     // 친구가 탄 것
     for (const r of rides) if (r.occ && r.occ !== player && !(r.occ.remoteRef && r.occ.remoteRef.rd === r.id && remotes.has(r.occ.remoteRef.uid))) r.occ = null;
     for (const r of remotes.values()) {
-      const want = r.a.area === 'park' && r.rd ? rides.find((x) => x.id === r.rd && x.type !== 'slide') : null;
+      const want = r.a.area === 'park' && r.rd ? rides.find((x) => x.id === r.rd && x.type !== 'slide' && x.type !== 'zip') : null;
       if (r.onRide && r.onRide !== want) { if (r.onRide.occ === r.a) r.onRide.occ = null; r.onRide = null; }
       if (want && (!want.occ || want.occ === r.a)) { want.occ = r.a; r.a.remoteRef = r; r.onRide = want; }
     }
@@ -1468,6 +1792,7 @@ export function createWorld(container, opts = {}) {
       r.pad.rotation.y = Math.sin(t * 0.4 + (r.id === 'pad1' ? 2 : 0)) * 0.15;
       if (r.occ) placeRider(r.occ, new THREE.Vector3(r.pad.position.x, DECK_Y + 0.27 + bob, r.pad.position.z), r.face, 'sit');
     }
+    stepNewRides(dt, t);
     for (const r of rides.filter((x) => x.type === 'bench' && x.occ)) placeRider(r.occ, r.seat, r.rot, r.occ === player && player.stretching ? 'stretch' : 'sit');
     // 삐걱 소리 (내가 탔을 때만, 작게)
     creakT -= dt;
@@ -1509,7 +1834,7 @@ export function createWorld(container, opts = {}) {
     if (leaves.visible) {
       leafData.forEach((d, i) => {
         d.y -= dt * d.s * 0.6; d.x += Math.sin(t * 0.9 + d.p) * dt * 0.6 + dt * 0.25;
-        if (d.y < 0.05) { d.y = 5 + Math.random() * 3; d.x = (Math.random() - 0.5) * 24; d.z = (Math.random() - 0.5) * 18; }
+        if (d.y < 0.05) { d.y = 5 + Math.random() * 3; d.x = (Math.random() - 0.5) * 30; d.z = (Math.random() - 0.5) * 22; }
         dummy.position.set(PX + d.x, DECK_Y + d.y, d.z);
         dummy.rotation.set(t * d.s * 2 + d.p, t * 1.3 + d.p, Math.sin(t + d.p));
         dummy.updateMatrix(); leaves.setMatrixAt(i, dummy.matrix);
@@ -1604,7 +1929,7 @@ export function createWorld(container, opts = {}) {
 
   // ---------------- 상호작용 (오른쪽 단추 · E/스페이스 키) ----------------
   let interaction = null, interactKey = '', interactT = 0;
-  const RIDE_NAME = { swing: ['🎠', '그네 타기'], seesaw: ['⚖️', '시소 타기'], merry: ['🎡', '뺑뺑이 타기'], slide: ['🛝', '미끄럼틀 타기'], pad: ['🍃', '연잎에 앉기'] };
+  const RIDE_NAME = { swing: ['🎠', '그네 타기'], seesaw: ['⚖️', '시소 타기'], merry: ['🎡', '뺑뺑이 타기'], slide: ['🛝', '미끄럼틀 타기'], pad: ['🍃', '연잎에 앉기'], tramp: ['🤸', '트램펄린'], bar: ['💪', '철봉 매달리기'], jungle: ['🧗', '정글짐 오르기'], spring: ['🐴', '흔들말 타기'], zip: ['🪂', '짚라인 타기'], wheel: ['🎡', '관람차 타기'], train: ['🚂', '꼬마 기차 타기'] };
   function findInteraction() {
     if (studying || trailWalk || player.slide || observer) return null;
     const p = player.obj.position;
@@ -1641,7 +1966,7 @@ export function createWorld(container, opts = {}) {
       }
       if (!best) return null;
       const [icon, label] = best.type === 'bench' ? [best.stretch ? '🧘' : '🪑', best.stretch ? '스트레칭 벤치' : '벤치에 앉기'] : RIDE_NAME[best.type];
-      return { key: 'ride' + best.id, icon, label, run: () => (best.type === 'slide' ? (walkTo(best.approach), (pendingOffice = { type: 'slide' })) : (walkTo(best.approach), (pendingOffice = { type: 'ride', ride: best }))) };
+      return { key: 'ride' + best.id, icon, label, run: () => (best.type === 'slide' || best.type === 'zip' ? (walkTo(best.approach), (pendingOffice = { type: best.type })) : (walkTo(best.approach), (pendingOffice = { type: 'ride', ride: best }))) };
     }
     return null;
   }
@@ -1765,6 +2090,7 @@ export function createWorld(container, opts = {}) {
     if (studying || trailWalk) return;
     if (player.slumpT > 0) { opts.onToast && opts.onToast('아직 어지러워요… 💫 조금만 기다려 줘'); return; }
     if (fishing) stopFishing();
+    waitRide = null;
     if (player.seat || player.officeDesk || player.ride) standUp();
     path = findPath(player.obj.position, target);
   }
@@ -1928,7 +2254,7 @@ export function createWorld(container, opts = {}) {
   function getPlayerState() {
     const p = player.obj.position;
     return { x: Math.round(p.x * 100) / 100, z: Math.round(p.z * 100) / 100, ry: Math.round(player.obj.rotation.y * 100) / 100, ar: area.name, s: area.name === 'main' && player.seat ? player.seat.idx : -1,
-      rd: player.ride ? player.ride.id : player.slide ? 'slide' : '', it: player.held || '', dz: player.dizzy ? 1 : 0, fi: fishing ? 1 : 0 };
+      rd: player.ride ? player.ride.id : player.slide ? (player.slide.zip ? 'zip' : 'slide') : '', it: player.held || '', dz: player.dizzy ? 1 : 0, fi: fishing ? 1 : 0 };
   }
   /** 선생님: 캐릭터 없이 구경 (화면은 보이지 않는 시점을 따라 움직임) */
   function setObserver(on) {
@@ -2141,6 +2467,9 @@ export function createWorld(container, opts = {}) {
     down = null;
     if (wasDrag || e.target !== el || studying || trailWalk) return;
     if (player.ride && player.ride.type === 'merry') { merry.boost = Math.min(MERRY_MAX - MERRY_BASE, merry.boost + 0.35); return; }   // 톡톡 = 밀기
+    if (player.ride && player.ride.type === 'tramp') { tramp.boost = Math.min(2.2, tramp.boost + 0.3); return; }
+    if (player.ride && player.ride.type === 'bar') { bar.boost = Math.min(0.85, bar.boost + 0.15); return; }
+    if (player.ride && (player.ride.type === 'wheel' || player.ride.type === 'train')) return;   // 타는 중엔 화면을 눌러도 안 내림 (일어나기 단추로)
     const r = el.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
@@ -2152,6 +2481,7 @@ export function createWorld(container, opts = {}) {
       if (ud.ride) { tapRide(ud.ride, h.point); return; }                       // 쉼터: 벤치 · 그네 · 시소 · 뺑뺑이 · 미끄럼틀
       if (ud.vend) { if (Math.hypot(player.obj.position.x - VEND_SPOT.x, player.obj.position.z - VEND_SPOT.z) < 0.6) { opts.onVend && opts.onVend(); } else { walkTo(VEND_SPOT); pendingOffice = { type: 'vend' }; } return; }
       if (ud.parkExit) { goOutOfPark(); return; }
+      if (ud.zip) { tapRide('zip'); return; }
       if (ud.fishSpot) { if (!fishing) { walkTo(FISH_SPOT); pendingOffice = { type: 'fish' }; } return; }
       if (ud.toPark) { goToPark(); return; }
       if (ud.officeExit) { goOutOfOffice(); return; }
@@ -2345,6 +2675,7 @@ export function createWorld(container, opts = {}) {
           else if (po.type === 'park-exit') exitPark();
           else if (po.type === 'ride') mountRide(po.ride);
           else if (po.type === 'slide') startSlide();
+          else if (po.type === 'zip') startZip();
           else if (po.type === 'vend') { faceDir(0, -1, 1); opts.onVend && opts.onVend(); }
           else if (po.type === 'fish') startFishing();
           else if (po.type === 'sit') sitAtDesk(po.desk);

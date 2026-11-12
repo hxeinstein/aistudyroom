@@ -364,6 +364,24 @@ export function animateAnimal(a, mode, t, dt) {
     u.body.rotation.y = k * 0.45; u.head.rotation.y = k * 0.9;
   } else if (u.body.rotation.y || u.head.rotation.y) { u.body.rotation.y = 0; u.head.rotation.y = 0; }
   if (u.dizzyEyes) for (const e of u.dizzyEyes) { e.visible = !!u.dizzy; if (u.dizzy) e.rotation.z -= dt * 9; }
+  if (mode === 'hang') {
+    // 매달리기 (철봉 · 짚라인 · 정글짐 오르기): 두 팔은 위로, 다리는 살짝 흔들
+    u.armL.rotation.x = u.armR.rotation.x = -3.0;
+    u.armL.rotation.z = 0.12; u.armR.rotation.z = -0.12;
+    u.legL.rotation.x = Math.sin(t * 3) * 0.25; u.legR.rotation.x = -Math.sin(t * 3) * 0.25;
+    u.body.position.y = by; u.body.rotation.z = 0;
+    u.head.position.y = hy; u.head.rotation.x = -0.1; u.head.rotation.z = 0;
+    return;
+  }
+  if (mode === 'jump') {
+    // 트램펄린: 만세 + 다리 모으기
+    u.armL.rotation.x = u.armR.rotation.x = -2.6;
+    u.armL.rotation.z = 0.5; u.armR.rotation.z = -0.5;
+    u.legL.rotation.x = u.legR.rotation.x = 0.15;
+    u.body.position.y = by; u.body.rotation.z = 0;
+    u.head.position.y = hy; u.head.rotation.x = -0.15; u.head.rotation.z = 0;
+    return;
+  }
   if (mode === 'swim') {
     // 수영: (몸 전체는 world.js에서 앞으로 눕힘) 고개는 들고, 팔은 번갈아 젓고, 다리는 파닥파닥
     const sp = u.swimFast ? 7 : 3.2;

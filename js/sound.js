@@ -160,7 +160,7 @@ function noise(sec) {
   const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   const s = ctx.createBufferSource(); s.buffer = b; return s;
 }
-/** kind: creak(그네·뺑뺑이) | whoosh(미끄럼틀) | thunk(시소) | vend(자판기) | shutter(사진) | sit | step | splash(연못 첨벙) | slosh(물속 걸음) */
+/** kind: creak(그네·뺑뺑이) | whoosh(미끄럼틀) | thunk(시소) | vend(자판기) | shutter(사진) | sit | step | splash(연못 첨벙) | slosh(물속 걸음) | toot(기차) | boing(트램펄린) */
 export function sfx(kind) {
   if (!ready()) return;
   try {
@@ -184,6 +184,12 @@ export function sfx(kind) {
     } else if (kind === 'shutter') {
       const n = noise(0.08), f = ctx.createBiquadFilter(), g = ctx.createGain();
       f.type = 'highpass'; f.frequency.value = 2500; env(g, t0, 0.002, 0.06, 0.08); n.connect(f).connect(g).connect(out); n.start(t0);
+    } else if (kind === 'toot') {   // 꼬마 기차 출발 칙칙
+      [0, 0.32].forEach((d) => { [523, 659].forEach((fr) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle'; o.frequency.value = fr; env(g, t0 + d, 0.02, 0.24, 0.035); o.connect(g).connect(out); o.start(t0 + d); o.stop(t0 + d + 0.3); }); });
+    } else if (kind === 'boing') {  // 트램펄린
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(180, t0); o.frequency.exponentialRampToValueAtTime(420, t0 + 0.18);
+      env(g, t0, 0.005, 0.2, 0.05); o.connect(g).connect(out); o.start(t0); o.stop(t0 + 0.25);
     } else if (kind === 'splash' || kind === 'slosh') {
       const big = kind === 'splash';
       const n = noise(big ? 0.5 : 0.18), f = ctx.createBiquadFilter(), g = ctx.createGain();
