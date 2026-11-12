@@ -7,6 +7,7 @@ import { CONFIG } from './config.js';
 import * as Office from './office.js';
 import * as Room from './room.js';
 import * as Board from './board.js';
+import * as Pond from './pond.js';
 import { initJoystick } from './joystick.js';
 import { badWord } from './words.js';
 import * as Sch from './school.js';
@@ -51,6 +52,8 @@ function boot(skipOnboarding = false) {
     onOfficeSeat: (n, t) => Office.tapSeat(n, t),
     onRide: (r) => { renderBar(); if (r && r.stretch) startStretch(); else if (!r) stopStretch(); },
     onVend: () => openVend(),
+    onFishBite: () => Pond.openFishQuiz(),   // 🎣 찌가 흔들리면 과학 퀴즈
+    onWish: () => Pond.openWish(),           // 🪙 소원 동전
     onTrail: (on) => document.body.classList.toggle('on-trail', on),   // 오솔길을 걷는 동안 버튼 줄 숨김
     onInteract: (it) => showInteract(it),
     onSfx: (k) => sfx(k),
@@ -103,6 +106,7 @@ function boot(skipOnboarding = false) {
   $('zReset').onclick = () => world.resetView();
   initChat({ onAskTeacher: (q) => Office.askTeacher(q), onNeedSchool: () => openSchoolGate(true) });
   Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' }, onTeacherChange: () => { renderBar(); Room.syncNow(); }, onOpenSuggestAdmin: () => Board.openSuggestAdmin() });
+  Pond.initPond({ world, toast, openModal, closeModal });
   Board.initBoard({ world, toast, openModal, closeModal, getProfile: () => st.profile || { name: '익명', animal: 'bear' }, teacherToken: () => Office.teacherToken(), isAdmin: () => Office.isAdmin() });
   Room.initRoom({
     world, toast,
@@ -996,6 +1000,7 @@ function onParkArea(name) {
     setAmbience(h >= 19 || h < 6 ? 'night' : 'day');
     if (S.activeSession() && !S.isPaused()) { S.pauseSession(); updatePauseUI(); Room.syncNow(); }
     if (S.activeSession()) toast('쉼터에 오면 휴식으로 바뀌어요 ☕ 쉬는 시간은 공부 시간에서 빠져요');
+    setTimeout(Pond.checkWish, 600);
     return;
   }
   if (!parkSince) return;

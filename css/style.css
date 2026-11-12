@@ -511,3 +511,24 @@ body.on-trail .actionbar, body.on-trail .joy { display: none !important; }
 .interact-btn kbd { display: none; font: 700 11px var(--font); background: rgba(255,255,255,.25); border-radius: 6px; padding: 0 6px; margin-top: 2px; }
 @media (pointer: fine) { .interact-btn kbd { display: inline-block; } }
 body.studying .interact-btn, body.on-trail .interact-btn, body.observer .interact-btn { display: none !important; }
+
+/* 🎣 연못 낚시 퀴즈 · 도감 */
+.qz-q { font-size: 16px; font-weight: 800; color: var(--brown); margin: 10px 0 12px; word-break: keep-all; overflow-wrap: anywhere; }
+.qz-opts { display: flex; flex-direction: column; gap: 8px; }
+.qz-opt { text-align: left; border: 2px solid #EADBC2; background: #fff; border-radius: 14px; padding: 10px 12px; font: inherit; font-size: 14.5px; color: var(--ink, #4A3A2A); word-break: keep-all; overflow-wrap: anywhere; }
+.qz-opt b { color: var(--brown); margin-right: 4px; }
+.qz-opt.right { border-color: var(--green); background: #EAF6E4; }
+.qz-opt.wrong { border-color: #E2574C; background: #FDECEA; }
+.qz-res { margin-top: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.qz-res b { font-size: 15px; color: var(--brown); }
+.qz-res small { color: var(--muted); }
+.qz-fish { font-size: 42px; line-height: 1.1; animation: qzPop .5s ease-out; }
+@keyframes qzPop { from { transform: translateY(16px) scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+.qz-exp { background: #FFF8E3; border-radius: 12px; padding: 8px 10px; font-size: 13.5px; margin-top: 10px; word-break: keep-all; overflow-wrap: anywhere; }
+.fish-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0; }
+.fish-card { background: #fff; border: 2px solid #EADBC2; border-radius: 14px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.fish-card span { font-size: 28px; }
+.fish-card b { font-size: 12.5px; color: var(--brown); word-break: keep-all; }
+.fish-card small { font-size: 11px; color: var(--muted); }
+.fish-card.none { opacity: .55; }
+@media (max-width: 380px) { .fish-grid { grid-template-columns: repeat(3, 1fr); } }

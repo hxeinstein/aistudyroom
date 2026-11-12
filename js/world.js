@@ -888,7 +888,7 @@ export function createWorld(container, opts = {}) {
   }
   // 가로등 (밤에 켜짐: 공부방 전구와 같은 빛)
   // 놀이터 쪽(10°, 320°) 가로등은 산책로 바깥으로 빼서 그네·시소를 가리지 않게
-  for (const [deg, k] of [[10, 1.29], [65, 1], [115, 1], [170, 1], [230, 1], [320, 1.29]]) {
+  for (const [deg, k] of [[10, 1.29], [65, 1], [150, 1], [195, 1], [235, 1], [320, 1.29]]) {
     const t = (deg * Math.PI) / 180, x = Math.cos(t) * 7.3 * k, z = Math.sin(t) * 5.45 * k;
     const g = new THREE.Group(); g.position.set(PX + x, DECK_Y, z);
     g.add(mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.2, 8), '#5E4630', { y: 1.1 }));
@@ -897,23 +897,46 @@ export function createWorld(container, opts = {}) {
     scene.add(g); pObs(x, z, 0.3, 0.3);
   }
   // 연못
-  const pond = mesh(new THREE.CircleGeometry(2.2, 40), new THREE.MeshLambertMaterial({ color: '#7CC4E8', emissive: '#2E6E99', emissiveIntensity: 0.15 }), { x: PX - 4, y: DECK_Y + 0.02, z: 0.4, cast: false });
-  pond.rotation.x = -Math.PI / 2; pond.scale.y = 0.68; scene.add(pond);
-  const pondEdge = mesh(new THREE.TorusGeometry(2.2, 0.12, 6, 40), '#B8AE9C', { x: PX - 4, y: DECK_Y + 0.04, z: 0.4 });
-  pondEdge.rotation.x = -Math.PI / 2; pondEdge.scale.y = 0.68; scene.add(pondEdge);
+  const PO = { x: -3.6, z: 0.2, r: 3.25, sy: 0.72 };   // 연못 (쉼터 기준 좌표)
+  const pond = mesh(new THREE.CircleGeometry(PO.r, 56), new THREE.MeshLambertMaterial({ color: '#7CC4E8', emissive: '#2E6E99', emissiveIntensity: 0.15 }), { x: PX + PO.x, y: DECK_Y + 0.02, z: PO.z, cast: false });
+  pond.rotation.x = -Math.PI / 2; pond.scale.y = PO.sy; scene.add(pond);
+  const pondEdge = mesh(new THREE.TorusGeometry(PO.r, 0.13, 6, 56), '#B8AE9C', { x: PX + PO.x, y: DECK_Y + 0.04, z: PO.z });
+  pondEdge.rotation.x = -Math.PI / 2; pondEdge.scale.y = PO.sy; scene.add(pondEdge);
   const ripple = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.26, 32), new THREE.MeshBasicMaterial({ color: '#E8F7FF', transparent: true, opacity: 0.6 }));
-  ripple.rotation.x = -Math.PI / 2; ripple.position.set(PX - 4.6, DECK_Y + 0.03, 0.2); scene.add(ripple);
-  for (const [x, z] of [[-3.1, 0.9], [-5.1, -0.1], [-4.3, 1.2]]) {
-    const pad = mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.02, 14), '#6CBF5A', { x: PX + x, y: DECK_Y + 0.035, z, cast: false }); scene.add(pad);
+  ripple.rotation.x = -Math.PI / 2; ripple.position.set(PX - 4.8, DECK_Y + 0.03, -0.9); scene.add(ripple);
+  for (const [x, z, r] of [[-1.8, -1.0, 0.3], [-5.9, 1.0, 0.28], [-3.2, -1.5, 0.24]]) {
+    const pad = mesh(new THREE.CylinderGeometry(r, r, 0.02, 14), '#6CBF5A', { x: PX + x, y: DECK_Y + 0.035, z, cast: false }); scene.add(pad);
   }
+  // 낚시터 (연못 앞쪽으로 나온 나무 데크)
+  const PIER = { x0: -3.1, x1: -2.1, z0: 1.25, z1: 3.1 };
+  const pier = new THREE.Group(); pier.position.set(PX + (PIER.x0 + PIER.x1) / 2, DECK_Y, (PIER.z0 + PIER.z1) / 2);
+  const pierLen = PIER.z1 - PIER.z0;
+  pier.add(mesh(new THREE.BoxGeometry(1.0, 0.06, pierLen), '#B98A57', { y: 0.05 }));
+  for (let k = 0; k < 6; k++) pier.add(mesh(new THREE.BoxGeometry(1.02, 0.015, 0.03), '#8A6238', { y: 0.085, z: -pierLen / 2 + 0.15 + k * (pierLen - 0.3) / 5, cast: false }));
+  for (const sx of [-0.45, 0.45]) for (const sz of [-pierLen / 2 + 0.1, 0]) pier.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 6), '#7A5530', { x: sx, y: 0.02, z: sz }));
+  scene.add(pier);
+  const pierTop = pier.children[0];
+  const FISH_SPOT = P(-2.6, DECK_Y, 1.5);
+  const fishSign = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.22), new THREE.MeshBasicMaterial({ map: canvasTex(256, 64, (c, w, h) => {
+    c.fillStyle = '#FFF8E3'; c.beginPath(); c.roundRect(2, 2, w - 4, h - 4, 14); c.fill();
+    c.fillStyle = '#6B4A2E'; c.font = `800 30px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🎣 과학 낚시터', w / 2, h / 2 + 2);
+  }), transparent: true }));
+  fishSign.position.set(PX - 1.75, DECK_Y + 0.75, 3.15); scene.add(fishSign);
+  scene.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6), '#7A5530', { x: PX - 1.75, y: DECK_Y + 0.35, z: 3.12 }));
+  pier.traverse((o) => { o.userData.fishSpot = true; });
+  fishSign.userData.fishSpot = true;
   // 연못에는 들어갈 수 있어요: 들어가면 몸이 물에 잠기고, 천천히 걷고, 물결이 퍼짐
-  const POND = { x: PX - 4, z: 0.4, rx: 2.05, rz: 1.38 };
+  const POND = { x: PX + PO.x, z: PO.z, rx: PO.r - 0.18, rz: PO.r * PO.sy - 0.15 };
+  const onPier = (x, z) => x > PX + PIER.x0 && x < PX + PIER.x1 && z > PIER.z0 && z < PIER.z1;
+  const pondQ = (x, z) => ((x - POND.x) / POND.rx) ** 2 + ((z - POND.z) / POND.rz) ** 2;
   const pondDepth = (x, z) => {   // 0(물가) ~ 1(한가운데)
-    const q = ((x - POND.x) / POND.rx) ** 2 + ((z - POND.z) / POND.rz) ** 2;
+    if (onPier(x, z)) return 0;
+    const q = pondQ(x, z);
     return q < 1 ? 1 - q : 0;
   };
   const sinkAt = (a) => {
     if (a.area !== undefined && a.area !== 'park') return 0;
+    if (onPier(a.obj.position.x, a.obj.position.z)) return -0.07;   // 데크 위
     const d = pondDepth(a.obj.position.x, a.obj.position.z);
     return d ? Math.min(0.26, 0.05 + d * 0.32) * (a.obj.userData.scale || 1) : 0;
   };
@@ -935,6 +958,123 @@ export function createWorld(container, opts = {}) {
     if (!w) { if (wakes.length > 24) return; w = { m: new THREE.Mesh(wakeGeo, new THREE.MeshBasicMaterial({ color: '#F2FBFF', transparent: true, opacity: 0.7, depthWrite: false })) }; w.m.rotation.x = -Math.PI / 2; scene.add(w.m); wakes.push(w); }
     w.on = true; w.t = 0; w.big = !!big; w.m.visible = true; w.m.position.set(x, DECK_Y + 0.035, z);
   }
+  // ---------- 🎣 과학 낚시 ----------
+  const _v = new THREE.Vector3();
+  const lineMat = new THREE.LineBasicMaterial({ color: '#F5F5F5' });
+  function makeRig(a) {
+    const s = a.obj.userData.scale || 1;
+    const rod = new THREE.Group(); rod.position.set(0.3, 0.45 * s + 0.08, 0.12); rod.rotation.x = 0.85;
+    rod.add(mesh(new THREE.CylinderGeometry(0.014, 0.026, 1.4, 6), '#7A5530', { y: 0.7, cast: false }));
+    rod.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.06, 8), '#3A3A3A', { y: 0.25, z: 0.04, cast: false }));   // 릴
+    const tip = new THREE.Object3D(); tip.position.y = 1.4; rod.add(tip);
+    a.obj.add(rod);
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), lineMat);
+    line.frustumCulled = false; scene.add(line);
+    const bob = new THREE.Group();
+    bob.add(mesh(new THREE.SphereGeometry(0.06, 10, 8), '#E2574C', { cast: false }));
+    bob.add(mesh(new THREE.SphereGeometry(0.045, 10, 8), '#FFFFFF', { y: 0.05, cast: false }));
+    scene.add(bob);
+    a.rig = { rod, tip, line, bob };
+  }
+  function dropRig(a) {
+    if (!a.rig) return;
+    a.obj.remove(a.rig.rod); scene.remove(a.rig.line); scene.remove(a.rig.bob); a.rig.line.geometry.dispose();
+    a.rig = null;
+  }
+  function stepRig(a, t, dip = 0, pull = 0) {
+    const r = a.rig, o = a.obj, ry = o.rotation.y, d = 0.5 + 2.0 * (1 - pull);
+    r.bob.position.set(o.position.x + Math.sin(ry) * d, DECK_Y + 0.03 - dip + Math.sin(t * 2.2) * 0.01 + pull * 0.5, o.position.z + Math.cos(ry) * d);
+    r.tip.getWorldPosition(_v);
+    const pos = r.line.geometry.attributes.position;
+    pos.setXYZ(0, _v.x, _v.y, _v.z); pos.setXYZ(1, r.bob.position.x, r.bob.position.y + 0.04, r.bob.position.z); pos.needsUpdate = true;
+  }
+  let fishing = null, fishTold = false;
+  function startFishing() {
+    if (player.ride) leaveRide(true);
+    player.obj.position.set(FISH_SPOT.x, DECK_Y, FISH_SPOT.z);
+    player.obj.rotation.y = Math.PI;   // 연못 쪽(-z)을 봄
+    if (!player.rig) makeRig(player);
+    fishing = { t: 0, biteAt: 2.5 + Math.random() * 3.5, phase: 'wait', pull: 0, catch: null };
+    opts.onSfx && opts.onSfx('whoosh');
+    setTimeout(() => opts.onSfx && opts.onSfx('slosh'), 450);
+    if (!fishTold) { fishTold = true; opts.onToast && opts.onToast('🎣 찌가 흔들리면 과학 퀴즈! 맞히면 물고기를 낚아요'); }
+  }
+  function stopFishing() {
+    if (!fishing) return;
+    fishing = null; dropRig(player);
+  }
+  function fishResult(f) {
+    if (!fishing || fishing.phase !== 'bite') return;
+    fishing.phase = 'reel'; fishing.pull = 0; fishing.catch = f || null;
+    opts.onSfx && opts.onSfx(f ? 'splash' : 'slosh');
+  }
+  function stepFishing(dt, t) {
+    if (!fishing) return;
+    if (area.name !== 'park' || Math.hypot(player.obj.position.x - FISH_SPOT.x, player.obj.position.z - FISH_SPOT.z) > 0.6) { stopFishing(); return; }
+    const f = fishing;
+    f.t += dt;
+    let dip = 0;
+    if (f.phase === 'wait') {
+      if (f.t > f.biteAt - 0.8) dip = Math.max(0, Math.sin(f.t * 14)) * 0.015;   // 톡톡 건드림
+      if (f.t > f.biteAt) {
+        f.phase = 'bite';
+        showFx(null, '❗');
+        opts.onSfx && opts.onSfx('splash');
+        addWake(player.obj.position.x, player.obj.position.z - 2.5);
+        if (opts.onFishBite) opts.onFishBite(); else fishResult(null);
+      }
+    } else if (f.phase === 'bite') {
+      dip = 0.05 + Math.sin(f.t * 16) * 0.035;
+    } else if (f.phase === 'reel') {
+      f.pull = Math.min(1, f.pull + dt / 0.7);
+      if (f.pull >= 1) {
+        showFx(null, f.catch ? f.catch.icon : '💨');
+        f.phase = 'wait'; f.t = 0; f.biteAt = 3 + Math.random() * 5; f.pull = 0; f.catch = null;
+        opts.onSfx && opts.onSfx('whoosh');
+      }
+    }
+    stepRig(player, t, dip, f.pull);
+  }
+
+  // ---------- 🪙 소원 동전 ----------
+  const coinGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.015, 16), coinMat = new THREE.MeshLambertMaterial({ color: '#F2C14E', emissive: '#7A5A10', emissiveIntensity: 0.35 });
+  const wishCoin = new THREE.Mesh(coinGeo, coinMat); wishCoin.visible = false; scene.add(wishCoin);
+  wishCoin.position.set(PX + PO.x + 0.6, DECK_Y + 0.028, PO.z - 0.3);
+  let flyCoin = null;
+  function throwCoin() {
+    const o = player.obj.position;
+    const tx = POND.x + (o.x - POND.x) * 0.35, tz = POND.z + (o.z - POND.z) * 0.35;   // 연못 안쪽으로
+    if (!flyCoin) { flyCoin = new THREE.Mesh(coinGeo, coinMat); scene.add(flyCoin); }
+    flyCoin.visible = true;
+    flyCoin.userData = { t: 0, from: new THREE.Vector3(o.x, DECK_Y + 0.8, o.z), to: new THREE.Vector3(tx, DECK_Y + 0.028, tz) };
+    faceDir(tx - o.x, tz - o.z, 1);
+    opts.onSfx && opts.onSfx('vend');
+  }
+  function stepCoin(dt, t) {
+    if (flyCoin && flyCoin.visible) {
+      const u = flyCoin.userData; u.t = Math.min(1, u.t + dt / 0.9);
+      flyCoin.position.lerpVectors(u.from, u.to, u.t); flyCoin.position.y += Math.sin(u.t * Math.PI) * 1.4;
+      flyCoin.rotation.x += dt * 14;
+      if (u.t >= 1) {
+        flyCoin.visible = false;
+        addWake(u.to.x, u.to.z, true); opts.onSfx && opts.onSfx('splash');
+        wishCoin.position.copy(u.to); wishCoin.rotation.set(0, 0, 0); wishCoin.visible = true;
+      }
+    }
+    if (wishCoin.visible) coinMat.emissiveIntensity = 0.35 + Math.max(0, Math.sin(t * 2.5)) * (wishDone ? 0.6 : 0.25);
+    sparkles.visible = wishDone && area.name === 'park';
+    if (sparkles.visible) sparkles.children.forEach((sp, i) => { const k = (Math.sin(t * 3 + i * 1.7) + 1) / 2; sp.scale.setScalar(0.3 + k); sp.rotation.y = t + i; });
+  }
+  // 소원이 이루어지면 연못 위에 반짝이
+  let wishDone = false;
+  const sparkles = new THREE.Group(); sparkles.visible = false; scene.add(sparkles);
+  { const sm = new THREE.MeshBasicMaterial({ color: '#FFE680' }), sg = new THREE.OctahedronGeometry(0.06);
+    const r2 = mulberry(9);
+    for (let i = 0; i < 26; i++) {
+      const a = r2() * Math.PI * 2, rr = Math.sqrt(r2()) * 0.9;
+      const sp = new THREE.Mesh(sg, sm); sp.position.set(POND.x + Math.cos(a) * POND.rx * rr, DECK_Y + 0.12 + r2() * 0.45, POND.z + Math.sin(a) * POND.rz * rr); sparkles.add(sp);
+    } }
+
   // 털 때 튀는 물방울
   const dropGeo = new THREE.SphereGeometry(0.035, 6, 5), dropMat = new THREE.MeshBasicMaterial({ color: '#BFE6FF' });
   const drops = [];
@@ -1060,6 +1200,17 @@ export function createWorld(container, opts = {}) {
   [0, 1, 2].forEach((k) => {
     const a = (k / 3) * Math.PI * 2 + Math.PI / 3;
     addRide({ id: 'merry' + k, type: 'merry', group: 'merry', a, approach: P(2.0 + Math.sin(a) * 1.75, DECK_Y, 1.5 + Math.cos(a) * 1.75), occ: null });
+  });
+  // 큰 연잎: 올라앉아 쉬기 (물 위에서 살랑살랑)
+  [[-5.2, -0.5, 0.62, 0.4], [-4.4, 1.2, 0.55, -0.5]].forEach(([x, z, r, face], k) => {
+    const g = new THREE.Group(); g.position.set(PX + x, DECK_Y + 0.04, z);
+    const leaf = mesh(new THREE.CylinderGeometry(r, r * 0.95, 0.05, 22, 1, false, 0.35, Math.PI * 2 - 0.35), '#5DB04B', { cast: false });
+    g.add(leaf);
+    g.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.012, 6), '#4A9A3A', { y: 0.03, cast: false }));
+    for (const [px, pz, c] of [[r * 0.55, -r * 0.35, '#FFB3C7'], [-r * 0.6, r * 0.3, '#FFFFFF']]) g.add(mesh(new THREE.SphereGeometry(0.07, 8, 6), c, { x: px, y: 0.06, z: pz, cast: false }));
+    g.traverse((o) => { o.userData.ride = 'pad' + k; });
+    scene.add(g);
+    addRide({ id: 'pad' + k, type: 'pad', group: 'pad' + k, pad: g, face, approach: P(x + r + 0.4, DECK_Y, z + 0.15), occ: null });
   });
   // 자판기
   const vend = new THREE.Group(); vend.position.set(PX + 3.4, DECK_Y, 7.2);
@@ -1311,14 +1462,27 @@ export function createWorld(container, opts = {}) {
       r.occ.obj.rotation.z = Math.min(0.22, merry.w * 0.03);   // 빨리 돌면 바깥으로 살짝 기울어짐
     }
     // 벤치
+    for (const r of rides.filter((x) => x.type === 'pad')) {
+      const bob = Math.sin(t * 1.3 + (r.id === 'pad1' ? 1.7 : 0)) * 0.012 - (r.occ ? 0.02 : 0);
+      r.pad.position.y = DECK_Y + 0.04 + bob;
+      r.pad.rotation.y = Math.sin(t * 0.4 + (r.id === 'pad1' ? 2 : 0)) * 0.15;
+      if (r.occ) placeRider(r.occ, new THREE.Vector3(r.pad.position.x, DECK_Y + 0.27 + bob, r.pad.position.z), r.face, 'sit');
+    }
     for (const r of rides.filter((x) => x.type === 'bench' && x.occ)) placeRider(r.occ, r.seat, r.rot, r.occ === player && player.stretching ? 'stretch' : 'sit');
     // 삐걱 소리 (내가 탔을 때만, 작게)
     creakT -= dt;
     if (player.ride && (player.ride.type === 'swing' || player.ride.type === 'merry') && creakT <= 0) { creakT = player.ride.type === 'swing' ? 1.37 : Math.max(0.6, 2.2 * MERRY_BASE / Math.max(MERRY_BASE, merry.w)); opts.onSfx && opts.onSfx('creak'); }
     stepSlide(dt);
-    if (area.name !== 'park') return;
+    if (area.name !== 'park') { if (fishing) stopFishing(); return; }
     // 연못: 들어갈 때 첨벙, 물속에서 움직이면 물결
     stepWakes(dt);
+    stepFishing(dt, t);
+    stepCoin(dt, t);
+    for (const r of remotes.values()) {   // 친구 낚싯대
+      const want = r.a.area === 'park' && r.fi && !r.onRide;
+      if (want && !r.a.rig) makeRig(r.a); else if (!want && r.a.rig) dropRig(r.a);
+      if (r.a.rig) stepRig(r.a, t);
+    }
     const wet = pondDepth(player.obj.position.x, player.obj.position.z) > 0;
     if (wet && !wasWet) { addWake(player.obj.position.x, player.obj.position.z, true); opts.onSfx && opts.onSfx('splash'); if (!pondTold) { pondTold = true; opts.onToast && opts.onToast('첨벙! 연못에 들어왔어요 💦 물속에선 천천히 걸어요'); } }
     if (!wet && wasWet) { shakeOff(player); opts.onSfx && opts.onSfx('slosh'); }
@@ -1440,7 +1604,7 @@ export function createWorld(container, opts = {}) {
 
   // ---------------- 상호작용 (오른쪽 단추 · E/스페이스 키) ----------------
   let interaction = null, interactKey = '', interactT = 0;
-  const RIDE_NAME = { swing: ['🎠', '그네 타기'], seesaw: ['⚖️', '시소 타기'], merry: ['🎡', '뺑뺑이 타기'], slide: ['🛝', '미끄럼틀 타기'] };
+  const RIDE_NAME = { swing: ['🎠', '그네 타기'], seesaw: ['⚖️', '시소 타기'], merry: ['🎡', '뺑뺑이 타기'], slide: ['🛝', '미끄럼틀 타기'], pad: ['🍃', '연잎에 앉기'] };
   function findInteraction() {
     if (studying || trailWalk || player.slide || observer) return null;
     const p = player.obj.position;
@@ -1465,6 +1629,10 @@ export function createWorld(container, opts = {}) {
     if (area.name === 'park') {
       if (nearDoor === 'vend') return { key: 'vend', icon: '🥤', label: '간식 고르기', run: () => opts.onVend && opts.onVend() };
       if (nearDoor === 'park-exit') return { key: 'pexit', icon: '🏠', label: '독서실로', run: () => goOutOfPark() };
+      if (fishing) return { key: 'fishstop', icon: '🎣', label: '낚시 그만하기', run: () => stopFishing() };
+      if (near(FISH_SPOT, 1.4)) return { key: 'fish', icon: '🎣', label: '과학 낚시', run: () => { walkTo(FISH_SPOT); pendingOffice = { type: 'fish' }; } };
+      { const q = pondQ(p.x, p.z);
+        if (q > 1 && q < 1.7 && !onPier(p.x, p.z)) return { key: 'wish', icon: '🪙', label: '소원 동전', run: () => opts.onWish && opts.onWish() }; }
       let best = null, bd = 1.9;
       for (const r of rides) {
         if (r.occ) continue;
@@ -1596,6 +1764,7 @@ export function createWorld(container, opts = {}) {
   function walkTo(target) {
     if (studying || trailWalk) return;
     if (player.slumpT > 0) { opts.onToast && opts.onToast('아직 어지러워요… 💫 조금만 기다려 줘'); return; }
+    if (fishing) stopFishing();
     if (player.seat || player.officeDesk || player.ride) standUp();
     path = findPath(player.obj.position, target);
   }
@@ -1680,6 +1849,7 @@ export function createWorld(container, opts = {}) {
       r.a.area = x.ar === 'office' || x.ar === 'park' ? x.ar : 'main';
       r.rd = typeof x.rd === 'string' ? x.rd.slice(0, 12) : '';
       r.a.dizzy = x.dz === 1;
+      r.fi = x.fi === 1;
       r.uid = x.uid;
       if ((x.it || '') !== (r.a.held || '')) setHeldFor(r.a, typeof x.it === 'string' ? x.it.slice(0, 4) : '');
       r.a.obj.traverse((o) => { o.userData.remoteNick = x.n; });
@@ -1758,7 +1928,7 @@ export function createWorld(container, opts = {}) {
   function getPlayerState() {
     const p = player.obj.position;
     return { x: Math.round(p.x * 100) / 100, z: Math.round(p.z * 100) / 100, ry: Math.round(player.obj.rotation.y * 100) / 100, ar: area.name, s: area.name === 'main' && player.seat ? player.seat.idx : -1,
-      rd: player.ride ? player.ride.id : player.slide ? 'slide' : '', it: player.held || '', dz: player.dizzy ? 1 : 0 };
+      rd: player.ride ? player.ride.id : player.slide ? 'slide' : '', it: player.held || '', dz: player.dizzy ? 1 : 0, fi: fishing ? 1 : 0 };
   }
   /** 선생님: 캐릭터 없이 구경 (화면은 보이지 않는 시점을 따라 움직임) */
   function setObserver(on) {
@@ -1982,6 +2152,7 @@ export function createWorld(container, opts = {}) {
       if (ud.ride) { tapRide(ud.ride, h.point); return; }                       // 쉼터: 벤치 · 그네 · 시소 · 뺑뺑이 · 미끄럼틀
       if (ud.vend) { if (Math.hypot(player.obj.position.x - VEND_SPOT.x, player.obj.position.z - VEND_SPOT.z) < 0.6) { opts.onVend && opts.onVend(); } else { walkTo(VEND_SPOT); pendingOffice = { type: 'vend' }; } return; }
       if (ud.parkExit) { goOutOfPark(); return; }
+      if (ud.fishSpot) { if (!fishing) { walkTo(FISH_SPOT); pendingOffice = { type: 'fish' }; } return; }
       if (ud.toPark) { goToPark(); return; }
       if (ud.officeExit) { goOutOfOffice(); return; }
       if (ud.officeSeat) { tapDesk(ud.officeSeat); return; }
@@ -2175,6 +2346,7 @@ export function createWorld(container, opts = {}) {
           else if (po.type === 'ride') mountRide(po.ride);
           else if (po.type === 'slide') startSlide();
           else if (po.type === 'vend') { faceDir(0, -1, 1); opts.onVend && opts.onVend(); }
+          else if (po.type === 'fish') startFishing();
           else if (po.type === 'sit') sitAtDesk(po.desk);
           else if (po.type === 'desk') {
             faceDir(0, -1, 1);
@@ -2388,6 +2560,12 @@ export function createWorld(container, opts = {}) {
     interact,
     tapRide,
     goOutOfPark,
+    fishResult,
+    stopFishing,
+    get fishing() { return !!fishing; },
+    throwCoin,
+    setWishCoin(on) { wishCoin.visible = !!on; },
+    setWishDone(on) { wishDone = !!on; if (on) wishCoin.visible = true; },
     get onRide() { return player.ride ? player.ride.type : player.slide ? 'slide' : null; },
     get rideIsStretch() { return !!(player.ride && player.ride.stretch); },
     setStretch(on) { player.stretching = !!on; },
