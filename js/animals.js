@@ -1,4 +1,4 @@
-// 동물 캐릭터 22종 — 둥근 로우폴리, 종마다 덩치·걸음 속도·생김새 특징이 다름
+// 동물 캐릭터 24종 — 둥근 로우폴리, 종마다 덩치·걸음 속도·생김새 특징이 다름
 // (특정 작품의 캐릭터가 아니라 동물 종의 특징만 살린 디자인)
 import * as THREE from '../vendor/three.module.min.js';
 import { bakeDeep, bakeShallow } from './bake.js';
