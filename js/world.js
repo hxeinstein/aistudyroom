@@ -1427,6 +1427,67 @@ export function createWorld(container, opts = {}) {
   };
   let trainWasStopped = true;
 
+
+  // 🤼 씨름장 (모래판 · 둘레 짚 · 팻말)
+  const SR = { x: -7.2, z: -4.9, r: 1.75 };
+  { const g = new THREE.Group(); g.position.set(PX + SR.x, DECK_Y, SR.z);
+    g.add(mesh(new THREE.CylinderGeometry(SR.r, SR.r + 0.08, 0.08, 40), '#EBD9AE', { y: 0.04, cast: false, receive: true }));
+    const rim = mesh(new THREE.TorusGeometry(SR.r, 0.09, 8, 48), '#C9A25E', { y: 0.09 }); rim.rotation.x = -Math.PI / 2; g.add(rim);
+    for (const sd of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(0.06, 0.012, 0.5), sd < 0 ? '#E2574C' : '#4D8FD1', { x: sd * 0.55, y: 0.085, cast: false }));   // 출발선
+    const sg = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.26), new THREE.MeshBasicMaterial({ map: canvasTex(256, 64, (c, w, h) => {
+      c.fillStyle = '#FFF8E3'; c.beginPath(); c.roundRect(2, 2, w - 4, h - 4, 14); c.fill();
+      c.fillStyle = '#6B4A2E'; c.font = `800 32px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🤼 씨름장', w / 2, h / 2 + 2);
+    }), transparent: true }));
+    sg.position.set(1.3, 0.95, 1.55); g.add(sg);
+    g.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.85, 6), '#7A5530', { x: 1.3, y: 0.42, z: 1.53 }));
+    g.traverse((o) => { o.userData.ssireum = true; });
+    scene.add(g); }
+  const SR_SPOT = P(SR.x, DECK_Y, SR.z + SR.r + 0.6);
+  // 씨름 중인 사람: { side: -1(왼쪽 · 빨강) | 1(오른쪽 · 파랑), g: 내 쪽에서 본 힘 (-1~1), end: 'win'|'lose'|null }
+  let wrestle = null;
+  const satbaGeo = new THREE.TorusGeometry(0.235, 0.035, 6, 20);
+  function setSatba(a, color) {
+    if (a.satba && (!color || a.satba.userData.c !== color)) { a.obj.remove(a.satba); a.satba = null; }
+    if (!color || a.satba) return;
+    const m = new THREE.Mesh(satbaGeo, new THREE.MeshLambertMaterial({ color })); m.userData.c = color;
+    m.rotation.x = Math.PI / 2; m.position.y = 0.36; m.scale.set(a.obj.userData.big ? 1.3 : 1, 1, 1);
+    a.obj.add(m); a.satba = m;
+  }
+  /** 씨름하는 내 캐릭터 놓기 (모래판 가운데에서 서로 마주 보고 샅바 잡기) */
+  function stepWrestle(dt, t) {
+    if (!wrestle) return;
+    const w = wrestle, o = player.obj, p = o.position;
+    const pair = PX + SR.x + (-w.side) * (w.g || 0) * 0.75;   // 이기는 쪽이 상대를 밀어냄
+    const tx = pair + w.side * 0.46;
+    p.x += (tx - p.x) * Math.min(1, dt * 8); p.z = SR.z; p.y = DECK_Y;
+    if (o.rotation.order !== 'YXZ') o.rotation.order = 'YXZ';
+    o.rotation.y = w.side < 0 ? Math.PI / 2 : -Math.PI / 2;
+    if (w.end === 'lose') { player.mode = 'slump'; o.rotation.x = 0; p.y = DECK_Y - 0.2 * (o.userData.scale || 1); }
+    else if (w.end === 'win') { player.mode = 'jump'; o.rotation.x = 0; p.y = DECK_Y + Math.abs(Math.sin(t * 6)) * 0.25; }
+    else { player.mode = 'wrestle'; o.rotation.x = 0.28 + Math.sin(t * 9) * 0.03 * (w.fight ? 1 : 0); }
+    setSatba(player, w.side < 0 ? '#E2574C' : '#4D8FD1');
+    // 연습 상대: 맞은편에서 똑같이 샅바를 잡고 버팀
+    if (w.npc) {
+      if (!wrestleBot) {
+        const kinds = ['bear', 'tiger', 'hippo', 'lion', 'panda'];
+        const obj = makeAnimal(kinds[(Math.random() * kinds.length) | 0], '#F7C96B');
+        scene.add(obj); wrestleBot = { obj, satba: null };
+        obj.position.set(PX + SR.x - w.side * 0.9, DECK_Y, SR.z);
+      }
+      const b = wrestleBot.obj, bp = b.position;
+      bp.x += (pair - w.side * 0.46 - bp.x) * Math.min(1, dt * 8); bp.z = SR.z;
+      if (b.rotation.order !== 'YXZ') b.rotation.order = 'YXZ';
+      b.rotation.y = -o.rotation.y;
+      const bm = w.end === 'win' ? 'slump' : w.end === 'lose' ? 'jump' : 'wrestle';
+      bp.y = bm === 'slump' ? DECK_Y - 0.2 * (b.userData.scale || 1) : bm === 'jump' ? DECK_Y + Math.abs(Math.sin(t * 6)) * 0.25 : DECK_Y;
+      b.rotation.x = bm === 'wrestle' ? 0.28 : 0;
+      animateAnimal(b, bm, t, dt);
+      setSatba(wrestleBot, w.side < 0 ? '#4D8FD1' : '#E2574C');
+    }
+  }
+  let wrestleBot = null;
+  function dropBot() { if (wrestleBot) { scene.remove(wrestleBot.obj); wrestleBot = null; } }
+
   // 자판기
   const vend = new THREE.Group(); vend.position.set(PX + 3.4, DECK_Y, 7.2);
   vend.add(mesh(new THREE.BoxGeometry(1.0, 1.8, 0.7), '#E2574C', { y: 0.9 }));
@@ -2000,6 +2061,8 @@ export function createWorld(container, opts = {}) {
       if (nearDoor === 'park-exit') return { key: 'pexit', icon: '🏠', label: '독서실로', run: () => goOutOfPark() };
       if (fishing) return { key: 'fishstop', icon: '🎣', label: '낚시 그만하기', run: () => stopFishing() };
       if (waitRide) return { key: 'wait' + waitRide, icon: waitRide === 'train' ? '🚂' : '🎡', label: '기다리는 중…', run: () => {} };
+      if (wrestle) return null;
+      if (Math.hypot(p.x - (PX + SR.x), p.z - SR.z) < SR.r + 1.0) return { key: 'ssireum', icon: '🤼', label: '씨름하기', run: () => opts.onSsireum && opts.onSsireum() };
       if (near(FISH_SPOT, 1.4)) return { key: 'fish', icon: '🎣', label: '과학 낚시', run: () => { walkTo(FISH_SPOT); pendingOffice = { type: 'fish' }; } };
       { const q = pondQ(p.x, p.z);
         if (q > 1 && q < 1.7 && !onPier(p.x, p.z)) return { key: 'wish', icon: '🪙', label: '소원 동전', run: () => opts.onWish && opts.onWish() }; }
@@ -2134,6 +2197,7 @@ export function createWorld(container, opts = {}) {
   function walkTo(target) {
     if (studying || trailWalk) return;
     if (player.slumpT > 0) { opts.onToast && opts.onToast('아직 어지러워요… 💫 조금만 기다려 줘'); return; }
+    if (wrestle) return;
     if (fishing) stopFishing();
     waitRide = null;
     if (player.seat || player.officeDesk || player.ride) standUp();
@@ -2221,6 +2285,7 @@ export function createWorld(container, opts = {}) {
       r.rd = typeof x.rd === 'string' ? x.rd.slice(0, 12) : '';
       r.a.dizzy = x.dz === 1;
       r.fi = x.fi === 1;
+      r.wr = x.sr && x.sr.on ? x.sr.side || 0 : 0;   // 씨름 중 (-1 빨강 · 1 파랑)
       r.uid = x.uid;
       if ((x.it || '') !== (r.a.held || '')) setHeldFor(r.a, typeof x.it === 'string' ? x.it.slice(0, 4) : '');
       r.a.obj.traverse((o) => { o.userData.remoteNick = x.n; });
@@ -2274,10 +2339,12 @@ export function createWorld(container, opts = {}) {
         let diff = Math.atan2(Math.sin(want - r.a.obj.rotation.y), Math.cos(want - r.a.obj.rotation.y));
         r.a.obj.rotation.y += diff * Math.min(1, dt * 10);
       } else {
-        r.a.mode = r.a.dizzy && r.a.area === 'park' ? 'slump' : 'idle';
+        r.a.mode = r.wr ? 'wrestle' : r.a.dizzy && r.a.area === 'park' ? 'slump' : 'idle';
         let diff = Math.atan2(Math.sin(r.ry - r.a.obj.rotation.y), Math.cos(r.ry - r.a.obj.rotation.y));
         r.a.obj.rotation.y += diff * Math.min(1, dt * 6);
       }
+      setSatba(r.a, r.wr ? (r.wr < 0 ? '#E2574C' : '#4D8FD1') : null);
+      if (r.wr) { if (r.a.obj.rotation.order !== 'YXZ') r.a.obj.rotation.order = 'YXZ'; r.a.obj.rotation.x = 0.28; }
       const swim = r.a.area === 'park' && r.a.mode !== 'slump' && pondDepth(p.x, p.z) > SWIM_DEPTH;
       const rMoving = r.a.mode === 'walk';
       if (swim) r.a.mode = 'swim';
@@ -2527,6 +2594,7 @@ export function createWorld(container, opts = {}) {
       if (ud.vend) { if (Math.hypot(player.obj.position.x - VEND_SPOT.x, player.obj.position.z - VEND_SPOT.z) < 0.6) { opts.onVend && opts.onVend(); } else { walkTo(VEND_SPOT); pendingOffice = { type: 'vend' }; } return; }
       if (ud.parkExit) { goOutOfPark(); return; }
       if (ud.zip) { tapRide('zip'); return; }
+      if (ud.ssireum) { if (Math.hypot(player.obj.position.x - SR_SPOT.x, player.obj.position.z - SR_SPOT.z) < 1.2) opts.onSsireum && opts.onSsireum(); else { walkTo(SR_SPOT); pendingOffice = { type: 'ssireum' }; } return; }
       if (ud.fishSpot) { if (!fishing) { walkTo(FISH_SPOT); pendingOffice = { type: 'fish' }; } return; }
       if (ud.toPark) { goToPark(); return; }
       if (ud.officeExit) { goOutOfOffice(); return; }
@@ -2693,6 +2761,7 @@ export function createWorld(container, opts = {}) {
     let moving = false;
     const walkingTrail = stepTrailWalk(dt);
     if (walkingTrail) { kx = kz = 0; }
+    if (wrestle) kx = kz = 0;
     if (player.slumpT > 0) {
       player.slumpT -= dt;
       kx = kz = 0;
@@ -2737,6 +2806,7 @@ export function createWorld(container, opts = {}) {
           else if (po.type === 'zip') startZip();
           else if (po.type === 'vend') { faceDir(0, -1, 1); opts.onVend && opts.onVend(); }
           else if (po.type === 'fish') startFishing();
+          else if (po.type === 'ssireum') opts.onSsireum && opts.onSsireum();
           else if (po.type === 'sit') sitAtDesk(po.desk);
           else if (po.type === 'desk') {
             faceDir(0, -1, 1);
@@ -2769,7 +2839,8 @@ export function createWorld(container, opts = {}) {
         faceDir(v.x, v.z, dt);
       }
     }
-    if (!player.seat && !player.officeDesk && !player.ride && !player.slide && !walkingTrail) {
+    if (wrestle) stepWrestle(dt, clock.elapsedTime);
+    else if (!player.seat && !player.officeDesk && !player.ride && !player.slide && !walkingTrail) {
       const swim = area.name === 'park' && !(player.slumpT > 0) && pondDepth(p.x, p.z) > SWIM_DEPTH;
       player.mode = player.slumpT > 0 ? 'slump' : swim ? 'swim' : moving ? 'walk' : 'idle';
       const lift = swimPose(player, swim, moving, dt);
@@ -2953,6 +3024,13 @@ export function createWorld(container, opts = {}) {
     interact,
     tapRide,
     goOutOfPark,
+    /** 씨름: null이면 끝, { side, g, fight, end } */
+    setWrestle(w) {
+      if (w && !wrestle) { if (player.ride) leaveRide(true); if (fishing) stopFishing(); path = []; pendingOffice = null; player.obj.position.set(PX + SR.x + w.side * 0.9, DECK_Y, SR.z); }
+      if (!w && wrestle) { setSatba(player, null); dropBot(); player.obj.rotation.x = 0; player.mode = 'idle'; player.obj.position.set(SR_SPOT.x, DECK_Y, SR_SPOT.z); }
+      wrestle = w ? { ...(wrestle || {}), ...w } : null;
+    },
+    get nearSsireum() { return area.name === 'park' && Math.hypot(player.obj.position.x - (PX + SR.x), player.obj.position.z - SR.z) < SR.r + 2.5; },
     fishResult,
     stopFishing,
     get fishing() { return !!fishing; },

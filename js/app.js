@@ -8,6 +8,7 @@ import * as Office from './office.js';
 import * as Room from './room.js';
 import * as Board from './board.js';
 import * as Pond from './pond.js';
+import * as Ssireum from './ssireum.js';
 import { pickerHTML, bindPicker } from './picker.js';
 import { initJoystick } from './joystick.js';
 import { badWord } from './words.js';
@@ -55,6 +56,7 @@ function boot(skipOnboarding = false) {
     onVend: () => openVend(),
     onFishBite: () => Pond.openFishQuiz(),   // 🎣 찌가 흔들리면 과학 퀴즈
     onWish: () => Pond.openWish(),           // 🪙 소원 동전
+    onSsireum: () => Ssireum.openSsireum(),  // 🤼 씨름장
     onTrail: (on) => document.body.classList.toggle('on-trail', on),   // 오솔길을 걷는 동안 버튼 줄 숨김
     onInteract: (it) => showInteract(it),
     onSfx: (k) => sfx(k),
@@ -108,6 +110,7 @@ function boot(skipOnboarding = false) {
   initChat({ onAskTeacher: (q) => Office.askTeacher(q), onNeedSchool: () => openSchoolGate(true) });
   Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' }, onTeacherChange: () => { renderBar(); Room.syncNow(); }, onOpenSuggestAdmin: () => Board.openSuggestAdmin() });
   Pond.initPond({ world, toast, openModal, closeModal });
+  Ssireum.initSsireum({ world, toast, openModal, closeModal, sfx: (k) => sfx(k), getProfile: () => st.profile || { name: '학생', animal: 'bear' } });
   Board.initBoard({ world, toast, openModal, closeModal, getProfile: () => st.profile || { name: '익명', animal: 'bear' }, teacherToken: () => Office.teacherToken(), isAdmin: () => Office.isAdmin() });
   Room.initRoom({
     world, toast,
@@ -122,6 +125,7 @@ function boot(skipOnboarding = false) {
         sj: s ? S.subjectById(s.subject).name : '', st: !!s, ps: S.isPaused(), el: Math.floor(el / 60000) * 60000, // 1분 단위
         td: Math.floor(S.totalMs() / 60000) * 60000,   // 오늘 공부 시간 (순위용)
         rk: S.showInRank(), gl: S.getGoal(), sk: S.streak(), dd: ddayText(),
+        sr: Ssireum.presence() || null,   // 🤼 씨름 (도전 · 경기 중 힘 누른 수 · 게이지)
       };
     },
   });

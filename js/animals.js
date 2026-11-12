@@ -425,6 +425,7 @@ export function animateAnimal(a, mode, t, dt) {
   if (u.dizzyEyes) for (const e of u.dizzyEyes) { e.visible = !!u.dizzy; if (u.dizzy) e.rotation.z -= dt * 9; }
   if (mode === 'hang') {
     // 매달리기 (철봉 · 짚라인 · 정글짐 오르기): 두 팔은 위로, 다리는 살짝 흔들
+    u.legL.rotation.z = u.legR.rotation.z = 0;
     u.armL.rotation.x = u.armR.rotation.x = -3.0;
     u.armL.rotation.z = 0.12; u.armR.rotation.z = -0.12;
     u.legL.rotation.x = Math.sin(t * 3) * 0.25; u.legR.rotation.x = -Math.sin(t * 3) * 0.25;
@@ -432,8 +433,19 @@ export function animateAnimal(a, mode, t, dt) {
     u.head.position.y = hy; u.head.rotation.x = -0.1; u.head.rotation.z = 0;
     return;
   }
+  if (mode === 'wrestle') {
+    // 씨름: 두 팔을 앞으로 뻗어 상대 샅바를 잡고, 다리는 벌려 버팀
+    u.armL.rotation.x = u.armR.rotation.x = -1.35 + Math.sin(t * 7) * 0.08;
+    u.armL.rotation.z = -0.35; u.armR.rotation.z = 0.35;
+    u.legL.rotation.x = 0.25 + Math.sin(t * 7) * 0.12; u.legR.rotation.x = -0.35 - Math.sin(t * 7) * 0.12;
+    u.legL.rotation.z = 0.2; u.legR.rotation.z = -0.2;
+    u.body.position.y = by - 0.02; u.body.rotation.z = Math.sin(t * 3.5) * 0.06;
+    u.head.position.y = hy - 0.03; u.head.rotation.x = 0.25; u.head.rotation.z = 0;
+    return;
+  }
   if (mode === 'jump') {
     // 트램펄린: 만세 + 다리 모으기
+    u.legL.rotation.z = u.legR.rotation.z = 0;
     u.armL.rotation.x = u.armR.rotation.x = -2.6;
     u.armL.rotation.z = 0.5; u.armR.rotation.z = -0.5;
     u.legL.rotation.x = u.legR.rotation.x = 0.15;

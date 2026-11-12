@@ -22,6 +22,8 @@ let mySeat = -1;
 let started = false;
 
 export const myUid = () => uid;
+/** 서버 시계 (기기마다 시계가 달라도 같은 순간을 맞추려고) */
+export const serverNow = () => Date.now() + offset;
 let players = [];
 /** 지금 접속 중인 다른 학생들 */
 export const onlinePlayers = () => players;
