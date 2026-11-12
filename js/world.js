@@ -1217,7 +1217,7 @@ export function createWorld(container, opts = {}) {
   // ================= 새 놀이기구 =================
   const rotd = (m, ax, v) => { m.rotation[ax] = v; return m; };
   // 🤸 트램펄린: 꾹 누르면 점점 높이, 높이 뛰면 가끔 공중제비
-  const TR = { x: -5.6, z: 5.4, r: 1.15 };
+  const TR = { x: -6.3, z: 5.4, r: 1.15 };
   { const g = new THREE.Group(); g.position.set(PX + TR.x, DECK_Y, TR.z);
     const rim = mesh(new THREE.TorusGeometry(TR.r, 0.1, 8, 36), '#4D8FD1', { y: 0.42 }); rim.rotation.x = -Math.PI / 2; g.add(rim);
     for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; g.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.42, 6), '#3A3A3A', { x: Math.cos(a) * TR.r, y: 0.21, z: Math.sin(a) * TR.r })); }
@@ -1230,7 +1230,7 @@ export function createWorld(container, opts = {}) {
   const tramp = { boost: 0, ph: 0, flip: false, dip: 0 };
 
   // 💪 철봉 (낮은 것 · 중간 · 높은 것)
-  const BAR = { x: -2.1, z: 6.0, hs: [1.15, 1.4, 1.65] };
+  const BAR = { x: -3.1, z: 6.0, hs: [1.15, 1.4, 1.65] };
   { const g = new THREE.Group(); g.position.set(PX + BAR.x, DECK_Y, BAR.z);
     const xs = [-1.5, -0.5, 0.5, 1.5];
     xs.forEach((x, k) => { const h = Math.max(BAR.hs[Math.max(0, k - 1)], BAR.hs[Math.min(2, k)]); g.add(mesh(new THREE.CylinderGeometry(0.06, 0.07, h + 0.05, 8), '#F5C451', { x, y: (h + 0.05) / 2 })); });
@@ -1241,23 +1241,26 @@ export function createWorld(container, opts = {}) {
   BAR.hs.forEach((h, k) => addRide({ id: 'bar' + k, type: 'bar', group: 'bar', h, bx: BAR.x - 1 + k, approach: P(BAR.x - 1 + k, DECK_Y, BAR.z + 0.9), occ: null }));
   const bar = { boost: 0 };
 
-  // 🧗 정글짐 (꼭대기 네 귀퉁이에 올라앉기)
-  const JG = { x: 1.3, z: 5.2, s: 0.8, H: 1.6 };
+  // 🧗 정글짐 (4×4칸, 4층 높이 · 꼭대기 가장자리 8곳에 올라앉기)
+  const JG = { x: 0.8, z: 5.0, s: 0.7, n: 4, H: 2.8 };
+  const JGH = (JG.n * JG.s) / 2;   // 반 너비
   { const g = new THREE.Group(); g.position.set(PX + JG.x, DECK_Y, JG.z);
     const cols = ['#E2574C', '#F5C451', '#4D8FD1', '#81C784'];
-    const n = [-1, 0, 1].map((i) => i * JG.s), ys = [0, JG.s, JG.H];
-    for (const x of n) for (const z of n) g.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, JG.H, 6), cols[(Math.abs(x) + Math.abs(z)) % 4 | 0], { x, y: JG.H / 2, z }));
-    ys.slice(1).forEach((y, yi) => {
-      for (const z of n) { const b = mesh(new THREE.CylinderGeometry(0.03, 0.03, JG.s * 2, 6), cols[(yi + 1) % 4], { y, z }); b.rotation.z = Math.PI / 2; g.add(b); }
-      for (const x of n) { const b = mesh(new THREE.CylinderGeometry(0.03, 0.03, JG.s * 2, 6), cols[(yi + 2) % 4], { x, y }); b.rotation.x = Math.PI / 2; g.add(b); }
+    const n = Array.from({ length: JG.n + 1 }, (_, i) => -JGH + i * JG.s), ys = Array.from({ length: JG.n }, (_, i) => (i + 1) * (JG.H / JG.n));
+    n.forEach((x, xi) => n.forEach((z, zi) => g.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, JG.H, 6), cols[(xi + zi) % 4], { x, y: JG.H / 2, z }))));
+    ys.forEach((y, yi) => {
+      for (const z of n) { const b = mesh(new THREE.CylinderGeometry(0.028, 0.028, JGH * 2, 6), cols[(yi + 1) % 4], { y, z }); b.rotation.z = Math.PI / 2; g.add(b); }
+      for (const x of n) { const b = mesh(new THREE.CylinderGeometry(0.028, 0.028, JGH * 2, 6), cols[(yi + 2) % 4], { x, y }); b.rotation.x = Math.PI / 2; g.add(b); }
     });
     g.traverse((o) => { o.userData.ride = 'jungle'; });
     scene.add(g); }
-  pObs(JG.x, JG.z, 1.9, 1.9);
-  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz], k) => addRide({
-    id: 'jg' + k, type: 'jungle', group: 'jungle', climb: 0,
-    top: P(JG.x + sx * JG.s, DECK_Y + JG.H + 0.2, JG.z + sz * JG.s), face: Math.atan2(sx, sz),
-    approach: P(JG.x + sx * (JG.s + 0.75), DECK_Y, JG.z + sz * (JG.s + 0.75)), occ: null }));
+  pObs(JG.x, JG.z, JGH * 2 + 0.3, JGH * 2 + 0.3);
+  [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]].forEach(([sx, sz], k) => {
+    const ax = sx || (k % 2 ? 0.5 : -0.5), az = sz || (k % 2 ? 0.5 : -0.5);   // 가운데 자리는 옆에서 올라감
+    addRide({ id: 'jg' + k, type: 'jungle', group: 'jungle', climb: 0,
+      top: P(JG.x + sx * JGH, DECK_Y + JG.H + 0.2, JG.z + sz * JGH), face: Math.atan2(sx || 0.001, sz),
+      approach: P(JG.x + (sx ? sx * (JGH + 0.7) : ax), DECK_Y, JG.z + (sz && !sx ? sz * (JGH + 0.7) : sz * 0.6)), occ: null });
+  });
 
   // 🐴 스프링 흔들말 (말 · 오리 · 돌고래)
   const SPRINGS = [{ x: 4.7, z: 5.9, c: '#C98A5A', k: 'horse' }, { x: 6.1, z: 6.3, c: '#F5C451', k: 'duck' }, { x: 7.5, z: 5.7, c: '#6EC1E4', k: 'dolphin' }];
@@ -1334,7 +1337,7 @@ export function createWorld(container, opts = {}) {
   const nearBottom = (k) => { const a = ((gondolaAngle(k) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2); return Math.min(a, Math.PI * 2 - a) < 0.22; };
 
   // 🚂 꼬마 기차 (선로를 따라 70초에 한 바퀴, 역에서 7초 쉼 · 시각으로 움직여서 누가 봐도 같은 자리)
-  const TRAIN = { lap: 70, stop: 7, st: Math.PI * 0.3, cars: 4, gap: 0.15 };
+  const TRAIN = { lap: 70, stop: 10, st: Math.PI * 0.3, cars: 4, gap: 0.15 };
   const trackPt = (th, f = 1, out = new THREE.Vector3()) => out.set(PX + Math.cos(th) * TRACK.rx * f, DECK_Y, Math.sin(th) * TRACK.rz * f);
   { // 선로: 침목 + 레일 두 줄
     const N = 260, sleeper = new THREE.BoxGeometry(0.85, 0.04, 0.12), sm = mat('#7A5530');
@@ -1542,6 +1545,12 @@ export function createWorld(container, opts = {}) {
     if (player.ride && player.ride.group === group) return;
     const r = freeRide(group, at);
     if (!r) { opts.onToast && opts.onToast('친구들이 다 타고 있어요. 조금 기다려 줘!'); return; }
+    goRide(r);
+  }
+  /** 놀이기구로 걸어가서 타기 (이미 타는 곳에 서 있으면 바로 타거나 기다림) */
+  function goRide(r) {
+    if (waitRide && waitRide === r.group) return;   // 이미 기다리는 중
+    if (Math.hypot(player.obj.position.x - r.approach.x, player.obj.position.z - r.approach.z) < 0.7) { path = []; mountRide(r); return; }
     walkTo(r.approach);
     pendingOffice = { type: 'ride', ride: r };
   }
@@ -1555,7 +1564,11 @@ export function createWorld(container, opts = {}) {
     if (r.type === 'train' || r.type === 'wheel') {
       const seat = readySeat(r.group);
       if (!seat) {
-        if (waitRide !== r.group) opts.onToast && opts.onToast(r.type === 'train' ? '🚂 기차가 역에 올 때까지 기다려요…' : '🎡 빈 칸이 내려올 때까지 기다려요…');
+        if (waitRide !== r.group) {
+          let msg = '🎡 빈 칸이 내려올 때까지 기다려요…';
+          if (r.type === 'train') { const cyc = TRAIN.lap + TRAIN.stop, sec = Math.ceil(cyc - (Date.now() / 1000) % cyc); msg = `🚂 기차가 약 ${sec}초 뒤에 역에 와요. 여기서 기다리면 자동으로 타요!`; }
+          opts.onToast && opts.onToast(msg, 5000);
+        }
         waitRide = r.group; return;
       }
       r = seat;
@@ -1636,7 +1649,7 @@ export function createWorld(container, opts = {}) {
     for (const r of rides.filter((x) => x.type === 'jungle')) {
       if (r.occ !== r.lastOcc) { r.lastOcc = r.occ; r.climb = 0; }
       if (!r.occ) continue;
-      r.climb = Math.min(1, r.climb + dt / 1.6);
+      r.climb = Math.min(1, r.climb + dt / 2.4);
       const k = r.climb, o = r.occ.obj;
       if (k < 1) {
         _p.copy(r.approach).lerp(r.top, k); _p.y = DECK_Y + (JG.H + 0.0) * Math.min(1, k * 1.15);
@@ -1955,6 +1968,7 @@ export function createWorld(container, opts = {}) {
       if (nearDoor === 'vend') return { key: 'vend', icon: '🥤', label: '간식 고르기', run: () => opts.onVend && opts.onVend() };
       if (nearDoor === 'park-exit') return { key: 'pexit', icon: '🏠', label: '독서실로', run: () => goOutOfPark() };
       if (fishing) return { key: 'fishstop', icon: '🎣', label: '낚시 그만하기', run: () => stopFishing() };
+      if (waitRide) return { key: 'wait' + waitRide, icon: waitRide === 'train' ? '🚂' : '🎡', label: '기다리는 중…', run: () => {} };
       if (near(FISH_SPOT, 1.4)) return { key: 'fish', icon: '🎣', label: '과학 낚시', run: () => { walkTo(FISH_SPOT); pendingOffice = { type: 'fish' }; } };
       { const q = pondQ(p.x, p.z);
         if (q > 1 && q < 1.7 && !onPier(p.x, p.z)) return { key: 'wish', icon: '🪙', label: '소원 동전', run: () => opts.onWish && opts.onWish() }; }
@@ -1966,7 +1980,7 @@ export function createWorld(container, opts = {}) {
       }
       if (!best) return null;
       const [icon, label] = best.type === 'bench' ? [best.stretch ? '🧘' : '🪑', best.stretch ? '스트레칭 벤치' : '벤치에 앉기'] : RIDE_NAME[best.type];
-      return { key: 'ride' + best.id, icon, label, run: () => (best.type === 'slide' || best.type === 'zip' ? (walkTo(best.approach), (pendingOffice = { type: best.type })) : (walkTo(best.approach), (pendingOffice = { type: 'ride', ride: best }))) };
+      return { key: 'ride' + best.id, icon, label, run: () => (best.type === 'slide' || best.type === 'zip' ? (walkTo(best.approach), (pendingOffice = { type: best.type })) : goRide(best)) };
     }
     return null;
   }
