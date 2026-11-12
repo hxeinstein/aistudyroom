@@ -57,6 +57,8 @@ export const LOOKS = {
   otter: { fur: '#8A5F3F', muzzle: '#E8D2B8', ear: 'tiny', tail: 'long', whiskers: true, scale: 0.85, speed: 1.1 },
   penguin: { fur: '#2F3542', muzzle: '#FFFFFF', ear: 'none', beak: '#F5A23C', face: '#FFFFFF', tail: 'none', waddle: true, limbs: '#F5A23C', speed: 0.8 },
   capybara: { fur: '#9C7B5B', muzzle: '#8F6F51', ear: 'tiny', earColor: '#7E6047', tail: 'none', capy: true, bodyW: 1.2, scale: 1.05, speed: 0.8, yuzu: true },
+  splitgray: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#8E949E', inner: '#F7B3B8', split: '#8E949E', tail: 'long', tailColor: '#8E949E', whiskers: true },
+  splitblack: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#34353B', inner: '#F7B3B8', split: '#34353B', tail: 'long', tailColor: '#34353B', whiskers: true },
   bun: { fur: '#FFF8EE', muzzle: '#FFFDF8', ear: 'none', tail: 'none', bun: true, limbs: '#F6EBDD', cheekColor: '#FFC2CF' },
   deer: { fur: '#C98F57', muzzle: '#F6E5CF', ear: 'side', antlers: '#8A5A33', tail: 'puff', tailColor: '#FFFFFF', speed: 1.25 },
 };
@@ -230,6 +232,11 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     head.add(mesh(S(0.06, 10, 10), '#FFFFFF', { x: sx * 0.15, y: 0.25, z: 0.14 }));
     head.add(mesh(S(0.032, 8, 8), '#2A2222', { x: sx * 0.15, y: 0.25, z: 0.19 }));
     const d = dizzyEye(0.12, sx * 0.15, 0.25, 0.205, 0); head.add(d); dizzyEyes.push(d);
+  }
+  if (L.split) { // 하치와레 무늬: 머리 위를 덮고 이마 가운데만 V자로 하얗게 갈림
+    const gap = 0.32;
+    const cap = mesh(new THREE.SphereGeometry(0.335, 28, 18, Math.PI / 2 + gap, Math.PI * 2 - gap * 2, 0, 1.22), L.split);
+    cap.scale.copy(skull.scale); head.add(cap);
   }
   if (L.yuzu) { // 카피바라: 머리 위에 귤 하나 (온천 카피바라처럼 느긋하게)
     head.add(mesh(S(0.1, 12, 10), '#F5A23C', { y: 0.38, z: -0.02 }));
