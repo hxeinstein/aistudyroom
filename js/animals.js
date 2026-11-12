@@ -56,7 +56,7 @@ export const LOOKS = {
   raccoon: { fur: '#9A9AA0', muzzle: '#F1EFEA', ear: 'point', inner: '#3A3A40', mask: '#3A3A40', tail: 'ringed', tailRing: '#3A3A40' },
   otter: { fur: '#8A5F3F', muzzle: '#E8D2B8', ear: 'tiny', tail: 'long', whiskers: true, scale: 0.85, speed: 1.1 },
   penguin: { fur: '#2F3542', muzzle: '#FFFFFF', ear: 'none', beak: '#F5A23C', face: '#FFFFFF', tail: 'none', waddle: true, limbs: '#F5A23C', speed: 0.8 },
-  capybara: { fur: '#A9764A', muzzle: '#946540', ear: 'tiny', tail: 'none', bigMuzzle: true, nostril: '#4A3324', bodyW: 1.2, scale: 1.05, speed: 0.8, yuzu: true },
+  capybara: { fur: '#9C7B5B', muzzle: '#8F6F51', ear: 'tiny', earColor: '#7E6047', tail: 'none', capy: true, bodyW: 1.2, scale: 1.05, speed: 0.8, yuzu: true },
   bun: { fur: '#FFF8EE', muzzle: '#FFFDF8', ear: 'none', tail: 'none', bun: true, limbs: '#F6EBDD', cheekColor: '#FFC2CF' },
   deer: { fur: '#C98F57', muzzle: '#F6E5CF', ear: 'side', antlers: '#8A5A33', tail: 'puff', tailColor: '#FFFFFF', speed: 1.25 },
 };
@@ -114,7 +114,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
   const head = new THREE.Group();
   head.position.y = 0.95 + neck;
   const skull = mesh(S(0.33, 20, 16), fur);
-  skull.scale.set(L.cheeks ? 1.15 : 1.05, 0.95, 0.98);
+  skull.scale.set(L.cheeks ? 1.15 : L.capy ? 0.98 : 1.05, L.capy ? 0.9 : 0.95, L.capy ? 1.08 : 0.98);
   head.add(skull);
   if (L.face) { // 펭귄 흰 얼굴
     const f = mesh(S(0.27, 16, 12), L.face, { y: -0.04, z: 0.1 });
@@ -131,10 +131,15 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     }
   }
   // 주둥이
-  const mz = L.bigMuzzle ? 0.2 : 0.14;
-  const muzzle = mesh(S(mz, 14, 10), mat(L.muzzle), { y: L.bigMuzzle ? -0.12 : -0.09, z: L.bigMuzzle ? 0.24 : 0.25 });
-  muzzle.scale.set(L.bigMuzzle ? 1.35 : 1.2, 0.8, 0.7);
+  const mz = L.bigMuzzle ? 0.2 : L.capy ? 0.22 : 0.14;
+  const muzzle = mesh(S(mz, 16, 12), mat(L.muzzle), { y: L.bigMuzzle ? -0.12 : L.capy ? -0.05 : -0.09, z: L.bigMuzzle ? 0.24 : L.capy ? 0.3 : 0.25 });
+  // 카피바라: 털색과 같은 길고 뭉툭한 콧등 (앞으로 쭉, 위아래는 납작)
+  muzzle.scale.set(L.bigMuzzle ? 1.35 : L.capy ? 0.9 : 1.2, L.capy ? 0.8 : 0.8, L.capy ? 1.35 : 0.7);
   head.add(muzzle);
+  if (L.capy) {   // 콧등 끝의 까만 코 (위쪽에 콧구멍 둘)
+    const tip = mesh(S(0.1, 12, 10), '#5A4636', { y: 0.0, z: 0.58 }); tip.scale.set(1.05, 0.55, 0.35); head.add(tip);
+    for (const sx of [-1, 1]) { const n = mesh(S(0.022, 6, 6), '#2A2018', { x: sx * 0.045, y: 0.02, z: 0.615 }); n.scale.set(1, 0.6, 0.6); head.add(n); }
+  }
   if (L.beak) {
     const b = mesh(new THREE.ConeGeometry(0.07, 0.16, 10), L.beak, { y: -0.06, z: 0.38 });
     b.rotation.x = Math.PI / 2;
@@ -145,6 +150,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     const t2 = mesh(new THREE.CapsuleGeometry(0.055, 0.14, 4, 8), fur, { y: -0.33, z: 0.42 });
     t2.rotation.x = -0.2;
     head.add(t1, t2);
+  } else if (L.capy) { // (코는 위에서 만듦)
   } else if (L.bigMuzzle) { // 하마 콧구멍
     for (const sx of [-1, 1]) head.add(mesh(S(0.03, 8, 6), L.nostril || '#5E5470', { x: sx * 0.08, y: -0.06, z: 0.39 }));
   } else {
@@ -182,7 +188,8 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
       if (L.patchLong) p.rotation.z = sx * 0.6;
       head.add(p);
     }
-    if (L.ear !== 'frog') head.add(mesh(eyeGeo, L.patch && !L.patchLong ? '#FFFFFF' : '#2A2222', { x: sx * 0.12, y: 0.04, z: 0.3 }));
+    if (L.capy) { const e = mesh(eyeGeo, '#2A2222', { x: sx * 0.15, y: 0.1, z: 0.27 }); e.scale.set(1.2, 0.45, 1); head.add(e); }   // 졸린 듯 가느다란 눈
+    else if (L.ear !== 'frog') head.add(mesh(eyeGeo, L.patch && !L.patchLong ? '#FFFFFF' : '#2A2222', { x: sx * 0.12, y: 0.04, z: 0.3 }));
     if (L.tears) { // 치타 눈물 무늬
       const tl = mesh(new THREE.BoxGeometry(0.02, 0.12, 0.02), '#3A2A22', { x: sx * 0.1, y: -0.05, z: 0.3 });
       tl.rotation.z = sx * 0.2;
@@ -190,7 +197,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     }
     const cheek = mesh(S(L.cheeks ? 0.11 : 0.05, 8, 8), L.cheeks ? mat('#FFF3DD') : mat(L.cheekColor || '#FF9AA8', { transparent: true, opacity: 0.7 }), { x: sx * (L.cheeks ? 0.24 : 0.21), y: -0.08, z: L.cheeks ? 0.17 : 0.24 });
     if (!L.cheeks) cheek.scale.z = 0.3;
-    head.add(cheek);
+    if (!L.capy) head.add(cheek);
     if (L.cheeks) head.add(mesh(S(0.04, 8, 8), mat('#FF9AA8', { transparent: true, opacity: 0.7 }), { x: sx * 0.22, y: -0.06, z: 0.27 }));
     if (L.whiskers) for (const dy of [-0.08, -0.12]) {
       const w = mesh(new THREE.BoxGeometry(0.16, 0.008, 0.008), '#5A4A42', { x: sx * 0.22, y: dy, z: 0.28, cast: false });
