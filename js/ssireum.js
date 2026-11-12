@@ -6,7 +6,7 @@
 import * as Room from './room.js';
 
 let ctx = null;   // { world, toast, openModal, closeModal, getProfile, sfx }
-const FIGHT_MS = 30000, COUNT_MS = 3500, TAP_GAP = 110, TECH_WIN = 700;
+const FIGHT_MS = 20000, COUNT_MS = 3500, TAP_GAP = 110, TECH_WIN = 700;
 const PUSH = 0.05, TECH = 0.2, MISS = 0.05;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -44,7 +44,7 @@ export function openSsireum() {
   const near = peers().filter((p) => p.ar === 'park' && p.uid !== myId());
   const m = ctx.openModal(`
     <h2>🤼 씨름장</h2>
-    <p class="desc"><b>💪 힘!</b>을 빠르게 눌러 상대를 밀고, 게이지에 <b>⚡</b>가 반짝일 때 <b>기술!</b>을 누르면 한 번에 크게 밀어요. 끝까지 밀어내거나 30초 뒤 더 밀고 있는 쪽이 이겨요.</p>
+    <p class="desc"><b>💪 힘!</b>을 빠르게 눌러 상대를 밀고, 게이지에 <b>⚡</b>가 반짝일 때 <b>기술!</b>을 누르면 한 번에 크게 밀어요. 끝까지 밀어내거나 20초 뒤 더 밀고 있는 쪽이 이겨요.</p>
     <button class="btn primary block" id="srNpc" type="button">🤖 연습 상대와 겨루기</button>
     <h3 class="sg-h">쉼터에 있는 친구에게 도전</h3>
     <div class="sr-list">${near.length ? near.map((p) => `<button type="button" class="sr-peer" data-u="${esc(p.uid)}"><b>${esc(p.n || '친구')}</b><span>도전하기 🤼</span></button>`).join('') : '<p class="hint">지금 쉼터에 다른 친구가 없어요. 연습 상대와 겨뤄 봐요!</p>'}</div>
