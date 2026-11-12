@@ -23,6 +23,13 @@ async function api(body) {
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
+/** 보내는 동안 단추를 잠가서 여러 번 눌려도 한 번만 가게 */
+async function once(btn, label, fn) {
+  if (!btn || btn.disabled) return;
+  const old = btn.innerHTML;
+  btn.disabled = true; btn.classList.add('busy'); btn.innerHTML = label;
+  try { return await fn(); } finally { if (btn.isConnected) { btn.disabled = false; btn.classList.remove('busy'); btn.innerHTML = old; } }
+}
 function ago(t) {
   const m = Math.floor((Date.now() - t) / 60000);
   if (m < 1) return '방금';
@@ -111,13 +118,12 @@ function renderGrid() {
       <div class="note-from">— ${esc(n.from)} · ${ago(n.t)}</div>
       <div class="note-act">${n.mine || admin ? `<button type="button" data-del="${n.id}">떼기</button>` : `<button type="button" data-rep="${n.id}">신고</button>`}</div>
     </div>`).join('') : '<p class="hint center">아직 포스트잇이 없어요. 첫 응원을 붙여 주세요!</p>';
-  box.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => {
-    if (!confirm('이 포스트잇을 뗄까요?')) return;
+  box.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => confirm('이 포스트잇을 뗄까요?') && once(b, '…', async () => {
     const r = await api({ action: 'board.delete', id: b.dataset.del, device: deviceId(), token: ctx.teacherToken() }).catch(() => ({ error: '연결하지 못했어요' }));
     if (r.error) return ctx.toast(r.error);
     ctx.toast('포스트잇을 뗐어요');
     refresh();
-  }));
+  })));
   box.querySelectorAll('[data-rep]').forEach((b) => (b.onclick = async () => {
     if (!confirm('이 포스트잇이 불편한가요? 신고가 모이면 숨겨지고 선생님이 확인해요.')) return;
     await api({ action: 'board.report', id: b.dataset.rep, device: deviceId() }).catch(() => {});
@@ -145,15 +151,15 @@ function openNoteForm() {
     m.querySelectorAll('.sw-btn').forEach((x) => x.classList.toggle('on', x === b));
   }));
   m.querySelector('#ntCancel').onclick = openBoard;
-  m.querySelector('#ntGo').onclick = async () => {
+  m.querySelector('#ntGo').onclick = (e) => once(e.currentTarget, '⏳ 붙이는 중…', async () => {
     const p = ctx.getProfile();
+    m.querySelector('#ntMsg').textContent = '';
     const r = await api({ action: 'board.post', device: deviceId(), nick: p.name, to: m.querySelector('#ntTo').value, text: m.querySelector('#ntText').value, color })
       .catch(() => ({ error: '연결하지 못했어요. 인터넷을 확인해 주세요.' }));
     if (r.error) { m.querySelector('#ntMsg').textContent = r.error; return; }
     ctx.toast('📌 응원을 붙였어요!');
-    await refresh();
-    openBoard();
-  };
+    openBoard();          // 바로 게시판으로 (목록은 뒤에서 새로 불러옴)
+  });
   setTimeout(() => m.querySelector('#ntText').focus(), 50);
 }
 
@@ -175,7 +181,8 @@ export function openSuggest() {
     <div id="sgPublic"><p class="hint">불러오는 중…</p></div>`);
   m.querySelector('#sgCancel').onclick = ctx.closeModal;
   if (m.querySelector('#sgAdmin')) m.querySelector('#sgAdmin').onclick = openSuggestAdmin;
-  m.querySelector('#sgGo').onclick = async () => {
+  m.querySelector('#sgGo').onclick = (e) => once(e.currentTarget, '⏳ 넣는 중…', async () => {
+    m.querySelector('#sgMsg').textContent = '';
     const r = await api({ action: 'suggest.post', device: deviceId(), nick: ctx.getProfile().name, text: m.querySelector('#sgText').value })
       .catch(() => ({ error: '연결하지 못했어요. 인터넷을 확인해 주세요.' }));
     if (r.error) { m.querySelector('#sgMsg').textContent = r.error; return; }
@@ -183,7 +190,7 @@ export function openSuggest() {
     ctx.closeModal();
     ctx.toast('📮 건의를 넣었어요. 선생님이 답하면 알려 줄게요!');
     setTimeout(checkMine, 2500);
-  };
+  });
   // 내 건의 · 공개된 건의 (선생님이 시트에서 '공개'에 체크한 것)
   const showMine = () => {
     const box = m.querySelector('#sgMine');
