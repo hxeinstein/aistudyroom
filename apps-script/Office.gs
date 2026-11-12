@@ -822,10 +822,10 @@ function suggestMine_(b) {
   for (let i = rows.length - 1; i >= 1 && items.length < 10; i--) {
     const r = rows[i];
     if (!r[2] || String(r[3]) !== dh) continue;
-    items.push({ id: i + 1, t: new Date(r[0]).getTime(), text: String(r[2]), status: String(r[4] || '새 건의'), reply: String(r[7] || '') });
+    items.push({ id: new Date(r[0]).getTime(), t: new Date(r[0]).getTime(), text: String(r[2]), status: String(r[4] || '새 건의'), reply: String(r[7] || '') });
   }
   const out = { items: items };
-  try { cache.put('sugmine_' + dh, JSON.stringify(out), 120); } catch (e) {}
+  try { cache.put('sugmine_' + dh, JSON.stringify(out), 60); } catch (e) {}
   return out;
 }
 

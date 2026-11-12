@@ -187,7 +187,8 @@ export function openSuggest() {
   // 내 건의 · 공개된 건의 (선생님이 시트에서 '공개'에 체크한 것)
   const showMine = () => {
     const box = m.querySelector('#sgMine');
-    if (!box || !mine.length) return;
+    if (!box) return;
+    if (!mine.length) { box.innerHTML = ''; return; }   // 시트에서 지운 건의는 화면에서도 사라짐
     box.innerHTML = `<h3 class="sg-h">📬 내 건의</h3><div class="sg-list">${mine.map((x) => sgCard(x, { me: true })).join('')}</div>`;
     markMineSeen();
   };
