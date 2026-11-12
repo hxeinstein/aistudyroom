@@ -19,6 +19,27 @@ function spiralMat() {
   }
   return new THREE.MeshBasicMaterial({ map: spiralTex, transparent: true });
 }
+// 하치와레 무늬 무늬결 (구 위쪽을 펼친 그림: 가로 = 한 바퀴, 세로 = 정수리→눈썹)
+const splitMats = {};
+function splitMat(color) {
+  if (splitMats[color]) return splitMats[color];
+  const W = 512, H = 128, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = color; g.fillRect(0, 0, W, H);
+  // 앞(+z)은 가로 1/4 지점. 정수리 쪽은 좁고 아래로 갈수록 둥글게 벌어지는 하얀 아치를 투명하게 비움
+  const fx = W * 0.25;
+  g.globalCompositeOperation = 'destination-out';
+  g.beginPath();
+  g.moveTo(fx, H * 0.18);
+  g.bezierCurveTo(fx + W * 0.02, H * 0.45, fx + W * 0.085, H * 0.8, fx + W * 0.13, H + 2);
+  g.lineTo(fx - W * 0.13, H + 2);
+  g.bezierCurveTo(fx - W * 0.085, H * 0.8, fx - W * 0.02, H * 0.45, fx, H * 0.18);
+  g.fill();
+  // 아래 가장자리도 살짝 물결지게
+  for (let i = 0; i < 10; i++) { g.beginPath(); g.ellipse((i + 0.5) * (W / 10), H + 4, W / 22, 10, 0, 0, Math.PI * 2); g.fill(); }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  return (splitMats[color] = new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5 }));
+}
 function dizzyEye(size, x, y, z, ry) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), spiralMat());
   m.position.set(x, y, z); m.rotation.y = ry; m.visible = false;   // (Euler XYZ라 rotation.z는 제자리 돌기)
@@ -59,6 +80,7 @@ export const LOOKS = {
   capybara: { fur: '#9C7B5B', muzzle: '#8F6F51', ear: 'tiny', earColor: '#7E6047', tail: 'none', capy: true, bodyW: 1.2, scale: 1.05, speed: 0.8, yuzu: true },
   splitgray: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#8E949E', inner: '#F7B3B8', split: '#8E949E', tail: 'long', tailColor: '#8E949E', whiskers: true },
   splitblack: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#34353B', inner: '#F7B3B8', split: '#34353B', tail: 'long', tailColor: '#34353B', whiskers: true },
+  splitcheese: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#E9A04F', inner: '#F7B3B8', split: '#E9A04F', tail: 'long', tailColor: '#E9A04F', whiskers: true },
   bun: { fur: '#FFF8EE', muzzle: '#FFFDF8', ear: 'none', tail: 'none', bun: true, limbs: '#F6EBDD', cheekColor: '#FFC2CF' },
   deer: { fur: '#C98F57', muzzle: '#F6E5CF', ear: 'side', antlers: '#8A5A33', tail: 'puff', tailColor: '#FFFFFF', speed: 1.25 },
 };
@@ -233,9 +255,8 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     head.add(mesh(S(0.032, 8, 8), '#2A2222', { x: sx * 0.15, y: 0.25, z: 0.19 }));
     const d = dizzyEye(0.12, sx * 0.15, 0.25, 0.205, 0); head.add(d); dizzyEyes.push(d);
   }
-  if (L.split) { // 하치와레 무늬: 머리 위를 덮고 이마 가운데만 V자로 하얗게 갈림
-    const gap = 0.32;
-    const cap = mesh(new THREE.SphereGeometry(0.335, 28, 18, Math.PI / 2 + gap, Math.PI * 2 - gap * 2, 0, 1.22), L.split);
+  if (L.split) { // 하치와레 무늬: 머리 위를 덮고, 이마 가운데는 둥근 아치 모양으로 하얗게 갈림
+    const cap = mesh(new THREE.SphereGeometry(0.336, 48, 20, 0, Math.PI * 2, 0, 1.25), splitMat(L.split));
     cap.scale.copy(skull.scale); head.add(cap);
   }
   if (L.yuzu) { // 카피바라: 머리 위에 귤 하나 (온천 카피바라처럼 느긋하게)
