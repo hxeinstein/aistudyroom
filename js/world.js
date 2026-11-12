@@ -991,7 +991,10 @@ export function createWorld(container, opts = {}) {
   }
   merryG.traverse((o) => { o.userData.ride = 'merry'; });
   scene.add(merryG); pObs(2.0, 1.5, 2.4, 2.4);
-  const merry = { disc, w: 0 };
+  // 뺑뺑이 속도: 탄 학생이 화면을 꾹 누르면(또는 톡톡) 점점 빨라짐. 최고 속도로 5초 넘게 돌면 어질어질
+  const MERRY_BASE = 1.3, MERRY_MAX = 6.5;
+  const merry = { disc, w: 0, boost: 0, maxT: 0 };
+  const SLUMP_SEC = 10;
   [0, 1, 2].forEach((k) => {
     const a = (k / 3) * Math.PI * 2 + Math.PI / 3;
     addRide({ id: 'merry' + k, type: 'merry', group: 'merry', a, approach: P(2.0 + Math.sin(a) * 1.75, DECK_Y, 1.5 + Math.cos(a) * 1.75), occ: null });
@@ -1150,6 +1153,7 @@ export function createWorld(container, opts = {}) {
     if (r.occ && r.occ !== player) { opts.onToast && opts.onToast('방금 친구가 탔어요'); return; }
     if (player.ride) leaveRide(true);
     r.occ = player; player.ride = r; player.mode = 'sit';
+    if (r.type === 'merry') opts.onToast && opts.onToast('화면을 꾹 누르고 있으면 점점 빨라져요 🎡 · 내릴 땐 일어나기');
     if (r.type === 'bench') { yaw = yawTarget = 0; pitchTarget = moodName === 'night' ? 0.6 : 0.3; setZoom(ZOOM_MIN); opts.onToast && opts.onToast('화면을 끌면 하늘을 둘러봐요 · 내 쪽으로 돌리면 내 모습도 보여요 📸'); }
     opts.onSfx && opts.onSfx(r.type === 'bench' ? 'sit' : 'creak');
     opts.onRide && opts.onRide(r);
@@ -1163,6 +1167,7 @@ export function createWorld(container, opts = {}) {
     player.obj.position.copy(r.approach); player.obj.position.y = DECK_Y;
     player.obj.rotation.z = 0;
     player.mode = 'idle';
+    if (player.dizzy) { player.slumpT = SLUMP_SEC; path = []; opts.onToast && opts.onToast('너무 어지러워서 털썩… 잠깐만 쉬었다 가요 💫'); }
     if (!silent) opts.onRide && opts.onRide(null);
   }
   function startSlide() {
@@ -1226,17 +1231,28 @@ export function createWorld(container, opts = {}) {
     }
     // 뺑뺑이
     const riders = rides.filter((x) => x.type === 'merry' && x.occ);
-    merry.w += ((riders.length ? 1.3 : 0) - merry.w) * Math.min(1, dt * 0.8);
+    const onMerry = player.ride && player.ride.type === 'merry';
+    const pushing = onMerry && down && !down.drag && !pinch && pointers.size === 1;
+    if (!riders.length) merry.boost = 0;
+    else if (pushing) merry.boost = Math.min(MERRY_MAX - MERRY_BASE, merry.boost + dt * 1.7);
+    else merry.boost = Math.max(0, merry.boost - dt * 0.45);
+    const want = riders.length ? MERRY_BASE + merry.boost : 0;
+    merry.w += (want - merry.w) * Math.min(1, dt * (want > merry.w ? 1.6 : 0.8));
     merry.disc.rotation.y += merry.w * dt;
+    if (onMerry && merry.w > MERRY_MAX * 0.93) {
+      merry.maxT += dt;
+      if (merry.maxT >= 5 && !player.dizzy) { player.dizzy = true; opts.onToast && opts.onToast('어질어질… 눈이 뺑글뺑글 💫'); }
+    } else merry.maxT = 0;
     for (const r of riders) {
       const a = r.a + merry.disc.rotation.y;
       placeRider(r.occ, P(2.0 + Math.sin(a) * 0.75, DECK_Y + 0.22, 1.5 + Math.cos(a) * 0.75), a + Math.PI / 2, 'sit');
+      r.occ.obj.rotation.z = Math.min(0.22, merry.w * 0.03);   // 빨리 돌면 바깥으로 살짝 기울어짐
     }
     // 벤치
     for (const r of rides.filter((x) => x.type === 'bench' && x.occ)) placeRider(r.occ, r.seat, r.rot, r.occ === player && player.stretching ? 'stretch' : 'sit');
     // 삐걱 소리 (내가 탔을 때만, 작게)
     creakT -= dt;
-    if (player.ride && (player.ride.type === 'swing' || player.ride.type === 'merry') && creakT <= 0) { creakT = player.ride.type === 'swing' ? 1.37 : 2.2; opts.onSfx && opts.onSfx('creak'); }
+    if (player.ride && (player.ride.type === 'swing' || player.ride.type === 'merry') && creakT <= 0) { creakT = player.ride.type === 'swing' ? 1.37 : Math.max(0.6, 2.2 * MERRY_BASE / Math.max(MERRY_BASE, merry.w)); opts.onSfx && opts.onSfx('creak'); }
     stepSlide(dt);
     if (area.name !== 'park') return;
     // 연못 물결
@@ -1497,6 +1513,7 @@ export function createWorld(container, opts = {}) {
 
   function walkTo(target) {
     if (studying || trailWalk) return;
+    if (player.slumpT > 0) { opts.onToast && opts.onToast('아직 어지러워요… 💫 조금만 기다려 줘'); return; }
     if (player.seat || player.officeDesk || player.ride) standUp();
     path = findPath(player.obj.position, target);
   }
@@ -1580,6 +1597,7 @@ export function createWorld(container, opts = {}) {
       r.at = now;
       r.a.area = x.ar === 'office' || x.ar === 'park' ? x.ar : 'main';
       r.rd = typeof x.rd === 'string' ? x.rd.slice(0, 12) : '';
+      r.a.dizzy = x.dz === 1;
       r.uid = x.uid;
       if ((x.it || '') !== (r.a.held || '')) setHeldFor(r.a, typeof x.it === 'string' ? x.it.slice(0, 4) : '');
       r.a.obj.traverse((o) => { o.userData.remoteNick = x.n; });
@@ -1621,6 +1639,7 @@ export function createWorld(container, opts = {}) {
     for (const r of remotes.values()) {
       r.a.obj.visible = r.a.area === area.name;
       if (r.seatIdx >= 0 || r.onRide) continue;
+      r.a.obj.rotation.z = 0;
       const p = r.a.obj.position;
       const d = Math.hypot(r.target.x - p.x, r.target.z - p.z);
       if (d > 0.04) {
@@ -1632,11 +1651,11 @@ export function createWorld(container, opts = {}) {
         let diff = Math.atan2(Math.sin(want - r.a.obj.rotation.y), Math.cos(want - r.a.obj.rotation.y));
         r.a.obj.rotation.y += diff * Math.min(1, dt * 10);
       } else {
-        r.a.mode = 'idle';
+        r.a.mode = r.a.dizzy && r.a.area === 'park' ? 'slump' : 'idle';
         let diff = Math.atan2(Math.sin(r.ry - r.a.obj.rotation.y), Math.cos(r.ry - r.a.obj.rotation.y));
         r.a.obj.rotation.y += diff * Math.min(1, dt * 6);
       }
-      p.y = DECK_Y;
+      p.y = r.a.mode === 'slump' ? DECK_Y - 0.2 * (r.a.obj.userData.scale || 1) : DECK_Y;
     }
   }
   /** 응원 이모지: 머리 위에 잠깐 떠오름 (uid가 null이면 나) */
@@ -1653,7 +1672,7 @@ export function createWorld(container, opts = {}) {
   function getPlayerState() {
     const p = player.obj.position;
     return { x: Math.round(p.x * 100) / 100, z: Math.round(p.z * 100) / 100, ry: Math.round(player.obj.rotation.y * 100) / 100, ar: area.name, s: area.name === 'main' && player.seat ? player.seat.idx : -1,
-      rd: player.ride ? player.ride.id : player.slide ? 'slide' : '', it: player.held || '' };
+      rd: player.ride ? player.ride.id : player.slide ? 'slide' : '', it: player.held || '', dz: player.dizzy ? 1 : 0 };
   }
   /** 선생님: 캐릭터 없이 구경 (화면은 보이지 않는 시점을 따라 움직임) */
   function setObserver(on) {
@@ -1865,6 +1884,7 @@ export function createWorld(container, opts = {}) {
     const wasDrag = down.drag;
     down = null;
     if (wasDrag || e.target !== el || studying || trailWalk) return;
+    if (player.ride && player.ride.type === 'merry') { merry.boost = Math.min(MERRY_MAX - MERRY_BASE, merry.boost + 0.35); return; }   // 톡톡 = 밀기
     const r = el.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
@@ -2027,6 +2047,11 @@ export function createWorld(container, opts = {}) {
     let moving = false;
     const walkingTrail = stepTrailWalk(dt);
     if (walkingTrail) { kx = kz = 0; }
+    if (player.slumpT > 0) {
+      player.slumpT -= dt;
+      kx = kz = 0;
+      if (player.slumpT <= 0) { player.slumpT = 0; player.dizzy = false; }
+    }
     if ((kx || kz) && !studying && !player.slide) {
       if (follow) stopFollow();
       if (player.seat || player.officeDesk || player.ride) standUp();
@@ -2097,8 +2122,8 @@ export function createWorld(container, opts = {}) {
       }
     }
     if (!player.seat && !player.officeDesk && !player.ride && !player.slide && !walkingTrail) {
-      player.mode = moving ? 'walk' : 'idle';
-      p.y = DECK_Y;
+      player.mode = player.slumpT > 0 ? 'slump' : moving ? 'walk' : 'idle';
+      p.y = player.slumpT > 0 ? DECK_Y - 0.2 * (player.obj.userData.scale || 1) : DECK_Y;
     }
     // 뭉치 박사 근처인지 (하단 '질문' 버튼 표시용)
     let nb = null;
@@ -2130,7 +2155,7 @@ export function createWorld(container, opts = {}) {
     stepRemotes(dt);
     stepPark(dt, t);
     stepBanner(t);
-    for (const a of actors) if (!a.fixed) animateAnimal(a.obj, a.mode, t + a.obj.userData.phase, dt);
+    for (const a of actors) if (!a.fixed) { a.obj.userData.dizzy = !!a.dizzy; animateAnimal(a.obj, a.mode, t + a.obj.userData.phase, dt); }
     for (const av of officeSitters.values()) animateAnimal(av, 'study', t + av.userData.phase, dt);
     clouds.forEach((c, i) => { c.position.x += dt * (0.3 + i * 0.05); if (c.position.x > 40) c.position.x = -40; });
 

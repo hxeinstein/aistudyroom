@@ -4,6 +4,25 @@ import * as THREE from '../vendor/three.module.min.js';
 
 const M = {};
 const mat = (c, extra) => (extra ? new THREE.MeshLambertMaterial({ color: c, ...extra }) : (M[c] ||= new THREE.MeshLambertMaterial({ color: c })));
+// 어지러울 때 눈 (뺑글뺑글 소용돌이)
+let spiralTex = null;
+function spiralMat() {
+  if (!spiralTex) {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = '#FFFFFF'; g.beginPath(); g.arc(32, 32, 30, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#2A2222'; g.lineWidth = 4.5; g.lineCap = 'round'; g.beginPath();
+    for (let k = 0; k <= 120; k++) { const a = k * 0.16, r = 2 + k * 0.23; const x = 32 + Math.cos(a) * r, y = 32 + Math.sin(a) * r; k ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.stroke();
+    spiralTex = new THREE.CanvasTexture(c);
+  }
+  return new THREE.MeshBasicMaterial({ map: spiralTex, transparent: true });
+}
+function dizzyEye(size, x, y, z, ry) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), spiralMat());
+  m.position.set(x, y, z); m.rotation.y = ry; m.visible = false;   // (Euler XYZ라 rotation.z는 제자리 돌기)
+  return m;
+}
 function mesh(geo, material, { x = 0, y = 0, z = 0, cast = true } = {}) {
   const o = new THREE.Mesh(geo, typeof material === 'string' ? mat(material) : material);
   o.position.set(x, y, z);
@@ -151,7 +170,9 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
   if (L.spots && neck) for (const [x, y, z] of [[-0.15, 0.2, 0.2], [0.18, 0.22, 0.15]]) head.add(spot(L.spots, 0.06, x, y, z));
 
   const eyeGeo = S(0.038, 10, 10);
+  const dizzyEyes = [];
   for (const sx of [-1, 1]) {
+    if (L.ear !== 'frog') { const d = dizzyEye(0.14, sx * 0.12, 0.04, 0.335, sx * 0.3); head.add(d); dizzyEyes.push(d); }
     if (L.patch) {
       const p = mesh(S(0.075, 10, 10), L.patch, { x: sx * 0.12, y: L.patchLong ? 0.0 : 0.03, z: 0.27 });
       p.scale.set(L.patchLong ? 1.3 : 1, 1.2, 0.5);
@@ -198,6 +219,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     head.add(mesh(S(0.1), fur, { x: sx * 0.15, y: 0.25, z: 0.08 }));
     head.add(mesh(S(0.06, 10, 10), '#FFFFFF', { x: sx * 0.15, y: 0.25, z: 0.14 }));
     head.add(mesh(S(0.032, 8, 8), '#2A2222', { x: sx * 0.15, y: 0.25, z: 0.19 }));
+    const d = dizzyEye(0.12, sx * 0.15, 0.25, 0.205, 0); head.add(d); dizzyEyes.push(d);
   }
   g.add(head);
 
@@ -250,6 +272,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
   g.userData = {
     legL, legR, armL, armR, head, body, tail, phase: Math.random() * 10,
     headY: head.position.y, bodyY: 0.45, height: box.max.y,
+    dizzyEyes, dizzy: false,
     scale: L.scale || 1, waddle: !!L.waddle, slow: !!L.slow, hop: !!L.hop, cushion: !!L.cushion, big: !!L.bigBottom,
   };
   return g;
@@ -334,6 +357,21 @@ export function animateAnimal(a, mode, t, dt) {
     return;
   }
   if (u.tail) u.tail.rotation.z = Math.sin(t * (mode === 'walk' ? 8 : 3) * slow) * 0.25;
+  if (u.dizzyEyes) for (const e of u.dizzyEyes) { e.visible = !!u.dizzy; if (u.dizzy) e.rotation.z -= dt * 9; }
+  if (mode === 'slump') {
+    // 어지러워서 털썩 주저앉음: 다리는 앞으로, 팔은 축, 머리는 빙글빙글
+    u.legL.rotation.x = u.legR.rotation.x = -1.45;
+    u.legL.rotation.z = 0.25; u.legR.rotation.z = -0.25;
+    u.armL.rotation.x = u.armR.rotation.x = -0.15;
+    u.armL.rotation.z = 0.7; u.armR.rotation.z = -0.7;
+    u.body.position.y = by;
+    u.body.rotation.z = Math.sin(t * 2.6) * 0.12;
+    u.head.position.y = hy - 0.02;
+    u.head.rotation.z = Math.sin(t * 2.6) * 0.3;
+    u.head.rotation.x = 0.12 + Math.cos(t * 2.6) * 0.18;
+    return;
+  }
+  u.legL.rotation.z = u.legR.rotation.z = 0;
   if (mode === 'walk') {
     const swing = u.waddle ? 0.25 : 0.6;
     u.legL.rotation.x = Math.sin(p) * swing;
