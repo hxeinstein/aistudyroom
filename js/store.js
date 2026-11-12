@@ -65,6 +65,8 @@ export const ANIMALS = [
   { id: 'otter', name: '수달', emoji: '🦦', trait: '조금 작고 날렵 · 긴 꼬리' },
   { id: 'penguin', name: '펭귄', emoji: '🐧', trait: '부리와 날개 · 뒤뚱뒤뚱 걸어요' },
   { id: 'deer', name: '사슴', emoji: '🦌', trait: '사슴뿔 · 가볍고 빠른 걸음' },
+  { id: 'capybara', name: '카피바라', emoji: '🍊', trait: '느긋한 표정 · 머리 위에 귤 하나' },
+  { id: 'bun', name: '찐빵이', emoji: '🥟', trait: '말랑한 하얀 찐빵 얼굴 · 머리 위 김이 모락모락' },
 ];
 export const animalById = (id) => ANIMALS.find((a) => a.id === id) || ANIMALS[0];
 

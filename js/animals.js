@@ -1,4 +1,4 @@
-// 동물 캐릭터 20종 — 둥근 로우폴리, 종마다 덩치·걸음 속도·생김새 특징이 다름
+// 동물 캐릭터 22종 — 둥근 로우폴리, 종마다 덩치·걸음 속도·생김새 특징이 다름
 // (특정 작품의 캐릭터가 아니라 동물 종의 특징만 살린 디자인)
 import * as THREE from '../vendor/three.module.min.js';
 import { bakeDeep, bakeShallow } from './bake.js';
@@ -56,6 +56,8 @@ export const LOOKS = {
   raccoon: { fur: '#9A9AA0', muzzle: '#F1EFEA', ear: 'point', inner: '#3A3A40', mask: '#3A3A40', tail: 'ringed', tailRing: '#3A3A40' },
   otter: { fur: '#8A5F3F', muzzle: '#E8D2B8', ear: 'tiny', tail: 'long', whiskers: true, scale: 0.85, speed: 1.1 },
   penguin: { fur: '#2F3542', muzzle: '#FFFFFF', ear: 'none', beak: '#F5A23C', face: '#FFFFFF', tail: 'none', waddle: true, limbs: '#F5A23C', speed: 0.8 },
+  capybara: { fur: '#A9764A', muzzle: '#946540', ear: 'tiny', tail: 'none', bigMuzzle: true, nostril: '#4A3324', bodyW: 1.2, scale: 1.05, speed: 0.8, yuzu: true },
+  bun: { fur: '#FFF8EE', muzzle: '#FFFDF8', ear: 'none', tail: 'none', bun: true, limbs: '#F6EBDD', cheekColor: '#FFC2CF' },
   deer: { fur: '#C98F57', muzzle: '#F6E5CF', ear: 'side', antlers: '#8A5A33', tail: 'puff', tailColor: '#FFFFFF', speed: 1.25 },
 };
 
@@ -144,7 +146,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     t2.rotation.x = -0.2;
     head.add(t1, t2);
   } else if (L.bigMuzzle) { // 하마 콧구멍
-    for (const sx of [-1, 1]) head.add(mesh(S(0.03, 8, 6), '#5E5470', { x: sx * 0.08, y: -0.06, z: 0.39 }));
+    for (const sx of [-1, 1]) head.add(mesh(S(0.03, 8, 6), L.nostril || '#5E5470', { x: sx * 0.08, y: -0.06, z: 0.39 }));
   } else {
     head.add(mesh(S(0.035, 8, 8), '#3A2A2A', { y: -0.04, z: 0.34 }));
   }
@@ -186,7 +188,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
       tl.rotation.z = sx * 0.2;
       head.add(tl);
     }
-    const cheek = mesh(S(L.cheeks ? 0.11 : 0.05, 8, 8), L.cheeks ? mat('#FFF3DD') : mat('#FF9AA8', { transparent: true, opacity: 0.7 }), { x: sx * (L.cheeks ? 0.24 : 0.21), y: -0.08, z: L.cheeks ? 0.17 : 0.24 });
+    const cheek = mesh(S(L.cheeks ? 0.11 : 0.05, 8, 8), L.cheeks ? mat('#FFF3DD') : mat(L.cheekColor || '#FF9AA8', { transparent: true, opacity: 0.7 }), { x: sx * (L.cheeks ? 0.24 : 0.21), y: -0.08, z: L.cheeks ? 0.17 : 0.24 });
     if (!L.cheeks) cheek.scale.z = 0.3;
     head.add(cheek);
     if (L.cheeks) head.add(mesh(S(0.04, 8, 8), mat('#FF9AA8', { transparent: true, opacity: 0.7 }), { x: sx * 0.22, y: -0.06, z: 0.27 }));
@@ -221,6 +223,22 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     head.add(mesh(S(0.06, 10, 10), '#FFFFFF', { x: sx * 0.15, y: 0.25, z: 0.14 }));
     head.add(mesh(S(0.032, 8, 8), '#2A2222', { x: sx * 0.15, y: 0.25, z: 0.19 }));
     const d = dizzyEye(0.12, sx * 0.15, 0.25, 0.205, 0); head.add(d); dizzyEyes.push(d);
+  }
+  if (L.yuzu) { // 카피바라: 머리 위에 귤 하나 (온천 카피바라처럼 느긋하게)
+    head.add(mesh(S(0.1, 12, 10), '#F5A23C', { y: 0.38, z: -0.02 }));
+    const lf = mesh(new THREE.BoxGeometry(0.07, 0.015, 0.04), '#5DAE55', { x: 0.03, y: 0.48, z: -0.02 }); lf.rotation.z = -0.4; head.add(lf);
+  }
+  let steam = null;
+  if (L.bun) { // 찐빵이: 머리 위 주름 꼭지 + 모락모락 김
+    head.add(mesh(new THREE.ConeGeometry(0.09, 0.09, 10), L.fur, { y: 0.34 }));
+    for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; const pl = mesh(new THREE.BoxGeometry(0.012, 0.012, 0.09), '#EADBC6', { x: Math.sin(a) * 0.05, y: 0.33, z: Math.cos(a) * 0.05, cast: false }); pl.rotation.y = a; pl.rotation.x = -0.6; head.add(pl); }
+    steam = new THREE.Group(); steam.position.y = 0.45;
+    // 김 방울마다 재질을 따로 (따로 흐려지고, 몸과 합쳐지지 않게)
+    [[0, 0.05, 0.06], [0.06, 0.15, 0.05], [-0.04, 0.24, 0.045]].forEach(([x, y, r]) => {
+      const p2 = new THREE.Mesh(S(r, 8, 6), new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: 0.55, depthWrite: false }));
+      p2.position.set(x, y, 0); steam.add(p2);
+    });
+    head.add(steam);
   }
   g.add(head);
 
@@ -278,7 +296,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
   g.userData = {
     legL, legR, armL, armR, head, body, tail, phase: Math.random() * 10,
     headY: head.position.y, bodyY: 0.45, height: box.max.y,
-    dizzyEyes, dizzy: false,
+    dizzyEyes, dizzy: false, steam,
     scale: L.scale || 1, waddle: !!L.waddle, slow: !!L.slow, hop: !!L.hop, cushion: !!L.cushion, big: !!L.bigBottom,
   };
   return g;
@@ -369,6 +387,7 @@ export function animateAnimal(a, mode, t, dt) {
     const k = Math.sin(u.shakeT * 38) * Math.min(1, u.shakeT * 2.2);
     u.body.rotation.y = k * 0.45; u.head.rotation.y = k * 0.9;
   } else if (u.body.rotation.y || u.head.rotation.y) { u.body.rotation.y = 0; u.head.rotation.y = 0; }
+  if (u.steam) u.steam.children.forEach((p2, i) => { const k = (t * 0.6 + i / 3) % 1; p2.position.x = Math.sin(t * 1.5 + i * 2) * 0.04; p2.position.y = 0.05 + k * 0.3; p2.material.opacity = 0.6 * (1 - k); p2.scale.setScalar(0.7 + k * 0.8); });
   if (u.dizzyEyes) for (const e of u.dizzyEyes) { e.visible = !!u.dizzy; if (u.dizzy) e.rotation.z -= dt * 9; }
   if (mode === 'hang') {
     // 매달리기 (철봉 · 짚라인 · 정글짐 오르기): 두 팔은 위로, 다리는 살짝 흔들
