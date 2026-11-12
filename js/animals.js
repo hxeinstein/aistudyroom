@@ -1,6 +1,7 @@
 // 동물 캐릭터 20종 — 둥근 로우폴리, 종마다 덩치·걸음 속도·생김새 특징이 다름
 // (특정 작품의 캐릭터가 아니라 동물 종의 특징만 살린 디자인)
 import * as THREE from '../vendor/three.module.min.js';
+import { bakeDeep, bakeShallow } from './bake.js';
 
 const M = {};
 const mat = (c, extra) => (extra ? new THREE.MeshLambertMaterial({ color: c, ...extra }) : (M[c] ||= new THREE.MeshLambertMaterial({ color: c })));
@@ -265,6 +266,11 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     g.add(mesh(new THREE.BoxGeometry(0.13, 0.17, 0.02), '#FFFFFF', { y: 0.47, z: 0.2 * Math.max(1, bw * 0.95) + 0.01 }));
     g.add(mesh(new THREE.BoxGeometry(0.13, 0.04, 0.022), '#3B6FD8', { y: 0.54, z: 0.2 * Math.max(1, bw * 0.95) + 0.012, cast: false }));
   }
+
+  // 같은 색 조각 합치기: 움직이는 단위(머리, 팔, 꼬리)는 그대로 두고 그 안에서만 합침
+  bakeDeep(head);
+  [armL, armR].forEach(bakeShallow);
+  if (tail && tail.isGroup) bakeShallow(tail);
 
   // 크기와 이름표 높이
   const box = new THREE.Box3().setFromObject(g);

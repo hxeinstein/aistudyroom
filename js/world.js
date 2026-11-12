@@ -3,6 +3,7 @@ import { badWord } from './words.js';
 import { wrapLines } from './wrap.js';
 import * as THREE from '../vendor/three.module.min.js';
 import { makeAnimal, animateAnimal, animalSpeed } from './animals.js';
+import { bakeShallow, bakeDeep, mergeInto } from './bake.js';
 export { makeAnimal };
 
 const FONT = '"Gowun Dodum", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
@@ -29,6 +30,8 @@ const ROWS = [
 const mat = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
 const M = {}; // 공용 재질 캐시
 const m = (c) => (M[c] ||= mat(c));
+
+
 
 function mesh(geo, material, { x = 0, y = 0, z = 0, cast = true, receive = false } = {}) {
   const o = new THREE.Mesh(geo, typeof material === 'string' ? m(material) : material);
@@ -261,6 +264,16 @@ export function createWorld(container, opts = {}) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // 🪶 느린 기기 가벼운 모드: 처음 몇 초 동안 화면이 버벅이면 해상도와 그림자를 낮춤 (이 기기에 기억)
+  const LS_LOW = 'aistudyroom.lowgfx';
+  let lowGfx = false;
+  try { lowGfx = Date.now() - Number(localStorage.getItem(LS_LOW) || 0) < 3 * 86400000; } catch (e) {}   // 3일 동안 기억, 그 뒤 다시 재기
+  const applyLowGfx = () => {
+    renderer.setPixelRatio(1);
+    renderer.shadowMap.enabled = false;
+    scene.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m2) => { m2.needsUpdate = true; }); });
+  };
+  const fpsProbe = { t0: 0, frames: 0, last: 0, done: lowGfx };
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -302,6 +315,12 @@ export function createWorld(container, opts = {}) {
   const obstacles = areas.main.obs;
   const addObs = (x, z, w, d) => obstacles.push({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2 });
 
+  // 장식 바구니: 움직이지 않는 장식(나무·꽃·자갈·침목)을 모았다가 마지막에 한꺼번에 합침
+  const PARK_CX = -36;
+  const decoMain = new THREE.Group(), decoTrail = new THREE.Group(), decoPark = new THREE.Group();
+  scene.add(decoMain, decoTrail, decoPark);
+  const deco = (o) => { const x = o.position.x, z = o.position.z; (x > -11 ? decoMain : Math.hypot(x - PARK_CX, z) < 24 ? decoPark : decoTrail).add(o); return o; };
+
   // 책장 (뒤쪽)
   const bookColors = ['#E57373', '#64B5F6', '#81C784', '#FFD54F', '#BA68C8', '#4DB6AC', '#FF8A65', '#F06292'];
   for (let i = 0; i < 6; i++) {
@@ -320,7 +339,7 @@ export function createWorld(container, opts = {}) {
         bx += bw + 0.02;
       }
     }
-    scene.add(shelf);
+    deco(shelf);
     addObs(x, -6.6, 2.6, 0.6);
   }
 
@@ -371,6 +390,8 @@ export function createWorld(container, opts = {}) {
   // 책상들
   const seats = [];
   const deskWood = m('#E6B77E');
+  const shadeMat = mat('#7FB89A', { side: THREE.DoubleSide });
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false });   // 누르기 영역 (보이지 않음)
   COLS.forEach((x) => ROWS.forEach(({ z, f }) => {
     const g = new THREE.Group();
     g.position.set(x, DECK_Y, z);
@@ -390,7 +411,7 @@ export function createWorld(container, opts = {}) {
     lamp.position.set(0.62, 0.66, -0.28);
     lamp.add(mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.04, 12), '#5E8C6A'));
     lamp.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.42, 6), '#5E8C6A', { y: 0.21 }));
-    const shade = mesh(new THREE.ConeGeometry(0.14, 0.16, 12, 1, true), mat('#7FB89A', { side: THREE.DoubleSide }), { y: 0.42, x: -0.06 });
+    const shade = mesh(new THREE.ConeGeometry(0.14, 0.16, 12, 1, true), shadeMat, { y: 0.42, x: -0.06 });
     shade.rotation.z = 0.5;
     lamp.add(shade);
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshStandardMaterial({ color: '#FFF3C4', emissive: '#FFD26B', emissiveIntensity: 0 }));
@@ -413,6 +434,8 @@ export function createWorld(container, opts = {}) {
     g.add(tag);
 
     const idx = seats.length;
+    // 책상 · 의자 전체를 덮는 보이지 않는 누르기 영역 (책상 모양은 아래에서 모든 책상과 합쳐 한 번에 그림)
+    const hit = new THREE.Mesh(new THREE.BoxGeometry(1.95, 1.3, 1.95), hitMat); hit.position.set(0, 0.6, 0.4); g.add(hit);
     g.traverse((o) => { o.userData.seat = idx; });
     scene.add(g);
     seats.push({ idx, group: g, bulb, f, tagCanvas, tagTex, chairPos: new THREE.Vector3(x, DECK_Y, z + b * 0.82), approach: new THREE.Vector3(x, DECK_Y, z + b * 1.45), occupant: null });
@@ -420,6 +443,13 @@ export function createWorld(container, opts = {}) {
     addObs(x, z + b * 0.82, 0.6, 0.55);
   }));
   seats.forEach((st) => drawSeatTag(st, ''));
+  { // 모든 책상의 같은 색 조각을 하나로 (전구 · 이름표 · 누르기 영역은 책상마다 따로)
+    const deskBucket = new THREE.Group(); scene.add(deskBucket);
+    const list = [];
+    for (const st of seats) st.group.traverse((o) => { if (o.isMesh && o.material !== hitMat && o !== st.bulb && !o.material.map) list.push(o); });
+    list.forEach((o) => { o.userData = {}; });
+    mergeInto(deskBucket, list);
+  }
 
   // 나무, 꽃, 구름
   const treeGreens = ['#6CBF5A', '#7FCF63', '#5DAE55', '#93D46F'];
@@ -433,7 +463,7 @@ export function createWorld(container, opts = {}) {
     g.add(mesh(new THREE.SphereGeometry(1.05, 14, 12), c[(Math.random() * c.length) | 0], { y: 2.2 }));
     g.add(mesh(new THREE.SphereGeometry(0.75, 12, 10), c[(Math.random() * c.length) | 0], { x: 0.55, y: 2.75, z: 0.2 }));
     g.add(mesh(new THREE.SphereGeometry(0.7, 12, 10), c[(Math.random() * c.length) | 0], { x: -0.55, y: 2.6, z: -0.1 }));
-    scene.add(g);
+    deco(g);
   };
   const rnd = mulberry(7);
   for (let i = 0; i < 34; i++) {
@@ -450,7 +480,7 @@ export function createWorld(container, opts = {}) {
     const x = (rnd() - 0.5) * 50, z = (rnd() - 0.5) * 44;
     if (Math.abs(x) < 10.5 && z > -7.5 && z < 9) continue;
     if (x < -12) continue;
-    scene.add(mesh(fGeo, flowerColors[i % 4], { x, y: 0.08, z, cast: false }));
+    deco(mesh(fGeo, flowerColors[i % 4], { x, y: 0.08, z, cast: false }));
   }
   const clouds = [];
   for (let i = 0; i < 7; i++) {
@@ -847,7 +877,7 @@ export function createWorld(container, opts = {}) {
   let myTeacherId = null;
 
   // ---------------- 🌿 쉼터: 산책로 + 놀이터 (x = PX 근처의 다른 구역) ----------------
-  const PX = -36;   // 공부방 왼쪽 숲속 (교무실 반대쪽), 오솔길로 이어짐
+  const PX = PARK_CX;   // 공부방 왼쪽 숲속 (교무실 반대쪽), 오솔길로 이어짐
   areas.park = { name: 'park', bounds: { x0: PX - 16.5, x1: PX + 16.5, z0: -13, z1: 13 }, obs: [] };
   const pObs = (x, z, w, d) => areas.park.obs.push({ x0: PX + x - w / 2, x1: PX + x + w / 2, z0: z - d / 2, z1: z + d / 2 });
   const P = (x, y, z) => new THREE.Vector3(PX + x, y, z);
@@ -872,7 +902,7 @@ export function createWorld(container, opts = {}) {
   { const prd2 = mulberry(77);
     for (let i = 0; i < 140; i++) {
       const a = prd2() * Math.PI * 2, r = RING.r0 + 0.1 + prd2() * 1.1;
-      scene.add(mesh(new THREE.CylinderGeometry(0.05 + prd2() * 0.05, 0.06, 0.02, 6), prd2() < 0.5 ? '#B08658' : '#D8B98C', { x: PX + Math.cos(a) * r, y: DECK_Y + 0.025, z: Math.sin(a) * r * RING.sz, cast: false }));
+      deco(mesh(new THREE.CylinderGeometry(0.05 + prd2() * 0.05, 0.06, 0.02, 6), prd2() < 0.5 ? '#B08658' : '#D8B98C', { x: PX + Math.cos(a) * r, y: DECK_Y + 0.025, z: Math.sin(a) * r * RING.sz, cast: false }));
     } }
   scene.add(entryPath);
   // 나무 · 꽃
@@ -886,7 +916,7 @@ export function createWorld(container, opts = {}) {
   }
   for (let i = 0; i < 220; i++) {
     const a = prnd() * Math.PI * 2, r = 15.4 + prnd() * 1.6;
-    scene.add(mesh(fGeo, flowerColors[i % 4], { x: PX + Math.cos(a) * r, y: DECK_Y + 0.08, z: Math.sin(a) * r * 0.8, cast: false }));
+    deco(mesh(fGeo, flowerColors[i % 4], { x: PX + Math.cos(a) * r, y: DECK_Y + 0.08, z: Math.sin(a) * r * 0.8, cast: false }));
   }
   // 가로등 (밤에 켜짐: 공부방 전구와 같은 빛)
   // 놀이터 쪽(10°, 320°) 가로등은 산책로 바깥으로 빼서 그네·시소를 가리지 않게
@@ -924,7 +954,7 @@ export function createWorld(container, opts = {}) {
   }), transparent: true }));
   fishSign.position.set(PX - 8.4, DECK_Y + 0.75, 1.15); scene.add(fishSign);
   scene.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6), '#7A5530', { x: PX - 8.4, y: DECK_Y + 0.35, z: 1.12 }));
-  pier.traverse((o) => { o.userData.fishSpot = true; });
+  pier.traverse((o) => { o.userData.fishSpot = true; }); bakeDeep(pier);
   fishSign.userData.fishSpot = true;
   // 연못에는 들어갈 수 있어요: 들어가면 몸이 물에 잠기고, 천천히 걷고, 물결이 퍼짐
   const POND = { x: PX + PO.x, z: PO.z, rx: PO.r - 0.18, rz: PO.r * PO.sy - 0.15 };
@@ -1139,6 +1169,7 @@ export function createWorld(container, opts = {}) {
       g.traverse((o) => { o.userData.ride = 'bench' + i; });
       return r;
     });
+    bakeDeep(g);
   });
   // 놀이터 바닥 (모래)
   const sand = mesh(new THREE.CylinderGeometry(3.6, 3.6, 0.03, 40), '#EAD9B0', { x: PX + 3.6, y: DECK_Y + 0.015, z: -1, cast: false, receive: true });
@@ -1222,7 +1253,7 @@ export function createWorld(container, opts = {}) {
     const rim = mesh(new THREE.TorusGeometry(TR.r, 0.1, 8, 36), '#4D8FD1', { y: 0.42 }); rim.rotation.x = -Math.PI / 2; g.add(rim);
     for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; g.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.42, 6), '#3A3A3A', { x: Math.cos(a) * TR.r, y: 0.21, z: Math.sin(a) * TR.r })); }
     g.traverse((o) => { o.userData.ride = 'tramp'; });
-    scene.add(g); }
+    scene.add(g); bakeDeep(g); }
   const trampMat = mesh(new THREE.CylinderGeometry(TR.r - 0.04, TR.r - 0.04, 0.02, 36), '#2F3A44', { x: PX + TR.x, y: DECK_Y + 0.42, z: TR.z, cast: false });
   trampMat.userData.ride = 'tramp'; scene.add(trampMat);
   pObs(TR.x, TR.z, 2.4, 2.4);
@@ -1236,7 +1267,7 @@ export function createWorld(container, opts = {}) {
     xs.forEach((x, k) => { const h = Math.max(BAR.hs[Math.max(0, k - 1)], BAR.hs[Math.min(2, k)]); g.add(mesh(new THREE.CylinderGeometry(0.06, 0.07, h + 0.05, 8), '#F5C451', { x, y: (h + 0.05) / 2 })); });
     BAR.hs.forEach((h, k) => { const b = mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.0, 8), '#C9CED4', { x: -1 + k, y: h }); b.rotation.z = Math.PI / 2; g.add(b); });
     g.traverse((o) => { o.userData.ride = 'bar'; });
-    scene.add(g); }
+    scene.add(g); bakeDeep(g); }
   pObs(BAR.x, BAR.z, 3.2, 0.5);
   BAR.hs.forEach((h, k) => addRide({ id: 'bar' + k, type: 'bar', group: 'bar', h, bx: BAR.x - 1 + k, approach: P(BAR.x - 1 + k, DECK_Y, BAR.z + 0.9), occ: null }));
   const bar = { boost: 0 };
@@ -1253,7 +1284,7 @@ export function createWorld(container, opts = {}) {
       for (const x of n) { const b = mesh(new THREE.CylinderGeometry(0.028, 0.028, JGH * 2, 6), cols[(yi + 2) % 4], { x, y }); b.rotation.x = Math.PI / 2; g.add(b); }
     });
     g.traverse((o) => { o.userData.ride = 'jungle'; });
-    scene.add(g); }
+    scene.add(g); bakeDeep(g); }
   pObs(JG.x, JG.z, JGH * 2 + 0.3, JGH * 2 + 0.3);
   [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]].forEach(([sx, sz], k) => {
     const ax = sx || (k % 2 ? 0.5 : -0.5), az = sz || (k % 2 ? 0.5 : -0.5);   // 가운데 자리는 옆에서 올라감
@@ -1277,7 +1308,7 @@ export function createWorld(container, opts = {}) {
     for (const sx of [-0.12, 0.12]) rock.add(mesh(new THREE.SphereGeometry(0.03, 6, 6), '#2A2222', { x: sx, y: (sp.k === 'dolphin' ? 0.26 : 0.46), z: 0.46 }));
     for (const sx of [-0.2, 0.2]) rock.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.22, 6), '#E2574C', { x: sx, y: 0.48, z: 0.2 }));   // 손잡이
     base.traverse((o) => { o.userData.ride = 'spring' + k; });
-    scene.add(base); pObs(sp.x, sp.z, 0.7, 0.9);
+    scene.add(base); bakeShallow(base); bakeShallow(rock); pObs(sp.x, sp.z, 0.7, 0.9);
     addRide({ id: 'spring' + k, type: 'spring', group: 'spring' + k, rock, ph: k * 1.3, approach: P(sp.x + 0.75, DECK_Y, sp.z + 0.3), occ: null });
   });
 
@@ -1292,7 +1323,7 @@ export function createWorld(container, opts = {}) {
     for (let i = 0; i < 8; i++) g.add(mesh(new THREE.BoxGeometry(0.5, 0.04, 0.05), '#6B4A2E', { y: 0.3 + i * 0.3, z: 0.68 }));   // 사다리
     for (const sx of [-0.25, 0.25]) g.add(mesh(new THREE.BoxGeometry(0.05, 2.6, 0.05), '#6B4A2E', { x: sx, y: 1.3, z: 0.68 }));
     g.traverse((o) => { o.userData.zip = true; });
-    scene.add(g); }
+    scene.add(g); bakeDeep(g); }
   { const pole = mesh(new THREE.CylinderGeometry(0.08, 0.09, 2.0, 8), '#8A5A33', { x: ZIP.b.x + 0.35, y: DECK_Y + 1.0, z: ZIP.b.z + 0.25 }); pole.userData.zip = true; scene.add(pole);
     const pad = mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.03, 20), '#EAD9B0', { x: ZIP.b.x - 0.6, y: DECK_Y + 0.015, z: ZIP.b.z - 0.5, cast: false, receive: true }); scene.add(pad);
     const d = ZIP.b.clone().sub(ZIP.a), len = d.length();
@@ -1316,8 +1347,8 @@ export function createWorld(container, opts = {}) {
       const l = mesh(new THREE.CylinderGeometry(0.1, 0.12, Math.hypot(1.7, FW.hub), 8), '#E2574C', { x: sx * 0.85, y: FW.hub / 2, z: zz }); l.rotation.z = sx * Math.atan2(1.7, FW.hub); legs.add(l);
     }
     legs.add(mesh(new THREE.BoxGeometry(1.9, 0.25, 0.9), '#B98A57', { y: 0.12, z: 1.1 }));   // 타는 곳
-    legs.traverse((o) => { o.userData.ride = 'wheel'; }); scene.add(legs);
-    fwWheel.traverse((o) => { o.userData.ride = 'wheel'; }); }
+    legs.traverse((o) => { o.userData.ride = 'wheel'; }); scene.add(legs); bakeDeep(legs);
+    fwWheel.traverse((o) => { o.userData.ride = 'wheel'; }); bakeShallow(fwWheel); }
   const GONDOLA_COLORS = ['#E2574C', '#F5C451', '#81C784', '#4D8FD1', '#B39DDB', '#FF8A65'];
   const gondolas = GONDOLA_COLORS.map((c, k) => {
     const g = new THREE.Group();
@@ -1327,7 +1358,7 @@ export function createWorld(container, opts = {}) {
     g.add(rotd(mesh(new THREE.ConeGeometry(0.62, 0.3, 4), c, { y: 0.38 }), 'y', Math.PI / 4));
     for (const sx of [-0.4, 0.4]) g.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 4), '#9AA4AE', { x: sx, y: 0.05 }));
     g.traverse((o) => { o.userData.ride = 'wheel'; });
-    scene.add(g);
+    scene.add(g); bakeShallow(g);
     addRide({ id: 'wheel' + k, type: 'wheel', group: 'wheel', k, gondola: g, approach: P(FW.x, DECK_Y, FW.z + 1.9), occ: null });
     return g;
   });
@@ -1343,7 +1374,7 @@ export function createWorld(container, opts = {}) {
     const N = 260, sleeper = new THREE.BoxGeometry(0.85, 0.04, 0.12), sm = mat('#7A5530');
     for (let i = 0; i < N; i++) {
       const th = (i / N) * Math.PI * 2, p = trackPt(th), dx = -Math.sin(th) * TRACK.rx, dz = Math.cos(th) * TRACK.rz;
-      const m = new THREE.Mesh(sleeper, sm); m.position.set(p.x, DECK_Y + 0.02, p.z); m.rotation.y = Math.atan2(dx, dz) + Math.PI / 2; scene.add(m);
+      const m = new THREE.Mesh(sleeper, sm); m.position.set(p.x, DECK_Y + 0.02, p.z); m.rotation.y = Math.atan2(dx, dz) + Math.PI / 2; deco(m);
     }
     for (const off of [-0.28, 0.28]) {
       const pts = []; for (let i = 0; i <= 200; i++) { const th = (i / 200) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(th) * (TRACK.rx + off), DECK_Y + 0.06, Math.sin(th) * (TRACK.rz + off))); }
@@ -1362,7 +1393,7 @@ export function createWorld(container, opts = {}) {
     }), transparent: true, side: THREE.DoubleSide }));
     tag.position.set(-0.3, 1.5, 0); tag.rotation.y = -Math.PI / 2; g.add(tag);
     g.traverse((o) => { o.userData.ride = 'train'; });
-    scene.add(g); }
+    scene.add(g); bakeDeep(g); }
   const STATION = trackPt(TRAIN.st, 0.89);
   const trainCars = [];
   for (let i = 0; i < TRAIN.cars; i++) {
@@ -1382,7 +1413,7 @@ export function createWorld(container, opts = {}) {
     }
     for (const sx of [-0.38, 0.38]) for (const sz of [-0.4, 0.4]) g.add(rotd(mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.06, 12), '#2F3A44', { x: sx, y: 0.13, z: sz }), 'z', Math.PI / 2));
     g.traverse((o) => { o.userData.ride = 'train'; });
-    scene.add(g); trainCars.push(g);
+    scene.add(g); bakeShallow(g); trainCars.push(g);
   }
   function trainTheta() {
     const cyc = TRAIN.lap + TRAIN.stop, tau = (Date.now() / 1000) % cyc;
@@ -1459,15 +1490,15 @@ export function createWorld(container, opts = {}) {
     const prd = mulberry(55);
     for (let i = 0; i < 70; i++) {
       const t = prd(), p = trail.getPointAt(t), tg = trail.getTangentAt(t), o = (prd() - 0.5) * 1.0;
-      scene.add(mesh(new THREE.CylinderGeometry(0.05 + prd() * 0.05, 0.06, 0.02, 6), prd() < 0.5 ? '#B08658' : '#D8B98C', { x: p.x - tg.z * o, y: trailY(p) + 0.02, z: p.z + tg.x * o, cast: false }));
+      deco(mesh(new THREE.CylinderGeometry(0.05 + prd() * 0.05, 0.06, 0.02, 6), prd() < 0.5 ? '#B08658' : '#D8B98C', { x: p.x - tg.z * o, y: trailY(p) + 0.02, z: p.z + tg.x * o, cast: false }));
     }
     const trnd = mulberry(33);
     for (let i = 0; i < 46; i++) {
       const t = 0.03 + trnd() * 0.8, p = trail.getPointAt(t), tg = trail.getTangentAt(t);
       const sd = (trnd() < 0.5 ? -1 : 1) * (0.95 + trnd() * 0.9);
       const x = p.x - tg.z * sd, z = p.z + tg.x * sd;
-      if (i % 3 === 0) scene.add(mesh(new THREE.DodecahedronGeometry(0.12 + trnd() * 0.1, 0), '#B8AE9C', { x, y: 0.08, z }));
-      else scene.add(mesh(fGeo, flowerColors[i % 4], { x, y: 0.1, z, cast: false }));
+      if (i % 3 === 0) deco(mesh(new THREE.DodecahedronGeometry(0.12 + trnd() * 0.1, 0), '#B8AE9C', { x, y: 0.08, z }));
+      else deco(mesh(fGeo, flowerColors[i % 4], { x, y: 0.1, z, cast: false }));
     }
     // 길가 나무 (양옆으로 숲 느낌) · 작은 등
     for (let i = 0; i < 14; i++) {
@@ -2630,6 +2661,20 @@ export function createWorld(container, opts = {}) {
 
   function tick() {
     const dt = Math.min(clock.getDelta(), 0.05);
+    if (!fpsProbe.done) {   // 시작 3초 뒤부터 6초 동안 평균 화면 속도 재기
+      const now = performance.now();
+      if (!fpsProbe.t0) fpsProbe.t0 = now + 3000;
+      else if (now > fpsProbe.t0) {
+        if (now - fpsProbe.last > 500) { fpsProbe.t0 = now; fpsProbe.frames = 0; }   // 탭을 가렸다 오면 다시 재기
+        fpsProbe.frames++;
+        if (now - fpsProbe.t0 > 6000) {
+          fpsProbe.done = true;
+          const fps = (fpsProbe.frames * 1000) / (now - fpsProbe.t0);
+          if (fps < 28) { lowGfx = true; applyLowGfx(); try { localStorage.setItem(LS_LOW, String(Date.now())); } catch (e) {} }
+        }
+      }
+      fpsProbe.last = now;
+    }
     const t = clock.elapsedTime;
     moodCheck += dt;
     if (moodCheck > 30) { moodCheck = 0; applyMood(moodFor(new Date().getHours())); }
@@ -2843,6 +2888,9 @@ export function createWorld(container, opts = {}) {
     player.obj.rotation.y += diff * Math.min(1, dt * 12);
   }
 
+  if (lowGfx) applyLowGfx();
+  // 장식 바구니 한꺼번에 합치기 (나무·꽃·자갈·침목)
+  [decoMain, decoTrail, decoPark].forEach(bakeDeep);
   requestAnimationFrame(tick);
 
   return {
