@@ -678,6 +678,7 @@ function boardHandle_(body) {
     if (a === 'suggest.mine') return suggestMine_(body);
     if (a === 'book.import') return bookImport_(body);
     if (a === 'stat.day') return statDay_(body);
+    if (a === 'stat.rank') return statRank_(body);
     if (a === 'notice.get') return noticeGet_(body);
     if (a === 'school.check') { const s = schoolInfo_(String(body.code || '').trim().toUpperCase()); return s && s.on ? { ok: true, code: s.code, name: s.name, def: s.code === defaultSchool_(), weather: s.lat && s.lon ? { lat: s.lat, lon: s.lon } : null } : { error: '학교 코드가 맞지 않아요. 선생님께 다시 물어봐 줘.' }; }
   } catch (e) {
@@ -1034,10 +1035,16 @@ function adminOverview_(sc) {
 
 
 /* ---------- 공부 통계 · 질문 통계 · 공지 (관리자 화면) ----------
- * '공부통계' 탭: 날짜 | 기기(암호화) | 공부 분 | 과목별(JSON) | 갱신 — 학생 이름은 남기지 않아요
+ * '공부통계' 탭: 날짜 | 기기(암호화) | 공부 분 | 과목별(JSON) | 갱신 | 학교 | 닉네임 | 동물
+ *   닉네임은 독서실이 정해 준 무작위 별명이고, 학생이 설정에서 '순위에 내 이름 보이기'를 켰을 때만 남아요 (실명은 남기지 않아요)
  * '질문통계' 탭: 날짜 | 교과 | 쪽 | 단원 | 횟수 — 질문 내용은 남기지 않아요
  */
-const statSheet_ = () => sheet_('공부통계', ['날짜', '기기(암호화)', '공부 분', '과목별 분', '갱신', '학교']);
+const STAT_HEAD = ['날짜', '기기(암호화)', '공부 분', '과목별 분', '갱신', '학교', '닉네임', '동물'];
+function statSheet_() {
+  const sh = sheet_('공부통계', STAT_HEAD);
+  if (sh.getLastColumn() < STAT_HEAD.length) sh.getRange(1, 7, 1, 2).setValues([STAT_HEAD.slice(6)]);   // 예전 탭: 닉네임 · 동물 칸 붙이기
+  return sh;
+}
 const qSheet_ = () => sheet_('질문통계', ['날짜', '교과', '쪽', '단원', '횟수', '학교']);
 const cellDay_ = (v) => (v instanceof Date ? Utilities.formatDate(v, 'Asia/Seoul', 'yyyy-MM-dd') : String(v).replace(/^'/, ''));
 const today_ = () => Utilities.formatDate(new Date(Date.now() - 6 * 3600000), 'Asia/Seoul', 'yyyy-MM-dd');   // 독서실 하루는 아침 6시부터
@@ -1067,12 +1074,63 @@ function statDay_(b) {
         if (d < day && i < vals.length - 300) break;   // 오래된 줄까지는 보지 않음
       }
     }
-    const data = [["'" + day, dh, min, JSON.stringify(subj), new Date(), b.school]];
-    if (row) sh.getRange(row, 1, 1, 6).setValues(data);
+    const nick = b.rk === false ? '' : String(b.nick || '').trim().slice(0, 12);   // 순위에서 빼 달라고 하면 닉네임을 남기지 않음
+    const data = [["'" + day, dh, min, JSON.stringify(subj), new Date(), b.school, hasBadWord_(nick) ? '' : nick, String(b.animal || '').slice(0, 12)]];
+    if (row) sh.getRange(row, 1, 1, 8).setValues(data);
     else { sh.appendRow(data[0]); row = sh.getLastRow(); }
     cache.put(ck, String(row), 21600);
   } finally { lock.releaseLock(); }
   return { ok: true };
+}
+
+/**
+ * 🏆 공부 랭킹: 같은 학교 코드로 들어온 학생 전체 (지금 접속한 학생만이 아니라)
+ * 오늘 · 이번 주(월요일부터) · 이번 달, 각 10등까지 + 내 순위 + 오늘 우리 독서실 전체 공부 시간
+ * 닉네임이 비어 있는 학생(순위에서 빼기를 고른 학생)은 순위에 넣지 않아요. 2분 동안 저장해 두고 씀
+ */
+function statRank_(b) {
+  const sc = b.school;
+  const cache = CacheService.getScriptCache();
+  const ck = 'rank_' + sc;
+  let all = null;
+  const hit = cache.get(ck);
+  if (hit) all = JSON.parse(hit);
+  if (!all) {
+    const today = today_();
+    const t = new Date(today + 'T12:00:00+09:00');
+    const dow = (t.getUTCDay() + 6) % 7;   // 월요일 = 0
+    const weekStart = Utilities.formatDate(new Date(t.getTime() - dow * 86400000), 'Asia/Seoul', 'yyyy-MM-dd');
+    const monthStart = today.slice(0, 8) + '01';
+    const from = weekStart < monthStart ? weekStart : monthStart;
+    const vals = statSheet_().getDataRange().getValues();
+    const per = { today: {}, week: {}, month: {} };
+    let total = 0;
+    const add = (m, dh, min, nick, ani, day) => {
+      const e = m[dh] || (m[dh] = { m: 0, n: '', a: '', d: '' });
+      e.m += min;
+      if (day >= e.d) { e.d = day; e.n = nick; e.a = ani; }   // 가장 최근 닉네임
+    };
+    for (let i = vals.length - 1; i >= 1; i--) {
+      const r = vals[i], day = cellDay_(r[0]);
+      if (day < from) { if (i < vals.length - 2000) break; continue; }
+      if (scOf_(r[5]) !== sc) continue;
+      const dh = String(r[1]), min = Number(r[2]) || 0, nick = String(r[6] || ''), ani = String(r[7] || '');
+      if (day === today) { add(per.today, dh, min, nick, ani, day); total += min; }
+      if (day >= weekStart) add(per.week, dh, min, nick, ani, day);
+      if (day >= monthStart) add(per.month, dh, min, nick, ani, day);
+    }
+    const list = (m) => Object.keys(m).filter((k) => m[k].n && m[k].m > 0).map((k) => ({ h: k, n: m[k].n, a: m[k].a, m: m[k].m })).sort((x, y) => y.m - x.m).slice(0, 300);
+    all = { today: list(per.today), week: list(per.week), month: list(per.month), total, at: Date.now() };
+    try { cache.put(ck, JSON.stringify(all), 120); } catch (e) {}
+  }
+  const dh = b.device ? devHash_(b.device) : '';
+  const out = { total: all.total };
+  ['today', 'week', 'month'].forEach((k) => {
+    const L = all[k];
+    const i = dh ? L.findIndex((x) => x.h === dh) : -1;
+    out[k] = { top: L.slice(0, 10).map((x) => ({ n: x.n, a: x.a, m: x.m, me: x.h === dh })), me: i >= 0 ? { rank: i + 1, m: L[i].m } : null, count: L.length };
+  });
+  return out;
 }
 
 /** 챗봇 질문 하나 세기: 교과 + 가장 관련 있는 교과서 쪽 */

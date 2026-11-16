@@ -9,6 +9,7 @@ import * as Room from './room.js';
 import * as Board from './board.js';
 import * as Pond from './pond.js';
 import * as Ssireum from './ssireum.js';
+import * as Rank from './rank.js';
 import { pickerHTML, bindPicker } from './picker.js';
 import { initJoystick } from './joystick.js';
 import { badWord } from './words.js';
@@ -37,7 +38,7 @@ function boot(skipOnboarding = false) {
       if (!S.activeSession()) openStart();
     },
     onStand: () => { $('seatLabel').textContent = '자리를 골라 앉아보세요'; renderBar(); Room.releaseSeat(); },
-    onSpot: (spot) => (spot === 'board' ? Board.openBoard() : Board.openSuggest()),
+    onSpot: (spot) => (spot === 'board' ? Board.openBoard() : spot === 'rank' ? Rank.openRank() : Board.openSuggest()),
     onRemoteTap: (uid, info) => (Office.isTeacher() ? Office.callStudent(uid, info.n, info.a) : openCheer(uid, info)),
     onToast: toast,
     bots: CONFIG.BOTS,
@@ -110,6 +111,7 @@ function boot(skipOnboarding = false) {
   initChat({ onAskTeacher: (q) => Office.askTeacher(q), onNeedSchool: () => openSchoolGate(true) });
   Office.initOffice({ world, toast, openModal, closeModal, renderBar: () => renderBar(), getProfile: () => st.profile || { name: '', animal: 'bear' }, onTeacherChange: () => { renderBar(); Room.syncNow(); }, onOpenSuggestAdmin: () => Board.openSuggestAdmin() });
   Pond.initPond({ world, toast, openModal, closeModal });
+  Rank.initRank({ world, openModal, closeModal, deviceId: () => deviceId(), isTeacher: () => Office.isTeacher() });
   Ssireum.initSsireum({ world, toast, openModal, closeModal, sfx: (k) => sfx(k), getProfile: () => st.profile || { name: '학생', animal: 'bear' } });
   Board.initBoard({ world, toast, openModal, closeModal, getProfile: () => st.profile || { name: '익명', animal: 'bear' }, teacherToken: () => Office.teacherToken(), isAdmin: () => Office.isAdmin() });
   Room.initRoom({
@@ -468,7 +470,7 @@ function sendStat() {
   lastStat = day + ':' + ms;
   const subjects = {};
   Object.entries(S.subjectTotals(day)).forEach(([id, v]) => { const n = S.subjectById(id).name; subjects[n] = (subjects[n] || 0) + v; });
-  post({ action: 'stat.day', device: deviceId(), day, ms, subjects }).catch(() => { lastStat = ''; });
+  post({ action: 'stat.day', device: deviceId(), day, ms, subjects, nick: st.profile?.name || '', animal: st.profile?.animal || '', rk: S.showInRank() }).catch(() => { lastStat = ''; });
 }
 function startStats() {
   setTimeout(sendStat, 20000);

@@ -325,6 +325,7 @@ export function createWorld(container, opts = {}) {
   const bookColors = ['#E57373', '#64B5F6', '#81C784', '#FFD54F', '#BA68C8', '#4DB6AC', '#FF8A65', '#F06292'];
   for (let i = 0; i < 6; i++) {
     if (i === 2 || i === 3) continue;   // 가운데 두 칸은 비워서 응원 게시판 · 건의함 자리
+    if (i >= 4) continue;               // 오른쪽 두 칸은 🏆 공부 랭킹 전광판 자리
     const x = -7.5 + i * 3;
     const shelf = new THREE.Group();
     shelf.position.set(x, DECK_Y, -6.6);
@@ -699,6 +700,52 @@ export function createWorld(container, opts = {}) {
   boxGroup.traverse((o) => { o.userData.spot = 'suggest'; });
   scene.add(boxGroup);
   addObs(BOX_POS.x, BOX_POS.z, 0.8, 0.6);
+
+  // 🏆 공부 랭킹 전광판 (뒷벽 책장 위, 누구나 보이게 · 오늘 → 이번 주 → 이번 달을 번갈아)
+  const rankCanvas = document.createElement('canvas'); rankCanvas.width = 1280; rankCanvas.height = 325;
+  const rankTex = new THREE.CanvasTexture(rankCanvas); rankTex.colorSpace = THREE.SRGBColorSpace; rankTex.anisotropy = 4;
+  // (오른쪽 책장 두 칸 자리, 눈높이 · 위쪽은 가랜드에 가리지 않게 조금 낮춤)
+  const RK = { x: 6.0, z: -6.05, y: 1.05, w: 5.6, h: 1.42 };   // 가랜드 줄 바로 앞 (깃발에 가리지 않게)
+  const rankGroup = new THREE.Group(); rankGroup.position.set(RK.x, DECK_Y, RK.z);
+  rankGroup.add(mesh(new THREE.BoxGeometry(RK.w + 0.3, RK.h + 0.22, 0.16), '#4A3222', { y: RK.y }));
+  for (const yy of [RK.y + RK.h / 2 + 0.04, RK.y - RK.h / 2 - 0.04]) rankGroup.add(mesh(new THREE.BoxGeometry(RK.w, 0.05, 0.22), '#C9A25E', { y: yy, z: 0.04 }));
+  const rankFace = new THREE.Mesh(new THREE.PlaneGeometry(RK.w, RK.h), new THREE.MeshBasicMaterial({ map: rankTex, toneMapped: false }));
+  rankFace.position.set(0, RK.y, 0.085); rankGroup.add(rankFace);
+  for (const lx of [-RK.w / 2 - 0.05, RK.w / 2 + 0.05]) rankGroup.add(mesh(new THREE.BoxGeometry(0.12, RK.y + RK.h / 2 + 0.1, 0.12), '#4A3222', { x: lx, y: (RK.y + RK.h / 2 + 0.1) / 2 }));
+  rankGroup.traverse((o) => { o.userData.spot = 'rank'; });
+  scene.add(rankGroup);
+  addObs(RK.x, RK.z, RK.w + 0.4, 0.5);
+  const RANK_TABS = [['today', '오늘의 공부 랭킹'], ['week', '이번 주 공부 랭킹'], ['month', '이번 달 공부 랭킹']];
+  let rankData = null, rankTab = 0;
+  const hm = (min) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
+  function drawRank() {
+    const g = rankCanvas.getContext('2d'), W = rankCanvas.width, H = rankCanvas.height;
+    const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#2A1A12'); bg.addColorStop(1, '#3A2418');
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    const [key, title] = RANK_TABS[rankTab];
+    g.textBaseline = 'middle'; g.textAlign = 'center';
+    g.fillStyle = '#F5C451'; g.font = `900 44px ${FONT}`; g.fillText(`🏆 ${title}`, W / 2, 36);
+    // 기간 표시 점 (지금 보이는 기간)
+    RANK_TABS.forEach((_, i) => { g.fillStyle = i === rankTab ? '#F5C451' : '#6B4A2E'; g.beginPath(); g.arc(W / 2 - 30 + i * 30, 68, 6, 0, Math.PI * 2); g.fill(); });
+    const d = rankData && rankData[key];
+    g.font = `700 25px ${FONT}`; g.fillStyle = '#E8C98A';
+    if (rankData) g.fillText(key === 'today' ? `오늘 우리 독서실에 쌓인 공부 시간 ${Math.floor(rankData.total / 60)}시간 ${rankData.total % 60}분` : `${d ? d.count : 0}명이 함께 공부했어요`, W / 2, 96);
+    const top = d ? d.top : [];
+    if (!top.length) { g.fillStyle = '#E8C98A'; g.font = `700 40px ${FONT}`; g.fillText(rankData ? '아직 기록이 없어요. 첫 1등이 되어 보세요!' : '랭킹을 불러오는 중…', W / 2, 210); rankTex.needsUpdate = true; return; }
+    g.textAlign = 'left';
+    top.forEach((x, i) => {
+      const col = i < 5 ? 0 : 1, row = i % 5, cx = 70 + col * 600, cy = 136 + row * 41;
+      g.fillStyle = i === 0 ? '#FFD54F' : i === 1 ? '#E0E0E0' : i === 2 ? '#F0A868' : '#C9A87A';
+      g.font = `900 31px ${FONT}`; g.fillText(String(i + 1), cx, cy);
+      g.fillStyle = x.me ? '#9EE6A0' : '#FFF3D6'; g.font = `800 31px ${FONT}`;
+      let name = x.n; while (g.measureText(name).width > 330 && name.length > 2) name = name.slice(0, -1);
+      g.fillText(name + (name !== x.n ? '…' : ''), cx + 56, cy);
+      g.textAlign = 'right'; g.fillStyle = '#F5C451'; g.font = `800 31px ${FONT}`; g.fillText(hm(x.m), cx + 520, cy); g.textAlign = 'left';
+    });
+    rankTex.needsUpdate = true;
+  }
+  drawRank();
+  setInterval(() => { if (!rankData) return; rankTab = (rankTab + 1) % RANK_TABS.length; drawRank(); }, 8000);
 
   function wrapText(g, text, x, y, maxW, lh, maxLines) {
     wrapLines(g, text, maxW).slice(0, maxLines).forEach((l, i) => g.fillText(l, x, y + i * lh));
@@ -2046,6 +2093,7 @@ export function createWorld(container, opts = {}) {
       if (nearDoor === 'park') return { key: 'park', icon: '🌿', label: '쉼터 가기', run: () => goToPark() };
       if (nearDoor === 'board') return { key: 'board', icon: '📌', label: '응원 게시판', run: () => opts.onSpot && opts.onSpot('board') };
       if (nearDoor === 'suggest') return { key: 'suggest', icon: '📮', label: '건의함', run: () => opts.onSpot && opts.onSpot('suggest') };
+      if (nearDoor === 'rank') return { key: 'rank', icon: '🏆', label: '공부 랭킹', run: () => opts.onSpot && opts.onSpot('rank') };
       let best = null, bd = 1.5;
       for (const st of seats) { const d = Math.hypot(p.x - st.approach.x, p.z - st.approach.z); if (!st.occupant && d < bd) { bd = d; best = st; } }
       if (best) return { key: 'seat' + best.idx, icon: '🪑', label: `${seatName(best.idx)} 앉기`, run: () => walkToSeat(best.idx) };
@@ -2858,6 +2906,7 @@ export function createWorld(container, opts = {}) {
         : Math.hypot(p.x - PORTAL.x, p.z - PORTAL.z) < 1.4 ? 'enter'
         : Math.hypot(p.x - BOARD_POS.x, p.z - (BOARD_POS.z + 0.7)) < 1.7 ? 'board'
         : Math.hypot(p.x - BOX_POS.x, p.z - (BOX_POS.z + 0.7)) < 1.2 ? 'suggest'
+        : Math.abs(p.x - RK.x) < RK.w / 2 && p.z < RK.z + 1.6 ? 'rank'
         : Math.hypot(p.x - MAIN_PARK_PORTAL.x, p.z - MAIN_PARK_PORTAL.z) < 1.2 ? 'park' : null)
       : area.name === 'park'
       ? (player.ride || player.slide ? null
@@ -3031,6 +3080,8 @@ export function createWorld(container, opts = {}) {
       wrestle = w ? { ...(wrestle || {}), ...w } : null;
     },
     get nearSsireum() { return area.name === 'park' && Math.hypot(player.obj.position.x - (PX + SR.x), player.obj.position.z - SR.z) < SR.r + 2.5; },
+    /** 🏆 공부 랭킹 전광판 새로 그리기 (Apps Script stat.rank 결과) */
+    setRank(d) { rankData = d; drawRank(); },
     fishResult,
     stopFishing,
     get fishing() { return !!fishing; },
