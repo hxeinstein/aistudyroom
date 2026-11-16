@@ -324,8 +324,8 @@ export function createWorld(container, opts = {}) {
   // 책장 (뒤쪽)
   const bookColors = ['#E57373', '#64B5F6', '#81C784', '#FFD54F', '#BA68C8', '#4DB6AC', '#FF8A65', '#F06292'];
   for (let i = 0; i < 6; i++) {
-    if (i === 2 || i === 3) continue;   // 가운데 두 칸은 비워서 응원 게시판 · 건의함 자리
-    if (i >= 4) continue;               // 오른쪽 두 칸은 🏆 공부 랭킹 전광판 자리
+    if (i === 2 || i === 3) continue;   // 가운데 두 칸은 🏆 공부 랭킹 전광판 자리
+    if (i >= 4) continue;               // 오른쪽 두 칸은 응원 게시판 · 건의함 자리
     const x = -7.5 + i * 3;
     const shelf = new THREE.Group();
     shelf.position.set(x, DECK_Y, -6.6);
@@ -628,9 +628,9 @@ export function createWorld(container, opts = {}) {
     const group = new THREE.Group();
     // 안쪽 벽 책장 바로 앞, 양쪽 모서리 기둥에 걸어요 (지나다닐 때 걸리지 않게)
     const Z = -6.25, HALF = 9.6;
-    const sagY = (x) => DECK_Y + 2.3 - 0.2 * (1 - (x / HALF) ** 2);   // 책장 윗부분에 살짝 처지게
+    const sagY = (x) => DECK_Y + 2.5 - 0.08 * (1 - (x / HALF) ** 2);   // 책장 위에 살짝 처지게 (가운데 랭킹판 제목이 보이게 조금 높이)
     // 글자 깃발 간격: 글자가 많으면 좁게
-    const gap = Math.min(0.9, 15.5 / chars.length);
+    const gap = Math.min(0.56, 15.5 / chars.length);
     const w = gap * 0.86;
     const xs = [];
     const start = -((chars.length - 1) * gap) / 2;
@@ -667,8 +667,8 @@ export function createWorld(container, opts = {}) {
   }
 
   // ---------------- 응원 게시판 · 건의함 (안쪽 벽, 책장 사이) ----------------
-  const BOARD_POS = { x: -0.7, z: -6.55 };
-  const BOX_POS = { x: 1.75, z: -6.5 };
+  const BOARD_POS = { x: 4.9, z: -6.55 };
+  const BOX_POS = { x: 7.45, z: -6.5 };
   const boardCanvas = document.createElement('canvas');
   boardCanvas.width = 640; boardCanvas.height = 400;
   const boardTex = new THREE.CanvasTexture(boardCanvas);
@@ -705,7 +705,7 @@ export function createWorld(container, opts = {}) {
   const rankCanvas = document.createElement('canvas'); rankCanvas.width = 1280; rankCanvas.height = 325;
   const rankTex = new THREE.CanvasTexture(rankCanvas); rankTex.colorSpace = THREE.SRGBColorSpace; rankTex.anisotropy = 4;
   // (오른쪽 책장 두 칸 자리, 눈높이 · 위쪽은 가랜드에 가리지 않게 조금 낮춤)
-  const RK = { x: 6.0, z: -6.05, y: 1.05, w: 5.6, h: 1.42 };   // 가랜드 줄 바로 앞 (깃발에 가리지 않게)
+  const RK = { x: 0, z: -6.62, y: 0.84, w: 5.6, h: 1.42 };   // 가운데 (가랜드 깃발 아래)
   const rankGroup = new THREE.Group(); rankGroup.position.set(RK.x, DECK_Y, RK.z);
   rankGroup.add(mesh(new THREE.BoxGeometry(RK.w + 0.3, RK.h + 0.22, 0.16), '#4A3222', { y: RK.y }));
   for (const yy of [RK.y + RK.h / 2 + 0.04, RK.y - RK.h / 2 - 0.04]) rankGroup.add(mesh(new THREE.BoxGeometry(RK.w, 0.05, 0.22), '#C9A25E', { y: yy, z: 0.04 }));
