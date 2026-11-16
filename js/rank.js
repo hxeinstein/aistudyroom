@@ -7,6 +7,7 @@ import { animalById } from './store.js';
 let ctx = null;   // { world, openModal, closeModal, deviceId(), isTeacher() }
 let data = null;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const hmShort = (min) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
 const hm = (min) => (min >= 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min}분`);
 const TABS = [['today', '오늘'], ['week', '이번 주'], ['month', '이번 달']];
 
@@ -44,8 +45,10 @@ export async function openRank() {
     if (!data) { box.innerHTML = '<p class="hint">랭킹을 불러오지 못했어요. 잠시 후 다시 열어 주세요.</p>'; return; }
     const d = data[tab];
     const head = tab === 'today' ? `<div class="rk-total">오늘 우리 독서실에 쌓인 공부 시간 <b>${hm(data.total || 0)}</b></div>` : `<div class="rk-total"><b>${d.count}명</b>이 함께 공부했어요</div>`;
-    const rows = d.top.length ? d.top.map((x, i) => `
-      <div class="rk-row ${x.me ? 'me' : ''}"><span class="rk-no">${['🥇', '🥈', '🥉'][i] || i + 1}</span><span class="rk-ava">${animalById(x.a || 'bear').emoji}</span><span class="rk-name">${esc(x.n)}${x.me ? ' <i>나</i>' : ''}</span><span class="rk-time">${hm(x.m)}</span></div>`).join('')
+    const row = (x, i) => `
+      <div class="rk-row ${x.me ? 'me' : ''}"><span class="rk-no">${['🥇', '🥈', '🥉'][i] || i + 1}</span><span class="rk-name">${animalById(x.a || 'bear').emoji} ${esc(x.n)}</span><span class="rk-time">${hmShort(x.m)}</span></div>`;
+    const top = d.top.slice(0, 10);   // 10등까지만 · 왼쪽 1~5등, 오른쪽 6~10등
+    const rows = top.length ? `<div class="rk-col">${top.slice(0, 5).map((x, i) => row(x, i)).join('')}</div><div class="rk-col">${top.slice(5, 10).map((x, i) => row(x, i + 5)).join('')}</div>`
       : '<p class="hint">아직 기록이 없어요. 첫 1등이 되어 보세요!</p>';
     const mine = ctx.isTeacher() ? '' : d.me ? `<div class="rk-mine">나는 <b>${d.me.rank}등</b> · ${hm(d.me.m)}${d.me.rank > 10 ? ` <small>(10등까지 ${hm(Math.max(0, (d.top[9]?.m || 0) - d.me.m + 1))} 남았어요)</small>` : ''}</div>` : '<div class="rk-mine">아직 순위에 없어요. 공부를 시작하면 10분 안에 올라가요!</div>';
     box.innerHTML = head + `<div class="rk-list">${rows}</div>` + mine;

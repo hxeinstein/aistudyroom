@@ -585,12 +585,13 @@ body.in-wrestle .actionbar, body.in-wrestle .interact-btn, body.in-wrestle .joy,
 .rk-tabs { margin: 8px 0; }
 .rk-total { text-align: center; color: var(--brown); margin: 4px 0 8px; }
 .rk-total b { color: #C7791B; }
-.rk-list { display: flex; flex-direction: column; gap: 4px; }
-.rk-row { display: grid; grid-template-columns: 34px 30px 1fr auto; align-items: center; gap: 6px; background: #fff; border-radius: 12px; padding: 7px 10px; border: 2px solid transparent; }
+.rk-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rk-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rk-row { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 4px; background: #fff; border-radius: 12px; padding: 6px 7px; border: 2px solid transparent; min-width: 0; font-size: 13px; }
 .rk-row.me { border-color: var(--green); background: var(--mint); }
-.rk-no { font-weight: 900; color: var(--brown); text-align: center; font-size: 16px; }
+.rk-no { font-weight: 900; color: var(--brown); text-align: center; font-size: 14px; }
 .rk-ava { font-size: 20px; }
-.rk-name { font-weight: 700; color: var(--ink, #4A3A2A); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-name { font-weight: 700; color: var(--ink, #4A3A2A); word-break: keep-all; overflow-wrap: anywhere; line-height: 1.2; font-size: 12.5px; }
 .rk-name i { font-style: normal; font-size: 11px; background: var(--green); color: #fff; border-radius: 999px; padding: 1px 6px; margin-left: 4px; }
 .rk-time { font-weight: 800; color: #C7791B; }
 .rk-mine { margin-top: 10px; text-align: center; background: #FFF8E3; border-radius: 12px; padding: 8px; color: var(--brown); }
