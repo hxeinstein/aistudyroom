@@ -702,10 +702,10 @@ export function createWorld(container, opts = {}) {
   addObs(BOX_POS.x, BOX_POS.z, 0.8, 0.6);
 
   // 🏆 공부 랭킹 전광판 (뒷벽 책장 위, 누구나 보이게 · 오늘 → 이번 주 → 이번 달을 번갈아)
-  const rankCanvas = document.createElement('canvas'); rankCanvas.width = 1280; rankCanvas.height = 325;
+  const rankCanvas = document.createElement('canvas'); rankCanvas.width = 1280; rankCanvas.height = 370;
   const rankTex = new THREE.CanvasTexture(rankCanvas); rankTex.colorSpace = THREE.SRGBColorSpace; rankTex.anisotropy = 4;
   // (오른쪽 책장 두 칸 자리, 눈높이 · 위쪽은 가랜드에 가리지 않게 조금 낮춤)
-  const RK = { x: 0, z: -6.62, y: 0.84, w: 5.6, h: 1.42 };   // 가운데 (가랜드 깃발 아래)
+  const RK = { x: 0, z: -6.62, y: 1.07, w: 5.6, h: 1.62 };   // 가운데 · 옆 책장(높이 2)과 위아래를 맞춤
   const rankGroup = new THREE.Group(); rankGroup.position.set(RK.x, DECK_Y, RK.z);
   rankGroup.add(mesh(new THREE.BoxGeometry(RK.w + 0.3, RK.h + 0.22, 0.16), '#4A3222', { y: RK.y }));
   for (const yy of [RK.y + RK.h / 2 + 0.04, RK.y - RK.h / 2 - 0.04]) rankGroup.add(mesh(new THREE.BoxGeometry(RK.w, 0.05, 0.22), '#C9A25E', { y: yy, z: 0.04 }));
@@ -724,17 +724,17 @@ export function createWorld(container, opts = {}) {
     g.fillStyle = bg; g.fillRect(0, 0, W, H);
     const [key, title] = RANK_TABS[rankTab];
     g.textBaseline = 'middle'; g.textAlign = 'center';
-    g.fillStyle = '#F5C451'; g.font = `900 44px ${FONT}`; g.fillText(`🏆 ${title}`, W / 2, 36);
+    g.fillStyle = '#F5C451'; g.font = `900 44px ${FONT}`; g.fillText(`🏆 ${title}`, W / 2, 74);   // 위쪽은 가랜드 깃발이 지나가는 자리라 비워 둠
     // 기간 표시 점 (지금 보이는 기간)
-    RANK_TABS.forEach((_, i) => { g.fillStyle = i === rankTab ? '#F5C451' : '#6B4A2E'; g.beginPath(); g.arc(W / 2 - 30 + i * 30, 68, 6, 0, Math.PI * 2); g.fill(); });
+    RANK_TABS.forEach((_, i) => { g.fillStyle = i === rankTab ? '#F5C451' : '#6B4A2E'; g.beginPath(); g.arc(W / 2 - 30 + i * 30, 106, 6, 0, Math.PI * 2); g.fill(); });
     const d = rankData && rankData[key];
     g.font = `700 25px ${FONT}`; g.fillStyle = '#E8C98A';
-    if (rankData) g.fillText(key === 'today' ? `오늘 우리 독서실에 쌓인 공부 시간 ${Math.floor(rankData.total / 60)}시간 ${rankData.total % 60}분` : `${d ? d.count : 0}명이 함께 공부했어요`, W / 2, 96);
+    if (rankData) g.fillText(key === 'today' ? `오늘 우리 독서실에 쌓인 공부 시간 ${Math.floor(rankData.total / 60)}시간 ${rankData.total % 60}분` : `${d ? d.count : 0}명이 함께 공부했어요`, W / 2, 134);
     const top = d ? d.top : [];
-    if (!top.length) { g.fillStyle = '#E8C98A'; g.font = `700 40px ${FONT}`; g.fillText(rankData ? '아직 기록이 없어요. 첫 1등이 되어 보세요!' : '랭킹을 불러오는 중…', W / 2, 210); rankTex.needsUpdate = true; return; }
+    if (!top.length) { g.fillStyle = '#E8C98A'; g.font = `700 40px ${FONT}`; g.fillText(rankData ? '아직 기록이 없어요. 첫 1등이 되어 보세요!' : '랭킹을 불러오는 중…', W / 2, 250); rankTex.needsUpdate = true; return; }
     g.textAlign = 'left';
     top.forEach((x, i) => {
-      const col = i < 5 ? 0 : 1, row = i % 5, cx = 70 + col * 600, cy = 136 + row * 41;
+      const col = i < 5 ? 0 : 1, row = i % 5, cx = 70 + col * 600, cy = 178 + row * 39;
       g.fillStyle = i === 0 ? '#FFD54F' : i === 1 ? '#E0E0E0' : i === 2 ? '#F0A868' : '#C9A87A';
       g.font = `900 31px ${FONT}`; g.fillText(String(i + 1), cx, cy);
       g.fillStyle = x.me ? '#9EE6A0' : '#FFF3D6'; g.font = `800 31px ${FONT}`;
