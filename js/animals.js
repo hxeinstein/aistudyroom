@@ -1,7 +1,8 @@
 // 동물 캐릭터 24종 — 둥근 로우폴리, 종마다 덩치·걸음 속도·생김새 특징이 다름
 // (특정 작품의 캐릭터가 아니라 동물 종의 특징만 살린 디자인)
 import * as THREE from '../vendor/three.module.min.js';
-import { bakeDeep, bakeShallow } from './bake.js';
+import { bakeDeep, bakeShallow, mergeInto } from './bake.js';
+import { COLORS, parseOutfit } from './outfit.js';
 
 const M = {};
 const mat = (c, extra) => (extra ? new THREE.MeshLambertMaterial({ color: c, ...extra }) : (M[c] ||= new THREE.MeshLambertMaterial({ color: c })));
@@ -319,8 +320,12 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     g.add(mesh(new THREE.BoxGeometry(0.13, 0.04, 0.022), '#3B6FD8', { y: 0.54, z: 0.2 * Math.max(1, bw * 0.95) + 0.012, cast: false }));
   }
 
+  // 👕 옷 입히기 (extra.outfit: "t=hood:3;b=skirt:1;..." · 선생님은 쓰지 않음)
+  if (extra.outfit) dressUp({ g, L, bw, body, collar, legL, legR, armL, armR, head, neck, cloth }, parseOutfit(extra.outfit));
+
   // 같은 색 조각 합치기: 움직이는 단위(머리, 팔, 꼬리)는 그대로 두고 그 안에서만 합침
   bakeDeep(head);
+  mergeInto(body, body.children.filter((c) => c.isMesh));
   [armL, armR].forEach(bakeShallow);
   if (tail && tail.isGroup) bakeShallow(tail);
 
@@ -334,6 +339,102 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     scale: L.scale || 1, waddle: !!L.waddle, slow: !!L.slow, hop: !!L.hop, cushion: !!L.cushion, big: !!L.bigBottom,
   };
   return g;
+}
+
+
+/* ---------- 👕 옷 ---------- */
+const col = (c) => COLORS[c] || COLORS[0];
+const WHITE = '#F7F5EF';
+const starMats = {};
+function starMat(color) {   // 잠옷: 별무늬
+  if (starMats[color]) return starMats[color];
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#FFF3A3';
+  for (const [x, y] of [[12, 14], [44, 10], [28, 34], [10, 50], [50, 46]]) { g.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 2.6 : 6, a = (k / 10) * Math.PI * 2 - Math.PI / 2; g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 2); t.colorSpace = THREE.SRGBColorSpace;
+  return (starMats[color] = new THREE.MeshLambertMaterial({ map: t }));
+}
+const box = (w, h, d, m, o = {}) => { const x = mesh(new THREE.BoxGeometry(w, h, d), m, o); return x; };
+const cyl = (r1, r2, h, m, o = {}) => mesh(new THREE.CylinderGeometry(r1, r2, h, 18), m, o);
+
+function dressUp(P, o) {
+  const { L, bw, body, collar, legL, legR, armL, armR, head, g } = P;
+  const sleeves = (m) => { if (!L.waddle) for (const a of [armL, armR]) a.children[0].material = m; };
+  const torso = (m) => { body.material = m; };
+  const legs = (m) => { legL.material = m; legR.material = m; };
+  const onBody = (o2) => body.add(o2);   // 몸에 붙이면 몸 너비(bw)를 따라 같이 커져요
+  const hip = (m, flare = 0, h = 0.09, y = -0.17) => onBody(cyl(0.205, 0.205 + flare, h, m, { y }));
+  const legBand = (m, len = 0.09) => { for (const l of [legL, legR]) l.add(cyl(0.085, 0.09, len, m, { y: 0.07 - len / 2 + 0.04 })); };
+  const bib = (m) => { onBody(box(0.2, 0.15, 0.04, m, { y: -0.05, z: 0.19 })); for (const sx of [-0.075, 0.075]) { onBody(box(0.035, 0.24, 0.03, m, { x: sx, y: 0.07, z: 0.19 })); onBody(box(0.035, 0.26, 0.03, m, { x: sx, y: 0.04, z: -0.2 })); } };
+  const hood = (m) => { const h = mesh(new THREE.SphereGeometry(0.17, 14, 10), m, { y: 0.23, z: -0.15 }); h.scale.set(1.05, 0.7, 0.6); onBody(h); for (const sx of [-0.05, 0.05]) onBody(cyl(0.008, 0.008, 0.12, WHITE, { x: sx, y: 0.1, z: 0.205 })); };
+  const stripes = (m, ys = [-0.03, 0.06]) => ys.forEach((y) => { const t = mesh(new THREE.TorusGeometry(0.203, 0.022, 6, 22), m, { y }); t.rotation.x = Math.PI / 2; onBody(t); });
+
+  // 한 벌
+  if (o.d) {
+    const c = col(o.d.c), m = o.d.id === 'pajama' ? starMat(c) : mat(c);
+    if (o.d.id === 'onepiece') { torso(m); sleeves(m); hip(m, 0.13, 0.24, -0.22); }
+    else if (o.d.id === 'jumper') { torso(mat(WHITE)); sleeves(mat(WHITE)); hip(m, 0.12, 0.22, -0.21); bib(m); }
+    else if (o.d.id === 'gymset') { torso(m); sleeves(m); legs(m); hip(m); for (const l of [legL, legR]) for (const sx of [-1, 1]) l.add(box(0.012, 0.2, 0.02, WHITE, { x: sx * 0.07, cast: false })); onBody(box(0.012, 0.3, 0.012, WHITE, { y: 0.02, z: 0.205, cast: false })); }
+    else if (o.d.id === 'pajama') { torso(m); sleeves(m); legs(m); hip(m); for (const y of [0.1, 0.02, -0.06]) onBody(mesh(new THREE.SphereGeometry(0.018, 8, 6), WHITE, { y, z: 0.205, cast: false })); }
+    else if (o.d.id === 'raincoat') { torso(m); sleeves(m); hip(m, 0.1, 0.26, -0.24); hood(m); for (const y of [0.1, 0.0, -0.1]) onBody(mesh(new THREE.SphereGeometry(0.02, 8, 6), '#FFFFFF', { y, z: 0.21, cast: false })); }
+  }
+  // 상의
+  if (o.t) {
+    const m = mat(col(o.t.c));
+    torso(m); sleeves(m);
+    if (o.t.id === 'hood') hood(m);
+    if (o.t.id === 'stripe') stripes(mat(WHITE));
+    if (o.t.id === 'shirt') { onBody(box(0.05, 0.17, 0.02, '#C0392B', { y: 0.05, z: 0.205 })); for (const sx of [-1, 1]) { const c2 = box(0.08, 0.04, 0.02, WHITE, { x: sx * 0.05, y: 0.17, z: 0.17 }); c2.rotation.z = sx * 0.5; onBody(c2); } }
+    if (o.t.id === 'vest') { sleeves(mat(WHITE)); onBody(box(0.09, 0.09, 0.02, WHITE, { y: 0.15, z: 0.19 })); stripes(m, [-0.15]); }
+    if (o.t.id === 'jacket') { onBody(box(0.04, 0.12, 0.02, '#C0392B', { y: 0.11, z: 0.205 })); for (const sx of [-1, 1]) { const c2 = box(0.09, 0.05, 0.02, WHITE, { x: sx * 0.06, y: 0.16, z: 0.18 }); c2.rotation.z = sx * 0.55; onBody(c2); } for (const y of [-0.02, -0.1]) onBody(mesh(new THREE.SphereGeometry(0.016, 8, 6), '#E0B23A', { y, z: 0.205, cast: false })); }
+  }
+  // 하의
+  if (o.b) {
+    const m = mat(col(o.b.c));
+    if (o.b.id === 'shorts') { hip(m, 0.01, 0.12, -0.17); legBand(m, 0.08); }
+    if (o.b.id === 'pants' || o.b.id === 'overalls' || o.b.id === 'track') { legs(m); hip(m); }
+    if (o.b.id === 'skirt') hip(m, 0.1, 0.17, -0.19);
+    if (o.b.id === 'overalls') bib(m);
+    if (o.b.id === 'track') for (const l of [legL, legR]) for (const sx of [-1, 1]) l.add(box(0.012, 0.2, 0.02, WHITE, { x: sx * 0.07, cast: false }));
+  }
+  if (o.t || o.d) collar.material = mat(o.t && o.t.id === 'stripe' ? WHITE : (o.t && o.t.id === 'tee') || (o.d && o.d.id !== 'jumper') ? col((o.t || o.d).c) : WHITE);
+  // 신발 (다리 끝에 붙여서 걸을 때 같이 움직임)
+  if (o.s) {
+    const m = mat(col(o.s.c));
+    for (const l of [legL, legR]) {
+      if (o.s.id === 'sneakers') { l.add(box(0.13, 0.06, 0.2, m, { y: -0.1, z: 0.03 })); l.add(box(0.135, 0.022, 0.21, WHITE, { y: -0.135, z: 0.03, cast: false })); }
+      if (o.s.id === 'boots') { l.add(cyl(0.088, 0.09, 0.15, m, { y: -0.07 })); l.add(box(0.13, 0.05, 0.08, m, { y: -0.12, z: 0.07 })); }
+      if (o.s.id === 'slippers') { l.add(box(0.12, 0.022, 0.2, m, { y: -0.135, z: 0.03 })); l.add(box(0.125, 0.04, 0.05, m, { y: -0.11, z: 0.07 })); }
+      if (o.s.id === 'loafers') l.add(box(0.12, 0.05, 0.18, m, { y: -0.115, z: 0.03 }));
+    }
+  }
+  // 악세서리
+  // 개구리는 눈이 머리 위에 있어서 모자를 조금 뒤 · 위로 (눈을 가리지 않게)
+  const hatHolder = new THREE.Group();
+  if (L.ear === 'frog') { hatHolder.position.set(0, 0.1, -0.12); hatHolder.rotation.x = -0.45; hatHolder.scale.setScalar(0.9); }
+  head.add(hatHolder);
+  for (const a of o.a || []) {
+    const m = mat(col(a.c));
+    const head = /^(cap|beanie|straw|crown|headphones)$/.test(a.id) ? hatHolder : P.head;
+    const dome = (r, sy, y) => { const d = mesh(new THREE.SphereGeometry(r, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), m, { y }); d.scale.y = sy; head.add(d); return d; };
+    if (a.id === 'cap') { dome(0.335, 0.72, 0.06); head.add(box(0.27, 0.022, 0.2, m, { y: 0.08, z: 0.33 })); }
+    if (a.id === 'beanie') { dome(0.345, 0.85, 0.04); const t = mesh(new THREE.TorusGeometry(0.335, 0.035, 6, 24), m, { y: 0.05 }); t.rotation.x = Math.PI / 2; head.add(t); head.add(mesh(new THREE.SphereGeometry(0.075, 10, 8), WHITE, { y: 0.35 })); }
+    if (a.id === 'straw') { head.add(cyl(0.55, 0.55, 0.02, m, { y: 0.22 })); head.add(cyl(0.24, 0.27, 0.15, m, { y: 0.29 })); head.add(cyl(0.272, 0.272, 0.04, '#C0392B', { y: 0.24 })); }
+    if (a.id === 'crown') { head.add(cyl(0.17, 0.17, 0.08, m, { y: 0.33 })); for (let k = 0; k < 5; k++) { const ang = (k / 5) * Math.PI * 2; head.add(mesh(new THREE.ConeGeometry(0.04, 0.09, 6), m, { x: Math.sin(ang) * 0.16, y: 0.41, z: Math.cos(ang) * 0.16 })); } head.add(mesh(new THREE.SphereGeometry(0.03, 8, 6), '#E2574C', { y: 0.34, z: 0.17 })); }
+    if (a.id === 'headphones') { const band = mesh(new THREE.TorusGeometry(0.34, 0.025, 6, 20, Math.PI), m, { y: 0.02 }); head.add(band); for (const sx of [-1, 1]) { const cup = cyl(0.08, 0.08, 0.06, m, { x: sx * 0.34, y: 0.02 }); cup.rotation.z = Math.PI / 2; head.add(cup); } }
+    if (a.id === 'glasses' || a.id === 'sunglasses') {
+      const sun = a.id === 'sunglasses';
+      for (const sx of [-1, 1]) {
+        head.add(mesh(new THREE.TorusGeometry(0.085, 0.013, 6, 20), m, { x: sx * 0.12, y: 0.04, z: 0.335, cast: false }));
+        if (sun) head.add(mesh(new THREE.CircleGeometry(0.082, 18), '#1E1E24', { x: sx * 0.12, y: 0.04, z: 0.338, cast: false }));
+      }
+      head.add(box(0.06, 0.012, 0.012, m, { y: 0.05, z: 0.34, cast: false }));
+    }
+    if (a.id === 'ribbon') { for (const sx of [-1, 1]) { const w = mesh(new THREE.ConeGeometry(0.06, 0.13, 8), m, { x: 0.2 + sx * 0.065, y: 0.25, z: 0.08 }); w.rotation.z = -sx * Math.PI / 2; head.add(w); } head.add(mesh(new THREE.SphereGeometry(0.035, 8, 6), m, { x: 0.2, y: 0.25, z: 0.08 })); }
+    if (a.id === 'scarf') { const t = mesh(new THREE.TorusGeometry(0.14 * bw, 0.05, 8, 20), m, { y: 0.67 + (P.neck || 0) * 0.2 }); t.rotation.x = Math.PI / 2; g.add(t); g.add(box(0.07, 0.17, 0.03, m, { x: 0.06, y: 0.56, z: 0.17 * Math.max(1, bw) })); }
+    if (a.id === 'bag') { onBody(box(0.26, 0.26, 0.1, m, { y: 0.0, z: -0.24 })); onBody(box(0.2, 0.08, 0.04, m, { y: -0.08, z: -0.3 })); for (const sx of [-0.08, 0.08]) onBody(box(0.03, 0.26, 0.03, '#3B3B44', { x: sx, y: 0.03, z: 0.19 })); }
+  }
 }
 
 function spot(color, r, x, y, z) {

@@ -11,6 +11,7 @@ import * as Pond from './pond.js';
 import * as Ssireum from './ssireum.js';
 import * as Rank from './rank.js';
 import { pickerHTML, bindPicker } from './picker.js';
+import { DEFAULT_OUTFIT } from './outfit.js';
 import { initJoystick } from './joystick.js';
 import { badWord } from './words.js';
 import * as Sch from './school.js';
@@ -30,6 +31,7 @@ function boot(skipOnboarding = false) {
   world = createWorld($('world'), {
     animal: profile.animal,
     name: profile.name,
+    outfit: typeof profile.outfit === 'string' ? profile.outfit : DEFAULT_OUTFIT,
     onSit: async (idx) => {
       $('seatLabel').textContent = `${seatName(idx)} 자리에 앉음`;
       renderBar();
@@ -128,7 +130,8 @@ function boot(skipOnboarding = false) {
         sj: s ? S.subjectById(s.subject).name : '', st: !!s, ps: S.isPaused(), el: Math.floor(el / 60000) * 60000, // 1분 단위
         td: Math.floor(S.totalMs() / 60000) * 60000,   // 오늘 공부 시간 (순위용)
         rk: S.showInRank(), gl: S.getGoal(), sk: S.streak(), dd: ddayText(),
-        sr: Ssireum.presence() || null,   // 🤼 씨름 (도전 · 경기 중 힘 누른 수 · 게이지)
+        sr: Ssireum.presence() || null,
+        of: typeof st.profile?.outfit === 'string' ? st.profile.outfit : DEFAULT_OUTFIT,   // 👕 옷 (친구 화면에도 보이게)   // 🤼 씨름 (도전 · 경기 중 힘 누른 수 · 게이지)
       };
     },
   });
@@ -307,8 +310,13 @@ function openModal(html, { wide = false, dismiss = true } = {}) {
 }
 function closeModal() { $('modalWrap').classList.add('hidden'); }
 
-function animalPicker(cur) { return pickerHTML(cur); }
-function bindAnimalPicker(root, onPick) { bindPicker(root, { cur: root.querySelector('.pk-item.on')?.dataset.a || st.profile?.animal || 'bear', onPick }); }
+function animalPicker(cur) { return pickerHTML(cur, { outfit: true }); }
+let pickedOutfit = null;
+function bindAnimalPicker(root, onPick) {
+  pickedOutfit = null;
+  bindPicker(root, { cur: root.querySelector('.pk-item.on')?.dataset.a || st.profile?.animal || 'bear', onPick, outfit: myOutfit(), onOutfit: (o) => { pickedOutfit = o; } });
+}
+const myOutfit = () => (st.profile && typeof st.profile.outfit === 'string' ? st.profile.outfit : DEFAULT_OUTFIT);
 
 // 처음 들어오면 닉네임·캐릭터를 무작위로 (닉네임은 바꿀 수 없고, 캐릭터는 설정에서 바꿔요)
 // (Office.gs의 NICK_A · NICK_B와 같게: 학교 안에서 겹치면 서버가 안 쓴 닉네임으로 바꿔 줘요)
@@ -647,7 +655,8 @@ function openSettings() {
   m.querySelector('#sTeacher').onclick = () => (Office.isTeacher() ? Office.openInbox() : Office.openTeacherLogin());
   m.querySelector('#sSave').onclick = () => {
     const name = p.name || randomName();
-    S.setProfile({ name, animal });
+    const outfit = pickedOutfit !== null ? pickedOutfit : myOutfit();
+    S.setProfile({ ...p, name, animal, outfit });
     S.setExam({ name: m.querySelector('#sExam').value.trim() || '시험', date: m.querySelector('#sDate').value });
     world.setMyDday(ddayText());
     const goal = m.querySelector('#sGoal').value.trim();
@@ -656,7 +665,7 @@ function openSettings() {
     world.setPlayer({ name, goal });
     S.setShowInRank(m.querySelector('#sRank').checked);
     Room.syncNow();
-    world.setPlayer({ animal, name });
+    world.setPlayer({ animal, name, outfit });
     closeModal();
     refreshHud();
     toast('저장했어요');

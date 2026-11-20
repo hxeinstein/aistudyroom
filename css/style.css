@@ -595,3 +595,20 @@ body.in-wrestle .actionbar, body.in-wrestle .interact-btn, body.in-wrestle .joy,
 .rk-name i { font-style: normal; font-size: 11px; background: var(--green); color: #fff; border-radius: 999px; padding: 1px 6px; margin-left: 4px; }
 .rk-time { font-weight: 800; color: #C7791B; }
 .rk-mine { margin-top: 10px; text-align: center; background: #FFF8E3; border-radius: 12px; padding: 8px; color: var(--brown); }
+
+/* 👕 옷 입기 (picker.js) */
+.pk-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pk-mode button { border: 2px solid #EADBC2; background: #fff; border-radius: 12px; padding: 7px; font: inherit; font-weight: 800; font-size: 14px; color: var(--muted); }
+.pk-mode button.on { border-color: var(--green); color: var(--green-d); background: #F1FBEF; }
+.pk-slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.pk-slots button { position: relative; border: 2px solid #EADBC2; background: #fff; border-radius: 14px; padding: 4px 2px 5px; font: inherit; font-size: 11.5px; font-weight: 700; color: var(--brown); display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.pk-slots button span { font-size: 19px; }
+.pk-slots button.on { background: var(--green); border-color: var(--green); color: #fff; }
+.pk-slots button i { position: absolute; top: 4px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: #F28C28; }
+.pk-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pk-items button { border: 2px solid #EADBC2; background: #fff; border-radius: 999px; padding: 6px 11px; font: inherit; font-size: 13px; font-weight: 700; color: var(--brown); }
+.pk-items button.on { border-color: var(--green); background: var(--mint); color: var(--green-d); }
+.pk-hint { width: 100%; color: var(--muted); font-size: 11.5px; }
+.pk-colors { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.pk-colors button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #E0D3BC; }
+.pk-colors button.on { box-shadow: 0 0 0 3px var(--green); }

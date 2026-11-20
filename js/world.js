@@ -504,8 +504,8 @@ export function createWorld(container, opts = {}) {
   labelsEl.className = 'labels';
   container.appendChild(labelsEl);
   const actors = [];
-  function addActor(animal, clothes, label, me = false) {
-    const obj = makeAnimal(animal, clothes);
+  function addActor(animal, clothes, label, me = false, outfit = '') {
+    const obj = makeAnimal(animal, clothes, outfit ? { outfit } : {});
     scene.add(obj);
     const el = document.createElement('div');
     el.className = 'name-tag' + (me ? ' me' : '');
@@ -590,9 +590,10 @@ export function createWorld(container, opts = {}) {
     if (seat.cushions) { seat.group.remove(seat.cushions); seat.cushions = null; }
   }
 
-  const player = addActor(opts.animal || 'bear', CLOTHES[0], { name: opts.name || '' }, true);
+  const player = addActor(opts.animal || 'bear', CLOTHES[0], { name: opts.name || '' }, true, opts.outfit || '');
+  let baseOutfit = opts.outfit || '';
   player.animal = opts.animal || 'bear';
-  player.lookKey = 's:' + player.animal;
+  player.lookKey = 's:' + player.animal + ':' + baseOutfit;
   let teacherLook = null;
   let baseAnimal = player.animal, baseName = opts.name || '', baseStatus = '', baseGoal = '';
   const playerSpeed = () => animalSpeed(player.animal) * (area.name === 'park' && pondDepth(player.obj.position.x, player.obj.position.z) > 0.05 ? 0.55 : 1);
@@ -2318,9 +2319,9 @@ export function createWorld(container, opts = {}) {
     for (const x of list || []) {
       seen.add(x.uid);
       let r = remotes.get(x.uid);
-      if (r && r.info.a !== x.a) { removeRemote(x.uid); r = null; }
+      if (r && (r.info.a !== x.a || (r.info.of || '') !== (x.of || ''))) { removeRemote(x.uid); r = null; }   // 동물이나 옷을 바꾸면 다시 만듦
       if (!r) {
-        const a = addActor(x.a || 'bear', CLOTHES[hashN(x.uid) % CLOTHES.length], { name: x.n });
+        const a = addActor(x.a || 'bear', CLOTHES[hashN(x.uid) % CLOTHES.length], { name: x.n }, false, typeof x.of === 'string' ? x.of.slice(0, 80) : '');
         a.remote = true;
         a.obj.traverse((o) => { o.userData.remoteUid = x.uid; o.userData.remoteNick = x.n; });
         a.obj.position.set(Number(x.x) || 0, DECK_Y, Number(x.z) || 6);
@@ -3034,18 +3035,19 @@ export function createWorld(container, opts = {}) {
     },
     zoomBy(f) { setZoom(zoomTarget * f); },
     resetView() { yawTarget = 0; pitchTarget = 0.65; setZoom(11.9); },
-    setPlayer({ animal, name, status, goal, force }) {
+    setPlayer({ animal, name, status, goal, force, outfit }) {
       if (animal) baseAnimal = animal;
+      if (outfit !== undefined) baseOutfit = outfit || '';
       if (name !== undefined) { baseName = name; baseStatus = status; }
       if (goal !== undefined) baseGoal = goal;
       const look = teacherLook;
       const want = look ? look.animal || 'bear' : baseAnimal;
-      const key = look ? `t:${want}:${look.color}:${look.glasses ? 1 : 0}` : `s:${want}`;
+      const key = look ? `t:${want}:${look.color}:${look.glasses ? 1 : 0}` : `s:${want}:${baseOutfit}`;
       if (force || key !== player.lookKey) {
         player.lookKey = key;
         animal = want;
         const old = player.obj;
-        const fresh = look ? makeAnimal(want, look.color || '#B79CE8', { glasses: !!look.glasses, teacher: true }) : makeAnimal(want, CLOTHES[0]);
+        const fresh = look ? makeAnimal(want, look.color || '#B79CE8', { glasses: !!look.glasses, teacher: true }) : makeAnimal(want, CLOTHES[0], baseOutfit ? { outfit: baseOutfit } : {});
         fresh.position.copy(old.position);
         fresh.rotation.copy(old.rotation);
         scene.remove(old);
