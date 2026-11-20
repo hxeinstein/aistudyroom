@@ -24,19 +24,18 @@ export const ITEMS = {
     { id: 'shorts', name: '반바지', c: 6 },
     { id: 'pants', name: '긴 바지', c: 7 },
     { id: 'skirt', name: '치마', c: 2 },
-    { id: 'overalls', name: '멜빵바지', c: 6 },
     { id: 'track', name: '체육복 바지', c: 7 },
   ],
   d: [
     { id: 'onepiece', name: '원피스', c: 9 },
-    { id: 'jumper', name: '멜빵 원피스', c: 5 },
+    { id: 'jumper', name: '멜빵바지', c: 6 },   // 흰 티 + 멜빵바지 한 벌
     { id: 'gymset', name: '체육복 세트', c: 7 },
     { id: 'pajama', name: '잠옷', c: 8 },
     { id: 'raincoat', name: '우비', c: 4, hidden: true },   // 고르는 목록엔 없음: 비·눈 오는 날 쉼터에서 자동으로
   ],
   s: [
     { id: 'sneakers', name: '운동화', c: 0 },
-    { id: 'boots', name: '장화', c: 4 },
+    { id: 'boots', name: '장화', c: 4, hidden: true },   // 고르는 목록엔 없음: 우비 입을 때 자동으로
     { id: 'slippers', name: '슬리퍼', c: 9 },
     { id: 'loafers', name: '구두', c: 10 },
   ],
@@ -99,7 +98,7 @@ export function itemIcon(slot, id, c) {
     shorts: legs(28), pants: legs(42), track: legs(42) + `<path d="M15 12 L14 40 M33 12 L34 40" stroke="${w}" stroke-width="2"/>`,
     skirt: `<path d="M17 10 L31 10 L38 36 L10 36 Z" fill="${f}"/>`,
     overalls: legs(42) + `<path d="M16 2 L18 9 M32 2 L30 9" stroke="${f}" stroke-width="3"/>`,
-    onepiece: dress, jumper: `<path d="M17 8 L31 8" stroke="${f}" stroke-width="2"/>` + `<path d="M17 18 L31 18 L38 40 L10 40 Z" fill="${f}"/><path d="M18 18 L18 6 M30 18 L30 6" stroke="${f}" stroke-width="3"/>`,
+    onepiece: dress, jumper: legs(42) + `<path d="M16 2 L18 9 M32 2 L30 9" stroke="${f}" stroke-width="3"/>`,
     gymset: tee + `<path d="M24 13 L24 39" stroke="${w}" stroke-width="2"/>`,
     pajama: tee + `<path d="M21 22 l1 2 2 0 -1.5 1.5 0.5 2 -2 -1 -2 1 0.5 -2 -1.5 -1.5 2 0Z" fill="#FFF3A3" stroke="none"/><path d="M28 30 l1 2 2 0 -1.5 1.5 0.5 2 -2 -1 -2 1 0.5 -2 -1.5 -1.5 2 0Z" fill="#FFF3A3" stroke="none"/>`,
     raincoat: dress,
@@ -119,4 +118,4 @@ export function itemIcon(slot, id, c) {
 }
 
 /** 처음 옷 (예전 모습과 비슷하게: 하늘색 반팔 티) */
-export const DEFAULT_OUTFIT = 't=tee:6';
+export const DEFAULT_OUTFIT = 'n';   // 아무것도 안 고르면 하늘색 반팔 티 (예전 기본 모습)

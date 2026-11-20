@@ -370,13 +370,12 @@ function dressUp(P, o) {
   const hood = (m) => { const h = mesh(new THREE.SphereGeometry(0.17, 14, 10), m, { y: 0.23, z: -0.15 }); h.scale.set(1.05, 0.7, 0.6); onBody(h); for (const sx of [-0.05, 0.05]) onBody(cyl(0.008, 0.008, 0.12, WHITE, { x: sx, y: 0.1, z: 0.205 })); };
   const stripes = (m, ys = [-0.03, 0.06]) => ys.forEach((y) => { const t = mesh(new THREE.TorusGeometry(0.203, 0.022, 6, 22), m, { y }); t.rotation.x = Math.PI / 2; onBody(t); });
 
-  // 상의 · 한 벌을 안 입으면 흰색 기본 티
-  if (!o.t && !o.d) { torso(mat(WHITE)); sleeves(mat(WHITE)); collar.material = mat(WHITE); }
+  // 상의 · 한 벌을 안 입으면 하늘색 반팔 티 (예전 기본 모습 그대로)
   // 한 벌
   if (o.d) {
     const c = col(o.d.c), m = o.d.id === 'pajama' ? starMat(c) : mat(c);
     if (o.d.id === 'onepiece') { torso(m); sleeves(m); hip(m, 0.13, 0.24, -0.22); }
-    else if (o.d.id === 'jumper') { torso(mat(WHITE)); sleeves(mat(WHITE)); hip(m, 0.12, 0.22, -0.21); bib(m); }
+    else if (o.d.id === 'jumper') { torso(mat(WHITE)); sleeves(mat(WHITE)); legs(m); hip(m); bib(m); }   // 흰 티 + 멜빵바지
     else if (o.d.id === 'gymset') { torso(m); sleeves(m); legs(m); hip(m); for (const l of [legL, legR]) for (const sx of [-1, 1]) l.add(box(0.012, 0.2, 0.02, WHITE, { x: sx * 0.07, cast: false })); onBody(box(0.012, 0.3, 0.012, WHITE, { y: 0.02, z: 0.205, cast: false })); }
     else if (o.d.id === 'pajama') { torso(m); sleeves(m); legs(m); hip(m); for (const y of [0.1, 0.02, -0.06]) onBody(mesh(new THREE.SphereGeometry(0.018, 8, 6), WHITE, { y, z: 0.205, cast: false })); }
     else if (o.d.id === 'raincoat') {   // 오버핏: 어깨부터 무릎까지 일자로 똑 떨어지게
