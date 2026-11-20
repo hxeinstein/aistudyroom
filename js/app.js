@@ -135,7 +135,7 @@ function boot(skipOnboarding = false) {
         rk: S.showInRank(), gl: S.getGoal(), sk: S.streak(), dd: ddayText(),
         sr: Ssireum.presence() || null,
         of: typeof st.profile?.outfit === 'string' ? st.profile.outfit : DEFAULT_OUTFIT,
-        fc: st.profile?.animal === 'drawn' && myFace() ? myFace().day + ':' + myFace().img.length : '',   // ✏️ 얼굴 그림 버전   // 👕 옷 (친구 화면에도 보이게)   // 🤼 씨름 (도전 · 경기 중 힘 누른 수 · 게이지)
+        fc: st.profile?.animal === 'drawn' && myFace() ? myFace().day + ':' + myFace().img.length + ':' + (myFace().strands || []).length : '',   // ✏️ 얼굴 그림 버전   // 👕 옷 (친구 화면에도 보이게)   // 🤼 씨름 (도전 · 경기 중 힘 누른 수 · 게이지)
       };
     },
   });
@@ -525,7 +525,7 @@ async function refreshHiddenFaces() {
   if (!r || !Array.isArray(r.hidden)) return;
   hiddenFaces.clear(); r.hidden.forEach((u) => hiddenFaces.add(u));
   const me = Room.myUid();
-  const myV = myFace() ? myFace().day + ':' + myFace().img.length : '';
+  const myV = myFace() ? myFace().day + ':' + myFace().img.length + ':' + (myFace().strands || []).length : '';
   if (me && hiddenFaces.has(me + '|' + myV) && st.profile?.animal === 'drawn' && !sessionStorage.getItem('faceHidTold')) {
     try { sessionStorage.setItem('faceHidTold', '1'); } catch (e) {}
     toast('🙈 내가 그린 얼굴이 신고되어 친구들에게는 기본 얼굴로 보여요. 내일 새로 그려 주세요', 7000);

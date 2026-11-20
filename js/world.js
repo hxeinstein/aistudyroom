@@ -594,7 +594,7 @@ export function createWorld(container, opts = {}) {
   const player = addActor(opts.animal || 'bear', CLOTHES[0], { name: opts.name || '' }, true, opts.outfit || '', opts.face || null);
   let baseOutfit = opts.outfit || '';
   let baseFace = opts.face || null;   // ✏️ 내가 그린 얼굴 { img, hair, day }
-  const faceKey = (f) => (f ? f.day + ':' + (f.img || '').length + ':' + f.hair : '');
+  const faceKey = (f) => (f ? f.day + ':' + (f.img || '').length + ':' + f.hair + ':' + (f.strands || []).length : '');
   let apiRef = null;
   // ☔ 비·눈 오는 날 쉼터에 있으면 노란 우비 + 장화 (나 · 친구 모두)
   const rainyPark = (ar) => (weather === 'rain' || weather === 'snow') && ar === 'park';

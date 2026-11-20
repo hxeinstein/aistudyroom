@@ -38,7 +38,7 @@ function readyFace(face, onLoad) {
   return null;
 }
 function faceOf(id, face) {
-  const ck = id + (face ? ':' + face.day + ':' + face.hair : '');
+  const ck = id + (face ? ':' + face.day + ':' + face.hair + ':' + (face.strands || []).length : '');
   if (faces[ck]) return faces[ck];
   try {
     const r = getRenderer();

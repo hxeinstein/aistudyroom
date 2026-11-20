@@ -479,6 +479,7 @@ function addDrawnFace(head, skull, face) {
     if (im) g.drawImage(im, 0, 0, N, N);
     tex.needsUpdate = true;
   };
+  addStrands(head, skull, face.strands);
   if (!face.img) paint(null);
   else if (face.img instanceof HTMLCanvasElement) paint(face.img);
   else { paint(null); const im = new Image(); im.onload = () => paint(im); im.src = face.img; }
@@ -487,6 +488,33 @@ function addDrawnFace(head, skull, face) {
   patch.scale.copy(skull.scale);
   patch.renderOrder = 2;
   head.add(patch);
+}
+
+// 🧵 얼굴 밖으로 그은 머리카락 선 → 굵기 있는 3D 머리카락 (draw.js 그리기 판: 384, 가운데 얼굴 반지름 128)
+const STRAND_COLORS = ['#2B2420', '#E2574C', '#F28C28', '#F5C451', '#81C784', '#4D8FD1', '#B39DDB', '#FFFFFF'];   // draw.js PENS와 같게
+const STRAND_W = [4, 8, 16];
+function addStrands(head, skull, strands) {
+  if (!Array.isArray(strands) || !strands.length) return;
+  const r0 = 0.33, k = 0.0023, sc = skull.scale;
+  strands.slice(0, 30).forEach((st) => {
+    const p = Array.isArray(st.p) ? st.p : [];
+    if (p.length < 4) return;
+    const pts = [];
+    for (let i = 0; i + 1 < p.length && pts.length < 40; i += 2) {
+      let X = (p[i] - 192) * k, Y = -(p[i + 1] - 192) * k;
+      const d = Math.hypot(X, Y);
+      if (d > r0 && Y < 0) Y -= (d - r0) * 0.9 * (-Y / d);   // 얼굴 아래로 내려가는 머리는 더 길게 (어깨까지)
+      // 얼굴 안쪽은 머리 표면을 따라, 바깥은 살짝 뒤로 넘어가며 흘러내리게
+      const Z = d < r0 ? Math.sqrt(r0 * r0 - d * d) : Math.max(-0.2, -(d - r0) * 0.45);
+      pts.push(new THREE.Vector3(X * sc.x, Y * sc.y, Z * sc.z));
+    }
+    if (pts.length < 2) return;
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const rad = ((STRAND_W[st.w] || 8) + 6) * k * 0.62;
+    const color = STRAND_COLORS[st.c] || STRAND_COLORS[0];
+    head.add(mesh(new THREE.TubeGeometry(curve, Math.min(60, pts.length * 3), rad, 5, false), color));
+    head.add(mesh(new THREE.SphereGeometry(rad, 6, 5), color, { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y, z: pts[pts.length - 1].z }));   // 끝을 둥글게
+  });
 }
 
 function spot(color, r, x, y, z) {
