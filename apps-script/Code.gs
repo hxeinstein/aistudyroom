@@ -409,11 +409,43 @@ function dayLimitMsg_(botName) {
  * 예비 모델은 스크립트 속성 GEMINI_FALLBACKS에 쉼표로 적어 바꿀 수 있어요.
  */
 const DEFAULT_FALLBACKS = ['gemini-2.5-flash-lite', 'gemma-3-27b-it'];
-function modelChain_() {
+/**
+ * 쓸 모델 순서. 구글이 무료 한도를 줄이거나 모델 이름을 바꿔도 멈추지 않도록,
+ * 이 키로 쓸 수 있는 모델 목록을 구글에 물어봐서(하루 한 번) 무료로 쓸 수 있는 다른 모델들도 뒤에 더 붙여요.
+ * 순서: GEMINI_MODEL → 예비 모델 → 그 밖의 flash · flash-lite → gemma (큰 것부터)
+ */
+function modelChain_(fresh) {
   const first = getProp_('GEMINI_MODEL') || MODEL;
   const extra = getProp_('GEMINI_FALLBACKS');
   const rest = extra ? extra.split(',').map((x) => x.trim()).filter(Boolean) : DEFAULT_FALLBACKS;
-  return [first].concat(rest).filter((m, i, arr) => arr.indexOf(m) === i);
+  let chain = [first].concat(rest);
+  const avail = availableModels_(fresh);
+  if (avail) {
+    chain = chain.filter((m) => avail.indexOf(m) >= 0);
+    const ver = (m) => Number((m.match(/-(\d+(?:\.\d+)?)/) || [0, 0])[1]);
+    const size = (m) => Number((m.match(/-e?(\d+)b-/) || [0, 0])[1]);
+    const flash = avail.filter((m) => /^gemini-\d+(\.\d+)?-flash(-lite)?$/.test(m)).sort((a, b) => ver(b) - ver(a) || (/lite/.test(a) ? 1 : -1));
+    const gemma = avail.filter((m) => /^gemma-\d+n?-e?\d+b-it$/.test(m)).sort((a, b) => ver(b) - ver(a) || size(b) - size(a));
+    chain = chain.concat(flash, gemma);
+  }
+  return chain.filter((m, i, arr) => m && arr.indexOf(m) === i);
+}
+/** 이 키로 글 답장을 만들 수 있는 모델 이름들 (6시간 저장). 물어보지 못하면 null → 정해 둔 순서 그대로 */
+function availableModels_(fresh) {
+  const cache = CacheService.getScriptCache();
+  const hit = !fresh && cache.get('GEMINI_MODELS');
+  if (hit) return JSON.parse(hit);
+  try {
+    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': getProp_('GEMINI_API_KEY') }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return null;
+    const list = (JSON.parse(res.getContentText()).models || [])
+      .filter((x) => (x.supportedGenerationMethods || []).indexOf('generateContent') >= 0)
+      .map((x) => String(x.name || '').replace(/^models\//, ''))
+      .filter((m) => m && !/(preview|exp|tts|image|audio|live|embed|thinking|vision|learnlm|robotics|computer)/i.test(m));
+    if (!list.length) return null;
+    cache.put('GEMINI_MODELS', JSON.stringify(list), 6 * 60 * 60);
+    return list;
+  } catch (e) { return null; }
 }
 
 function callGemini_(key, system, contents) {
@@ -424,7 +456,7 @@ function callGemini_(key, system, contents) {
     if (cache.get('GEMINI_DAY_LIMIT_' + model)) continue;
     const r = callModel_(key, model, system, contents);
     if (r.text) return r;
-    if (r.dayLimit) { cache.put('GEMINI_DAY_LIMIT_' + model, '1', 60 * 60); continue; }
+    if (r.dayLimit) { cache.put('GEMINI_DAY_LIMIT_' + model, '1', 60 * 60); console.warn('하루 한도 다 씀: ' + model); continue; }
     if (r.skip) { cache.put('GEMINI_DAY_LIMIT_' + model, '1', 6 * 60 * 60); continue; } // 이 계정에서 못 쓰는 모델 → 다음 모델
     if (r.busy) { busy = true; continue; }
     return r;
@@ -494,6 +526,29 @@ function getPrompt_() {
 
 function getProp_(name) {
   return PropertiesService.getScriptProperties().getProperty(name) || '';
+}
+
+/**
+ * 🤖 챗봇 모델 점검 (시트 메뉴 [🐾 독서실 → 챗봇 모델 점검]): 쓸 수 있는 모델을 차례로 한 번씩 불러 보고 결과를 보여 줘요.
+ * 모델마다 질문 1번씩을 써요. 점검하면 '오늘 한도 다 씀' 기록도 새로 고쳐요.
+ */
+function checkModels() {
+  const key = getProp_('GEMINI_API_KEY');
+  const cache = CacheService.getScriptCache();
+  const chain = modelChain_(true);
+  const lines = chain.map((m) => {
+    cache.remove('GEMINI_DAY_LIMIT_' + m);
+    const r = callModel_(key, m, '한 단어로 대답해.', [{ role: 'user', parts: [{ text: '안녕?' }] }]);
+    if (r.text) return '✅ ' + m + ' : 사용 가능';
+    if (r.dayLimit) { cache.put('GEMINI_DAY_LIMIT_' + m, '1', 60 * 60); return '⛔ ' + m + ' : 오늘 무료 한도 다 씀'; }
+    if (r.skip) { cache.put('GEMINI_DAY_LIMIT_' + m, '1', 6 * 60 * 60); return '🚫 ' + m + ' : 이 키로 쓸 수 없는 모델'; }
+    if (r.busy) return '⏳ ' + m + ' : 잠깐 혼잡 (분당 한도)';
+    return '❗ ' + m + ' : ' + (r.error || '알 수 없는 오류');
+  });
+  const msg = '챗봇이 쓰는 순서대로예요 (위에서부터 먼저 씀):\n\n' + lines.join('\n');
+  console.log(msg);
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) {}
+  return msg;
 }
 
 /** 설정 확인용: 편집기에서 이 함수를 한 번 실행해 보세요. */

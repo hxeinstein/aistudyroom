@@ -85,6 +85,7 @@ function onOpen() {
       .addItem('빈 학교 칸을 기본 학교 코드로 채우기', 'fillSchoolCodes')
       .addItem('학교 코드 바꾸기', 'changeSchoolCode')
       .addItem('관리자 지정하기', 'setAdminByCode')
+      .addItem('🤖 챗봇 모델 점검', 'checkModels')
       .addToUi();
   } catch (e) { /* 편집기에서 실행 시 무시 */ }
 }
