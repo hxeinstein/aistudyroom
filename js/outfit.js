@@ -72,7 +72,7 @@ export function stringifyOutfit(o) {
   const out = [];
   ['t', 'b', 'd', 's'].forEach((k) => { if (o[k]) out.push(`${k}=${o[k].id}:${o[k].c}`); });
   if (o.a && o.a.length) out.push('a=' + o.a.slice(0, 2).map((x) => `${x.id}:${x.c}`).join(','));
-  return out.join(';');
+  return out.join(';') || 'n';   // 'n' = 아무것도 안 고름 (흰색 기본 티)
 }
 /** ☔ 비·눈 오는 날 쉼터: 노란 우비 + 노란 장화 (모자 종류만 벗고 다른 악세서리는 그대로) */
 export function rainOutfit(str) {
