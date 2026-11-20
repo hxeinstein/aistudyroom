@@ -451,7 +451,8 @@ function dressUp(P, o) {
  * face: { img: 그림 주소(data:image/png…) 또는 그림판(canvas), hair: 뒷머리 색 번호(-1 = 없음) }
  * 머리 앞쪽에 구 조각을 살짝 덮어 그림을 입혀요 (조각의 UV가 그림 한 장과 딱 맞음) */
 export const HAIR_COLORS = ['#2B2420', '#5A3A24', '#8A5A33', '#D9A441', '#C0392B', '#7E8A97'];
-const FACE = { a: 1.05, t0: 0.42, tl: 2.3 };   // 앞쪽 조각: 좌우 ±60° · 위 24°부터 아래 156°까지
+const FACE = { a: 1.05, t0: 0.42, tl: 2.3 };
+const L_SKIN = '#F6D7B8';   // 앞쪽 조각: 좌우 ±60° · 위 24°부터 아래 156°까지
 function addDrawnFace(head, skull, face) {
   face = face || {};
   // 뒷머리 (색을 고르면 뒤통수와 정수리를 덮음)
@@ -461,16 +462,28 @@ function addDrawnFace(head, skull, face) {
     const top = mesh(new THREE.SphereGeometry(0.336, 24, 8, 0, Math.PI * 2, 0, 0.5), HAIR_COLORS[face.hair]);
     top.scale.copy(skull.scale); head.add(top);
   }
-  if (!face.img) return;
-  const tex = face.img instanceof HTMLCanvasElement ? new THREE.CanvasTexture(face.img) : new THREE.Texture();
+  // 얼굴 조각은 네모라서, 동그란 그림 바깥 귀퉁이를 채워야 머리가 끊기지 않아요:
+  // 위쪽 귀퉁이 = 뒷머리 색(없으면 살색), 아래쪽 = 살색, 동그라미 안 = 살색 + 내 그림
+  const hairC = face.hair >= 0 && HAIR_COLORS[face.hair] ? HAIR_COLORS[face.hair] : null;
+  const N = 256, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  if (!(face.img instanceof HTMLCanvasElement)) {
-    const im = new Image();
-    im.onload = () => { tex.image = im; tex.needsUpdate = true; };
-    im.src = face.img;
-  }
+  const paint = (im) => {
+    const g = cv.getContext('2d');
+    g.fillStyle = L_SKIN; g.fillRect(0, 0, N, N);
+    if (hairC) { g.fillStyle = hairC; g.fillRect(0, 0, N, N * 0.46); }
+    g.fillStyle = L_SKIN; g.beginPath(); g.arc(N / 2, N / 2, N / 2 - 1, 0, Math.PI * 2); g.fill();
+    if (hairC) {   // 동그라미 위쪽 가장자리도 살짝 머리색으로 (귀퉁이와 자연스럽게 이어지게)
+      g.strokeStyle = hairC; g.lineWidth = 5; g.beginPath(); g.arc(N / 2, N / 2, N / 2 - 2, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
+    }
+    if (im) g.drawImage(im, 0, 0, N, N);
+    tex.needsUpdate = true;
+  };
+  if (!face.img) paint(null);
+  else if (face.img instanceof HTMLCanvasElement) paint(face.img);
+  else { paint(null); const im = new Image(); im.onload = () => paint(im); im.src = face.img; }
   const patch = new THREE.Mesh(new THREE.SphereGeometry(0.338, 32, 24, Math.PI / 2 - FACE.a, FACE.a * 2, FACE.t0, FACE.tl),
-    new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.05, depthWrite: false }));
+    new THREE.MeshLambertMaterial({ map: tex }));
   patch.scale.copy(skull.scale);
   patch.renderOrder = 2;
   head.add(patch);
