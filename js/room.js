@@ -149,7 +149,7 @@ export function syncNow() { last = null; }
 /* ---------- ✏️ 내가 그린 얼굴 (faces/내 uid: { img, h, t }) ---------- */
 export async function putFace(f) {
   if (!db) return false;
-  try { await set(ref(db, `faces/${uid}`), { img: f.img, h: f.hair, s: JSON.stringify(f.strands || []).slice(0, 20000), t: serverTimestamp() }); return true; } catch (e) { console.warn('얼굴 저장 실패', e); return false; }
+  try { await set(ref(db, `faces/${uid}`), { img: f.img, hr: f.hr || '', st: f.st || 'bald', v: 2, t: serverTimestamp() }); return true; } catch (e) { console.warn('얼굴 저장 실패', e); return false; }
 }
 const faceCache = new Map();   // uid → { v, face, p }
 /** 친구 얼굴 (버전 v가 바뀌었을 때만 다시 받음) · 받는 중이면 null */
@@ -161,8 +161,8 @@ export function getFace(fuid, v, onReady) {
   faceCache.set(fuid, { v: c ? c.v : null, face: c ? c.face : null, p: v });
   get(ref(db, `faces/${fuid}`)).then((snap) => {
     const x = snap.val();
-    let strands = []; try { strands = x && x.s ? JSON.parse(x.s) : []; } catch (e) {}
-    faceCache.set(fuid, { v, face: x && x.img ? { img: x.img, hair: Number(x.h), strands } : null, p: null });
+    const face = !x || !x.img ? null : x.v === 2 ? { v: 2, img: x.img, hr: x.hr || '', st: String(x.st || 'bald') } : { img: x.img, hair: Number(x.h) };
+    faceCache.set(fuid, { v, face, p: null });
     onReady && onReady(fuid);
   }).catch(() => { faceCache.delete(fuid); });
   return null;

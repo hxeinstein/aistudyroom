@@ -1,25 +1,25 @@
-// ✏️ 내가 그린 친구: 동그란 얼굴 틀에 손가락으로 그리기 (하루 한 번 저장)
-// 저장하는 그림은 투명 배경 PNG (얼굴 살구색은 3D 머리 색이라 그림엔 넣지 않음)
-// 🧵 얼굴 밖으로 나간 선은 그림이 아니라 '머리카락 선'(좌표)으로 저장 → 3D에서 굵기 있는 머리카락이 돼요
-import { HAIR_COLORS } from './animals.js';
+// ✏️ 내가 그린 친구: 3D 머리를 돌려 가며 직접 칠하기 (하루 한 번 저장)
+// - 한 손가락: 칠하기 · 두 손가락: 돌리기 / 크게·작게 · 버튼으로도 돌리기
+// - 머리 모양 틀(민머리 · 단발 · 긴 머리 · 양갈래 · 포니테일)을 고르면 그 틀 위에도 칠할 수 있어요
+// - 저장: 머리 그림(512×256) + 머리카락 그림(256×256) PNG, 머리 모양 이름
+import * as THREE from '../vendor/three.module.min.js';
+import { makeAnimal, animateAnimal, HAIR_COLORS, HAIR_STYLES, FRONT_RECT, HEAD_TEX, HAIR_TEX } from './animals.js';
 
-const SIZE = 256;           // 저장하는 그림 크기 (작게 → 친구 화면에 빨리 뜸)
 const SKIN = '#F6D7B8';
-const PENS = ['#2B2420', '#E2574C', '#F28C28', '#F5C451', '#81C784', '#4D8FD1', '#B39DDB', '#FFFFFF'];
-const WIDTHS = [4, 8, 16];
-const BIG = 384, OFF = (BIG - SIZE) / 2, R = SIZE / 2;   // 그리기 판: 가운데 얼굴(지름 256) + 둘레 여백 64
-const MAX_STRANDS = 30, MAX_PTS = 40;
-export const PEN_COLORS = PENS;
+const PENS = ['#2B2420', '#E2574C', '#F28C28', '#F5C451', '#81C784', '#4D8FD1', '#B39DDB', '#FFFFFF', SKIN];
+const WIDTHS = [3, 6, 12];
 const LS_FACE = 'aistudyroom.face';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-/** 이 기기에 저장한 내 얼굴 { img, hair, day, strands: [{ c: 색 번호, w: 굵기 번호, p: [x, y, …] }] } */
+/** 이 기기에 저장한 내 얼굴 { v: 2, img, hr, st, day } (예전: { img, hair, day }) */
 export function myFace() { try { return JSON.parse(localStorage.getItem(LS_FACE)) || null; } catch (e) { return null; } }
 function saveFace(f) { try { localStorage.setItem(LS_FACE, JSON.stringify(f)); } catch (e) {} }
 const today = () => { const d = new Date(Date.now() - 6 * 3600000); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
 export const canDrawToday = () => { const f = myFace(); return !f || f.day !== today(); };
+/** 친구에게 알리는 그림 버전 (바뀌면 친구 화면이 다시 받아요) */
+export const faceVersion = (f) => (f ? f.day + ':' + (f.img || '').length + ':' + (f.hr || '').length + ':' + (f.st || f.hair || '') : '');
 
-// 스티커: 그림판 좌표(0~256)에 펜 색으로 그려 넣기
+// 얼굴 스티커: 256×256 앞모습 판에 그린 뒤 머리 그림의 얼굴 자리에 얹어요
 const STAMPS = {
   eyes1: { name: '동그란 눈', draw: (g) => { for (const x of [92, 164]) { g.beginPath(); g.arc(x, 112, 13, 0, Math.PI * 2); g.fill(); } } },
   eyes2: { name: '웃는 눈', draw: (g) => { g.lineWidth = 7; for (const x of [92, 164]) { g.beginPath(); g.arc(x, 118, 15, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); } } },
@@ -28,133 +28,188 @@ const STAMPS = {
   mouth2: { name: '동그란 입', draw: (g) => { g.lineWidth = 5; g.beginPath(); g.ellipse(128, 172, 12, 15, 0, 0, Math.PI * 2); g.stroke(); } },
   mouth3: { name: '헤 입', draw: (g) => { g.beginPath(); g.arc(128, 160, 22, 0, Math.PI); g.closePath(); g.fill(); } },
   brows: { name: '눈썹', draw: (g) => { g.lineWidth = 6; for (const [x, d] of [[92, -1], [164, 1]]) { g.beginPath(); g.moveTo(x - 16, 84 + d * 3); g.lineTo(x + 16, 84 - d * 3); g.stroke(); } } },
-  hairShort: { name: '짧은 머리', draw: (g) => { g.beginPath(); g.arc(128, 128, 126, Math.PI * 1.08, Math.PI * 1.92); g.quadraticCurveTo(180, 40, 128, 52); g.quadraticCurveTo(76, 40, 12, 98); g.closePath(); g.fill(); } },
-  hairLong: { name: '긴 머리', draw: (g) => { g.beginPath(); g.moveTo(8, 240); g.lineTo(8, 110); g.arc(128, 128, 122, Math.PI * 1.05, Math.PI * 1.95); g.lineTo(248, 240); g.lineTo(214, 240); g.quadraticCurveTo(222, 90, 128, 62); g.quadraticCurveTo(34, 90, 42, 240); g.closePath(); g.fill(); } },
-  // (아래 세 가지는 얼굴 밖으로 나가는 3D 머리카락 선 스티커: strands = 그리기 판 좌표 0~384)
-  longStr: { name: '긴 생머리', strands: () => [-1, 1].flatMap((sd) => [0, 1, 2, 3].map((k) => { const x0 = 192 + sd * (96 + k * 9), x1 = 192 + sd * (132 + k * 10); return [x0, 104 + k * 6, 192 + sd * (128 + k * 6), 160, x1, 230, x1 + sd * 6, 300 + k * 10, x1 + sd * 4, 352]; })) },
-  twin: { name: '양갈래', strands: () => [-1, 1].flatMap((sd) => [0, 1, 2].map((k) => [192 + sd * 108, 110, 192 + sd * (150 + k * 6), 118 + k * 8, 192 + sd * (172 + k * 4), 170 + k * 6, 192 + sd * (168 + k * 6), 240 + k * 12, 192 + sd * (176 + k * 4), 300 + k * 10])) },
-  pony: { name: '포니테일', strands: () => [0, 1, 2, 3].map((k) => [190 + k * 6, 66, 236 + k * 4, 48, 290 + k * 6, 64 + k * 4, 318 + k * 4, 120 + k * 10, 326 + k * 2, 190 + k * 12]) },
-  hairBangs: { name: '앞머리', draw: (g) => { g.beginPath(); g.arc(128, 128, 124, Math.PI * 1.06, Math.PI * 1.94); for (let i = 0; i <= 6; i++) { const x = 240 - i * 37; g.lineTo(x, i % 2 ? 88 : 76); } g.closePath(); g.fill(); } },
+  blush: { name: '볼터치', draw: (g) => { g.save(); g.globalAlpha = 0.6; for (const x of [70, 186]) { g.beginPath(); g.ellipse(x, 150, 18, 10, 0, 0, Math.PI * 2); g.fill(); } g.restore(); } },
 };
 
-/** 그리기 화면 열기 · onSave({ img, hair, strands, day }) */
-export function openDrawer({ openModal, closeModal, toast, onSave, onCancel }) {
+/** 그리기 화면 열기 · onSave(face) */
+export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, outfit }) {
   if (!canDrawToday()) { toast('오늘은 이미 그렸어요. 내일 다시 그릴 수 있어요 ✏️'); return; }
   const prev = myFace();
-  let pen = 0, width = 1, erase = false, hair = prev ? prev.hair : 0;
-  let strands = prev && Array.isArray(prev.strands) ? prev.strands.map((x) => ({ ...x, p: x.p.slice() })) : [];
+  let pen = 0, width = 1, erase = false;
+  let style = prev && prev.st ? prev.st : 'bob';
   const m = openModal(`
     <h2>✏️ 내 얼굴 그리기</h2>
-    <p class="desc">동그란 얼굴 안은 그림으로, <b>얼굴 밖으로 그은 선은 3D 머리카락</b>이 돼요. <b>하루에 한 번</b> 저장할 수 있어요.</p>
-    <div class="dw-wrap"><canvas id="dwCanvas" width="${BIG}" height="${BIG}"></canvas></div>
-    <div class="dw-row dw-pens">${PENS.map((c, i) => `<button type="button" data-p="${i}" class="${i === pen ? 'on' : ''}" style="background:${c}" aria-label="색"></button>`).join('')}</div>
+    <p class="desc"><b>한 손가락</b>으로 칠하고, <b>두 손가락</b>으로 돌려 보세요 (PC는 오른쪽 버튼 끌기). <b>하루에 한 번</b> 저장할 수 있어요.</p>
+    <div class="dw3-stage" id="dw3Stage">
+      <div class="dw3-turn"><button type="button" data-turn="-1">⟲</button><button type="button" data-view="front">앞</button><button type="button" data-view="side">옆</button><button type="button" data-view="back">뒤</button><button type="button" data-turn="1">⟳</button></div>
+    </div>
+    <div class="dw-label">머리 모양</div>
+    <div class="dw-row dw-styles">${HAIR_STYLES.map((x) => `<button type="button" data-st="${x.id}" class="${x.id === style ? 'on' : ''}">${esc(x.name)}</button>`).join('')}</div>
+    <div class="dw-row dw-hair">${HAIR_COLORS.map((c, i) => `<button type="button" data-h="${i}" style="background:${c}" aria-label="머리 색"></button>`).join('')}<small>← 머리 전체 색</small></div>
+    <div class="dw-label">펜</div>
+    <div class="dw-row dw-pens">${PENS.map((c, i) => `<button type="button" data-p="${i}" class="${i === pen ? 'on' : ''}" style="background:${c}" aria-label="${i === PENS.length - 1 ? '살색' : '색'}"></button>`).join('')}</div>
     <div class="dw-row dw-tools">
-      ${WIDTHS.map((w, i) => `<button type="button" data-w="${i}" class="${i === width ? 'on' : ''}"><i style="width:${4 + w}px;height:${4 + w}px"></i></button>`).join('')}
+      ${WIDTHS.map((w, i) => `<button type="button" data-w="${i}" class="${i === width ? 'on' : ''}"><i style="width:${5 + w}px;height:${5 + w}px"></i></button>`).join('')}
       <button type="button" id="dwErase">🧽 지우개</button><button type="button" id="dwUndo">↩ 되돌리기</button><button type="button" id="dwClear">🗑️</button>
     </div>
-    <div class="dw-label">스티커 (지금 고른 색으로 찍혀요 · 🧵는 3D 머리카락)</div>
-    <div class="dw-row dw-stamps">${Object.entries(STAMPS).map(([k, s]) => `<button type="button" data-s="${k}">${s.strands ? '🧵 ' : ''}${esc(s.name)}</button>`).join('')}</div>
-    <div class="dw-label">뒷머리 색</div>
-    <div class="dw-row dw-hair"><button type="button" data-h="-1" class="${hair < 0 ? 'on' : ''}" style="background:${SKIN}" aria-label="없음">✕</button>${HAIR_COLORS.map((c, i) => `<button type="button" data-h="${i}" class="${i === hair ? 'on' : ''}" style="background:${c}" aria-label="색"></button>`).join('')}</div>
-    <p class="hint" id="dwCount"></p>
+    <div class="dw-label">얼굴 스티커 (얼굴 앞에 찍혀요)</div>
+    <div class="dw-row dw-stamps">${Object.entries(STAMPS).map(([k, s]) => `<button type="button" data-s="${k}">${esc(s.name)}</button>`).join('')}</div>
     <p class="hint">⚠️ 친구 얼굴 · 실명 · 나쁜 그림은 그리지 마세요. 친구들이 신고하면 그림이 숨겨져요.</p>
     <div class="foot"><button class="btn ghost" id="dwCancel" type="button">취소</button><button class="btn primary" id="dwSave" type="button">💾 저장</button></div>`, { dismiss: false });
 
-  const cv = m.querySelector('#dwCanvas'), out = cv.getContext('2d');
-  // 얼굴 그림 (256, 투명 배경) — 화면에는 큰 판 가운데에 얹어서 보여 줌
-  const fc = document.createElement('canvas'); fc.width = fc.height = SIZE;
-  const g = fc.getContext('2d');
-  const undo = [];
-  const snap = () => { undo.push({ img: g.getImageData(0, 0, SIZE, SIZE), strands: strands.map((x) => ({ ...x, p: x.p.slice() })) }); if (undo.length > 25) undo.shift(); };
-  const count = () => { m.querySelector('#dwCount').textContent = `🧵 3D 머리카락 ${strands.length} / ${MAX_STRANDS}개`; };
-  const strandPath = (c2, st) => { c2.beginPath(); for (let i = 0; i < st.p.length; i += 2) (i ? c2.lineTo : c2.moveTo).call(c2, st.p[i], st.p[i + 1]); };
-  const render = (live) => {
-    out.clearRect(0, 0, BIG, BIG);
-    // 머리카락 선 (얼굴 뒤에 깔리듯)
-    out.lineCap = out.lineJoin = 'round';
-    for (const st of strands) { out.strokeStyle = PENS[st.c]; out.lineWidth = WIDTHS[st.w] + 4; strandPath(out, st); out.stroke(); }
-    // 얼굴
-    out.fillStyle = SKIN; out.beginPath(); out.arc(BIG / 2, BIG / 2, R, 0, Math.PI * 2); out.fill();
-    out.drawImage(fc, OFF, OFF);
-    out.save(); out.setLineDash([6, 6]); out.strokeStyle = '#D9B28C'; out.lineWidth = 2; out.beginPath(); out.arc(BIG / 2, BIG / 2, R, 0, Math.PI * 2); out.stroke(); out.restore();
-    if (live && live.length > 2) { out.strokeStyle = erase ? 'rgba(0,0,0,.25)' : PENS[pen]; out.lineWidth = WIDTHS[width] + (erase ? 0 : 4); strandPath(out, { p: live }); out.stroke(); }
-    count();
+  // 그림판 두 장 (칠하는 대로 3D에 바로 보임)
+  const [W, H] = HEAD_TEX, [HW, HH] = HAIR_TEX;
+  const headCv = Object.assign(document.createElement('canvas'), { width: W, height: H });
+  const hairCv = Object.assign(document.createElement('canvas'), { width: HW, height: HH });
+  const hg = headCv.getContext('2d'), rg = hairCv.getContext('2d');
+  let curHairBase = HAIR_COLORS[prev && prev.hair >= 0 ? prev.hair : 0] || HAIR_COLORS[0];
+  hg.fillStyle = SKIN; hg.fillRect(0, 0, W, H);
+  rg.fillStyle = curHairBase; rg.fillRect(0, 0, HW, HH);
+  let refs = null;
+  const touchTex = () => { if (refs) { refs.headTex.needsUpdate = true; refs.hairTex.needsUpdate = true; } };
+  // 예전 그림 불러오기 (예전 방식 얼굴은 얼굴 앞자리에 얹음)
+  if (prev && prev.img) {
+    const im = new Image();
+    im.onload = () => {
+      if (prev.v === 2) hg.drawImage(im, 0, 0, W, H);
+      else { const R = FRONT_RECT; hg.drawImage(im, R.u0 * W, R.v0 * H, (R.u1 - R.u0) * W, (R.v1 - R.v0) * H); }
+      touchTex();
+    };
+    im.src = prev.img;
+  }
+  if (prev && prev.v === 2 && prev.hr) { const im = new Image(); im.onload = () => { rg.drawImage(im, 0, 0, HW, HH); touchTex(); }; im.src = prev.hr; }
+
+  // 3D 장면 (그리기 화면 전용 그림판, 닫으면 정리)
+  const stage = m.querySelector('#dw3Stage');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x000000, 0);
+  renderer.domElement.className = 'dw3-canvas';
+  stage.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight('#FFFFFF', '#E8D9C0', 1.7));
+  const dl = new THREE.DirectionalLight('#FFFFFF', 1.1); dl.position.set(1, 2, 3); scene.add(dl);
+  const cam = new THREE.PerspectiveCamera(32, 1, 0.05, 20);
+  let obj = null, yaw = 0, pitch = 0.08, dist = 1.75;
+  const build = () => {
+    if (obj) scene.remove(obj);
+    obj = makeAnimal('drawn', '#7FB3E8', { outfit: outfit || '', face: { v: 2, img: headCv, hr: hairCv, st: style } });
+    refs = obj.userData.drawn;
+    scene.add(obj);
   };
-  if (prev && prev.img) { const im = new Image(); im.onload = () => { g.drawImage(im, 0, 0, SIZE, SIZE); render(); }; im.src = prev.img; }
-  const style = () => { g.globalCompositeOperation = erase ? 'destination-out' : 'source-over'; g.strokeStyle = g.fillStyle = PENS[pen]; g.lineWidth = WIDTHS[width]; g.lineCap = g.lineJoin = 'round'; };
-  const clip = () => { g.save(); g.beginPath(); g.arc(R, R, R - 2, 0, Math.PI * 2); g.clip(); };
-  const outside = (x, y) => Math.hypot(x - BIG / 2, y - BIG / 2) > R + 6;
-  let pts = null, wentOut = false;
-  const pt = (e) => { const r = cv.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * BIG, ((e.clientY - r.top) / r.height) * BIG]; };
-  const paintSeg = (a, b) => { clip(); style(); g.beginPath(); g.moveTo(a[0] - OFF, a[1] - OFF); g.lineTo(b[0] - OFF, b[1] - OFF); g.stroke(); g.restore(); };
+  build();
+  const size = () => { const w = stage.clientWidth || 300, h = stage.clientHeight || 300; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); };
+  size();
+  const clock = new THREE.Clock();
+  const loop = () => {
+    if (!stage.isConnected) { renderer.dispose(); if (renderer.forceContextLoss) renderer.forceContextLoss(); return; }
+    const dt = Math.min(clock.getDelta(), 0.05);
+    obj.rotation.y += (yaw - obj.rotation.y) * Math.min(1, dt * 10);
+    const hy = 0.95 * (obj.userData.scale || 1);
+    cam.position.set(0, hy + Math.sin(pitch) * dist, Math.cos(pitch) * dist); cam.lookAt(0, hy - 0.05, 0);
+    renderer.render(scene, cam);
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+
+  // 칠하기: 머리 공 · 머리카락 조각에 닿은 곳의 그림 좌표에 동그라미
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  const hitAt = (x, y) => {
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, cam);
+    obj.updateMatrixWorld(true);
+    const h = ray.intersectObjects([refs.skull, refs.hair].filter(Boolean), false)[0];
+    if (!h || !h.uv) return null;
+    return { onHair: h.object === refs.hair, u: h.uv.x, v: h.uv.y };
+  };
+  const dab = (pt, prevPt) => {
+    const cw = pt.onHair ? HW : W, ch = pt.onHair ? HH : H, g = pt.onHair ? rg : hg;
+    const rad = WIDTHS[width] * (pt.onHair ? 0.6 : 1) * (erase ? 1.6 : 1);
+    g.fillStyle = erase ? (pt.onHair ? curHairBase : SKIN) : PENS[pen];
+    const near = prevPt && prevPt.onHair === pt.onHair && Math.abs(prevPt.u - pt.u) < 0.25 && Math.abs(prevPt.v - pt.v) < 0.25;
+    const steps = near ? Math.max(1, Math.ceil(Math.hypot((pt.u - prevPt.u) * cw, (pt.v - prevPt.v) * ch) / Math.max(1, rad * 0.5))) : 1;
+    for (let k = 1; k <= steps; k++) {
+      const t = near ? k / steps : 1;
+      const u = near ? prevPt.u + (pt.u - prevPt.u) * t : pt.u, v = near ? prevPt.v + (pt.v - prevPt.v) * t : pt.v;
+      const px = u * cw, py = (1 - v) * ch;
+      // 머리 공은 구를 펼친 그림이라 위 · 아래로 갈수록 가로로 넓게 칠해야 동그랗게 보여요
+      const stretch = pt.onHair ? 1 : 1 / Math.max(0.25, Math.sin((1 - v) * Math.PI));
+      const rx = rad * stretch;
+      g.beginPath(); g.ellipse(px, py, rx, rad, 0, 0, Math.PI * 2); g.fill();
+      if (!pt.onHair && px - rx < 0) { g.beginPath(); g.ellipse(px + cw, py, rx, rad, 0, 0, Math.PI * 2); g.fill(); }   // 이음매 너머도
+      if (!pt.onHair && px + rx > cw) { g.beginPath(); g.ellipse(px - cw, py, rx, rad, 0, 0, Math.PI * 2); g.fill(); }
+    }
+    touchTex();
+  };
+  const undo = [];
+  const snap = () => { undo.push([hg.getImageData(0, 0, W, H), rg.getImageData(0, 0, HW, HH), style, curHairBase]); if (undo.length > 15) undo.shift(); };
+  const cv = renderer.domElement;
+  const ptrs = new Map();
+  let painting = null, turn = null;
+  cv.addEventListener('contextmenu', (e) => e.preventDefault());
   cv.addEventListener('pointerdown', (e) => {
-    e.preventDefault(); cv.setPointerCapture(e.pointerId); snap();
-    const p = pt(e); pts = [p[0], p[1]]; wentOut = outside(p[0], p[1]);
-    if (!wentOut) { clip(); style(); g.beginPath(); g.arc(p[0] - OFF, p[1] - OFF, g.lineWidth / 2, 0, Math.PI * 2); g.fill(); g.restore(); }
-    render(wentOut ? pts : null);
+    e.preventDefault(); cv.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 2 || e.button === 2) {   // 두 손가락(또는 오른쪽 버튼): 돌리기 · 크게/작게
+      if (painting && painting.dabbed) undo.length && (() => { const d = undo.pop(); hg.putImageData(d[0], 0, 0); rg.putImageData(d[1], 0, 0); touchTex(); })();   // 첫 손가락에 묻은 점은 지움
+      painting = null;
+      const ps = [...ptrs.values()];
+      const mid = ps.length === 2 ? { x: (ps[0].x + ps[1].x) / 2, y: (ps[0].y + ps[1].y) / 2 } : { x: e.clientX, y: e.clientY };
+      turn = { mid, yaw, pitch, dist, d: ps.length === 2 ? Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) : 0 };
+      return;
+    }
+    if (ptrs.size === 1) { snap(); const h = hitAt(e.clientX, e.clientY); painting = { last: h, dabbed: !!h }; if (h) dab(h, null); }
   });
   cv.addEventListener('pointermove', (e) => {
-    if (!pts) return;
-    const p = pt(e), lx = pts[pts.length - 2], ly = pts[pts.length - 1];
-    if (Math.hypot(p[0] - lx, p[1] - ly) < 5) return;
-    if (!wentOut && outside(p[0], p[1])) wentOut = true;   // 얼굴 밖으로 나가면 이 선은 머리카락이 됨
-    if (!wentOut || erase) paintSeg([lx, ly], p);
-    pts.push(Math.round(p[0]), Math.round(p[1]));
-    render(wentOut ? pts : null);
-  });
-  const up = () => {
-    if (!pts) return;
-    if (erase && wentOut) {   // 지우개로 머리카락 선을 쓸면 그 선을 뺌
-      strands = strands.filter((st) => { for (let i = 0; i < st.p.length; i += 2) for (let j = 0; j < pts.length; j += 2) if (Math.hypot(st.p[i] - pts[j], st.p[i + 1] - pts[j + 1]) < 14) return false; return true; });
-    } else if (wentOut && pts.length >= 4) {
-      if (strands.length >= MAX_STRANDS) toast(`3D 머리카락은 ${MAX_STRANDS}개까지예요`);
-      else strands.push({ c: pen, w: width, p: simplify(pts) });
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (turn) {
+      const ps = [...ptrs.values()];
+      const mid = ps.length === 2 ? { x: (ps[0].x + ps[1].x) / 2, y: (ps[0].y + ps[1].y) / 2 } : ps[0];
+      yaw = turn.yaw + (mid.x - turn.mid.x) * 0.012;
+      pitch = Math.max(-0.6, Math.min(1.1, turn.pitch + (mid.y - turn.mid.y) * 0.008));
+      if (ps.length === 2 && turn.d) dist = Math.max(1.0, Math.min(2.6, turn.dist * turn.d / Math.max(20, Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y))));
+      return;
     }
-    pts = null; g.globalCompositeOperation = 'source-over'; render();
-  };
+    if (painting) { const h = hitAt(e.clientX, e.clientY); if (h) { dab(h, painting.last); painting.dabbed = true; } painting.last = h; }
+  });
+  const up = (e) => { ptrs.delete(e.pointerId); if (ptrs.size === 0) { turn = null; painting = null; } };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-  render();
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); dist = Math.max(1.0, Math.min(2.6, dist * (1 + Math.sign(e.deltaY) * 0.1))); }, { passive: false });
+  m.querySelectorAll('[data-turn]').forEach((b) => (b.onclick = () => { yaw += Number(b.dataset.turn) * Math.PI / 4; }));
+  const face = (v) => { const base = Math.round(yaw / (Math.PI * 2)) * Math.PI * 2; yaw = base + (v === 'side' ? -Math.PI / 2 : v === 'back' ? Math.PI : 0); pitch = 0.08; };
+  m.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => face(b.dataset.view)));
 
-  const pick = (sel, attr, fn) => m.querySelectorAll(sel).forEach((b) => (b.onclick = () => { m.querySelectorAll(sel).forEach((x) => x.classList.toggle('on', x === b)); fn(Number(b.dataset[attr])); }));
-  pick('.dw-pens button', 'p', (i) => { pen = i; erase = false; m.querySelector('#dwErase').classList.remove('on'); });
-  pick('.dw-tools button[data-w]', 'w', (i) => { width = i; });
-  pick('.dw-hair button', 'h', (i) => { hair = i; });
+  const pick = (sel, attr, fn) => m.querySelectorAll(sel).forEach((b) => (b.onclick = () => { m.querySelectorAll(sel).forEach((x) => x.classList.toggle('on', x === b)); fn(b.dataset[attr]); }));
+  pick('.dw-pens button', 'p', (i) => { pen = Number(i); erase = false; m.querySelector('#dwErase').classList.remove('on'); });
+  pick('.dw-tools button[data-w]', 'w', (i) => { width = Number(i); });
+  pick('.dw-styles button', 'st', (st) => { snap(); style = st; build(); });
+  m.querySelectorAll('.dw-hair button').forEach((b) => (b.onclick = () => { snap(); curHairBase = HAIR_COLORS[Number(b.dataset.h)]; rg.fillStyle = curHairBase; rg.fillRect(0, 0, HW, HH); touchTex(); }));
   m.querySelector('#dwErase').onclick = (e) => { erase = !erase; e.currentTarget.classList.toggle('on', erase); };
-  m.querySelector('#dwUndo').onclick = () => { const d = undo.pop(); if (d) { g.putImageData(d.img, 0, 0); strands = d.strands; render(); } };
-  m.querySelector('#dwClear').onclick = () => { snap(); g.clearRect(0, 0, SIZE, SIZE); strands = []; render(); };
+  m.querySelector('#dwUndo').onclick = () => {
+    const d = undo.pop(); if (!d) return;
+    hg.putImageData(d[0], 0, 0); rg.putImageData(d[1], 0, 0); curHairBase = d[3];
+    if (d[2] !== style) { style = d[2]; m.querySelectorAll('.dw-styles button').forEach((x) => x.classList.toggle('on', x.dataset.st === style)); build(); }
+    touchTex();
+  };
+  m.querySelector('#dwClear').onclick = () => { snap(); hg.fillStyle = SKIN; hg.fillRect(0, 0, W, H); rg.fillStyle = curHairBase; rg.fillRect(0, 0, HW, HH); touchTex(); };
   m.querySelectorAll('.dw-stamps button').forEach((b) => (b.onclick = () => {
-    const st = STAMPS[b.dataset.s];
-    snap(); erase = false; m.querySelector('#dwErase').classList.remove('on');
-    if (st.strands) {
-      const add = st.strands().map((p) => ({ c: pen, w: Math.max(width, 1), p: simplify(smooth(p)) }));
-      if (strands.length + add.length > MAX_STRANDS) { toast(`3D 머리카락은 ${MAX_STRANDS}개까지예요`); undo.pop(); return; }
-      strands = strands.concat(add);
-    } else { clip(); style(); st.draw(g); g.restore(); }
-    render();
+    snap();
+    const sc = Object.assign(document.createElement('canvas'), { width: 256, height: 256 }), sg = sc.getContext('2d');
+    sg.strokeStyle = sg.fillStyle = PENS[pen === PENS.length - 1 ? 0 : pen]; sg.lineCap = sg.lineJoin = 'round';
+    STAMPS[b.dataset.s].draw(sg);
+    const R = FRONT_RECT; hg.drawImage(sc, R.u0 * W, R.v0 * H, (R.u1 - R.u0) * W, (R.v1 - R.v0) * H);
+    touchTex();
+    face('front');   // 얼굴이 보이게 앞으로
   }));
   m.querySelector('#dwCancel').onclick = () => { closeModal(); onCancel && onCancel(); };
   m.querySelector('#dwSave').onclick = () => {
-    const img = fc.toDataURL('image/png');
-    if (img.length > 90000) { toast('그림이 너무 복잡해요. 조금만 덜 칠해 주세요'); return; }
-    const f = { img, hair, strands, day: today() };
+    const img = headCv.toDataURL('image/png'), hr = style === 'bald' ? '' : hairCv.toDataURL('image/png');
+    if (img.length > 95000 || hr.length > 60000) { toast('그림이 너무 복잡해요. 조금만 덜 칠해 주세요'); return; }
+    const f = { v: 2, img, hr, st: style, day: today() };
     saveFace(f);
     closeModal();
     onSave && onSave(f);
   };
-}
-/** 점이 너무 많으면 줄이기 (최대 MAX_PTS개) */
-function simplify(p) {
-  const out = [];
-  const step = Math.max(1, Math.ceil(p.length / 2 / MAX_PTS));
-  for (let i = 0; i < p.length; i += 2 * step) out.push(Math.round(p[i]), Math.round(p[i + 1]));
-  const n = p.length;
-  if (out[out.length - 2] !== Math.round(p[n - 2])) out.push(Math.round(p[n - 2]), Math.round(p[n - 1]));
-  return out;
-}
-/** 스티커의 굵은 꺾은선을 부드럽게 (점 사이를 채움) */
-function smooth(p) {
-  const out = [];
-  for (let i = 0; i < p.length - 2; i += 2) for (let t = 0; t < 1; t += 0.25) out.push(p[i] + (p[i + 2] - p[i]) * t, p[i + 1] + (p[i + 3] - p[i + 1]) * t);
-  out.push(p[p.length - 2], p[p.length - 1]);
-  return out;
 }

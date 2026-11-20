@@ -27,18 +27,23 @@ function lightScene() {
 const faceImgs = new Map();
 function readyFace(face, onLoad) {
   if (!face || !face.img) return null;
-  const hit = faceImgs.get(face.img);
-  if (hit && hit.done) return { ...face, img: hit.cv };
-  if (!hit) {
-    const im = new Image(), e = { done: false, cv: document.createElement('canvas') };
-    faceImgs.set(face.img, e);
-    im.onload = () => { e.cv.width = im.width; e.cv.height = im.height; e.cv.getContext('2d').drawImage(im, 0, 0); e.done = true; onLoad && onLoad(); };
-    im.src = face.img;
-  }
-  return null;
+  const load = (src) => {
+    if (!src) return { done: true, cv: '' };
+    let e = faceImgs.get(src);
+    if (!e) {
+      e = { done: false, cv: document.createElement('canvas') };
+      faceImgs.set(src, e);
+      const im = new Image();
+      im.onload = () => { e.cv.width = im.width; e.cv.height = im.height; e.cv.getContext('2d').drawImage(im, 0, 0); e.done = true; onLoad && onLoad(); };
+      im.src = src;
+    }
+    return e;
+  };
+  const a = load(face.img), b = load(face.hr);
+  return a.done && b.done ? { ...face, img: a.cv, hr: b.cv || '' } : null;
 }
 function faceOf(id, face) {
-  const ck = id + (face ? ':' + face.day + ':' + face.hair + ':' + (face.strands || []).length : '');
+  const ck = id + (face ? ':' + face.day + ':' + (face.st || face.hair) + ':' + (face.img && face.img.width ? 'c' : '') : '');
   if (faces[ck]) return faces[ck];
   try {
     const r = getRenderer();

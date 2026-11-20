@@ -630,3 +630,12 @@ body.in-wrestle .actionbar, body.in-wrestle .interact-btn, body.in-wrestle .joy,
 .dw-tools button.on, .dw-stamps button.on { border-color: var(--green); background: var(--mint); }
 .dw-tools i { display: block; border-radius: 50%; background: #5A4636; }
 .dw-label { text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); margin-top: 6px; }
+
+/* ✏️ 3D로 칠하기 */
+.dw3-stage { position: relative; width: 100%; height: min(330px, 62vw + 60px); border-radius: 22px; background: radial-gradient(circle at 50% 40%, #FFFDF5 0%, #F1E6CF 75%); overflow: hidden; margin: 6px 0; }
+.dw3-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+.dw3-turn { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; justify-content: center; gap: 6px; pointer-events: none; }
+.dw3-turn button { pointer-events: auto; border: 2px solid #EADBC2; background: rgba(255,255,255,.92); border-radius: 999px; min-width: 38px; padding: 5px 9px; font: inherit; font-weight: 800; font-size: 13px; color: var(--brown); }
+.dw-styles button { border: 2px solid #EADBC2; background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--brown); }
+.dw-styles button.on { border-color: var(--green); background: var(--mint); }
+.dw-hair small { align-self: center; color: var(--muted); font-size: 11.5px; }

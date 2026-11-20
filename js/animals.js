@@ -161,7 +161,8 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
   // 카피바라: 털색과 같은 길고 뭉툭한 콧등 (앞으로 쭉, 위아래는 납작)
   muzzle.scale.set(L.bigMuzzle ? 1.35 : L.capy ? 0.9 : 1.2, L.capy ? 0.8 : 0.8, L.capy ? 1.35 : 0.7);
   if (!L.drawn) head.add(muzzle);
-  if (L.drawn) addDrawnFace(head, skull, extra.face);
+  let drawnRefs = null;
+  if (L.drawn) drawnRefs = dressDrawnHead(head, skull, extra.face);
   if (L.capy) {   // 콧등 끝의 까만 코 (위쪽에 콧구멍 둘)
     const tip = mesh(S(0.1, 12, 10), '#5A4636', { y: 0.0, z: 0.58 }); tip.scale.set(1.05, 0.55, 0.35); head.add(tip);
     for (const sx of [-1, 1]) { const n = mesh(S(0.022, 6, 6), '#2A2018', { x: sx * 0.045, y: 0.02, z: 0.615 }); n.scale.set(1, 0.6, 0.6); head.add(n); }
@@ -231,7 +232,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
       w.rotation.z = sx * (dy + 0.1) * 2;
       head.add(w);
     }
-    { const ear = makeEar(L, sx, fur); if (L.earSmall) { ear.scale.multiplyScalar(0.62); ear.position.set(sx * 0.31, 0.04, 0); } head.add(ear); }
+    if (!(drawnRefs && drawnRefs.style !== 'bald')) { const ear = makeEar(L, sx, fur); if (L.earSmall) { ear.scale.multiplyScalar(0.62); ear.position.set(sx * 0.31, 0.04, 0); } head.add(ear); }   // 그린 친구는 머리카락이 귀를 덮으면 귀를 안 보임
     if (L.horns) { // 기린 뿔
       const h = new THREE.Group();
       h.position.set(sx * 0.1, 0.3, -0.02);
@@ -338,7 +339,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
   g.userData = {
     legL, legR, armL, armR, head, body, tail, phase: Math.random() * 10,
     headY: head.position.y, bodyY: 0.45, height: box.max.y,
-    dizzyEyes, dizzy: false, steam,
+    dizzyEyes, dizzy: false, steam, drawn: drawnRefs,
     scale: L.scale || 1, waddle: !!L.waddle, slow: !!L.slow, hop: !!L.hop, cushion: !!L.cushion, big: !!L.bigBottom,
   };
   return g;
@@ -451,70 +452,82 @@ function dressUp(P, o) {
  * face: { img: 그림 주소(data:image/png…) 또는 그림판(canvas), hair: 뒷머리 색 번호(-1 = 없음) }
  * 머리 앞쪽에 구 조각을 살짝 덮어 그림을 입혀요 (조각의 UV가 그림 한 장과 딱 맞음) */
 export const HAIR_COLORS = ['#2B2420', '#5A3A24', '#8A5A33', '#D9A441', '#C0392B', '#7E8A97'];
-const FACE = { a: 1.05, t0: 0.42, tl: 2.3 };
-const L_SKIN = '#F6D7B8';   // 앞쪽 조각: 좌우 ±60° · 위 24°부터 아래 156°까지
-function addDrawnFace(head, skull, face) {
-  face = face || {};
-  // 뒷머리 (색을 고르면 뒤통수와 정수리를 덮음)
-  if (face.hair >= 0 && HAIR_COLORS[face.hair]) {
-    const back = mesh(new THREE.SphereGeometry(0.336, 24, 14, Math.PI / 2 + FACE.a, Math.PI * 2 - FACE.a * 2, 0, 2.0), HAIR_COLORS[face.hair]);
-    back.scale.copy(skull.scale); head.add(back);
-    const top = mesh(new THREE.SphereGeometry(0.336, 24, 8, 0, Math.PI * 2, 0, 0.5), HAIR_COLORS[face.hair]);
-    top.scale.copy(skull.scale); head.add(top);
-  }
-  // 얼굴 조각은 네모라서, 동그란 그림 바깥 귀퉁이를 채워야 머리가 끊기지 않아요:
-  // 위쪽 귀퉁이 = 뒷머리 색(없으면 살색), 아래쪽 = 살색, 동그라미 안 = 살색 + 내 그림
-  const hairC = face.hair >= 0 && HAIR_COLORS[face.hair] ? HAIR_COLORS[face.hair] : null;
-  const N = 256, cv = document.createElement('canvas'); cv.width = cv.height = N;
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const paint = (im) => {
-    const g = cv.getContext('2d');
-    g.fillStyle = L_SKIN; g.fillRect(0, 0, N, N);
-    if (hairC) { g.fillStyle = hairC; g.fillRect(0, 0, N, N * 0.46); }
-    g.fillStyle = L_SKIN; g.beginPath(); g.arc(N / 2, N / 2, N / 2 - 1, 0, Math.PI * 2); g.fill();
-    if (hairC) {   // 동그라미 위쪽 가장자리도 살짝 머리색으로 (귀퉁이와 자연스럽게 이어지게)
-      g.strokeStyle = hairC; g.lineWidth = 5; g.beginPath(); g.arc(N / 2, N / 2, N / 2 - 2, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
-    }
-    if (im) g.drawImage(im, 0, 0, N, N);
-    tex.needsUpdate = true;
-  };
-  addStrands(head, skull, face.strands);
-  if (!face.img) paint(null);
-  else if (face.img instanceof HTMLCanvasElement) paint(face.img);
-  else { paint(null); const im = new Image(); im.onload = () => paint(im); im.src = face.img; }
-  const patch = new THREE.Mesh(new THREE.SphereGeometry(0.338, 32, 24, Math.PI / 2 - FACE.a, FACE.a * 2, FACE.t0, FACE.tl),
-    new THREE.MeshLambertMaterial({ map: tex }));
-  patch.scale.copy(skull.scale);
-  patch.renderOrder = 2;
-  head.add(patch);
-}
+export const HAIR_STYLES = [
+  { id: 'bald', name: '민머리' }, { id: 'bob', name: '단발' }, { id: 'long', name: '긴 머리' },
+  { id: 'twin', name: '양갈래' }, { id: 'pony', name: '포니테일' },
+];
+const L_SKIN = '#F6D7B8';
+// 머리 그림(구 전체 펼친 그림)에서 얼굴 앞쪽 자리 (스티커 · 예전 그림을 여기에 얹음)
+export const FRONT_RECT = { u0: 0.25 - 1.05 / (2 * Math.PI), u1: 0.25 + 1.05 / (2 * Math.PI), v0: 0.42 / Math.PI, v1: 2.72 / Math.PI };
+export const HEAD_TEX = [512, 256], HAIR_TEX = [256, 256];
 
-// 🧵 얼굴 밖으로 그은 머리카락 선 → 굵기 있는 3D 머리카락 (draw.js 그리기 판: 384, 가운데 얼굴 반지름 128)
-const STRAND_COLORS = ['#2B2420', '#E2574C', '#F28C28', '#F5C451', '#81C784', '#4D8FD1', '#B39DDB', '#FFFFFF'];   // draw.js PENS와 같게
-const STRAND_W = [4, 8, 16];
-function addStrands(head, skull, strands) {
-  if (!Array.isArray(strands) || !strands.length) return;
-  const r0 = 0.33, k = 0.0023, sc = skull.scale;
-  strands.slice(0, 30).forEach((st) => {
-    const p = Array.isArray(st.p) ? st.p : [];
-    if (p.length < 4) return;
-    const pts = [];
-    for (let i = 0; i + 1 < p.length && pts.length < 40; i += 2) {
-      let X = (p[i] - 192) * k, Y = -(p[i + 1] - 192) * k;
-      const d = Math.hypot(X, Y);
-      if (d > r0 && Y < 0) Y -= (d - r0) * 0.9 * (-Y / d);   // 얼굴 아래로 내려가는 머리는 더 길게 (어깨까지)
-      // 얼굴 안쪽은 머리 표면을 따라, 바깥은 살짝 뒤로 넘어가며 흘러내리게
-      const Z = d < r0 ? Math.sqrt(r0 * r0 - d * d) : Math.max(-0.2, -(d - r0) * 0.45);
-      pts.push(new THREE.Vector3(X * sc.x, Y * sc.y, Z * sc.z));
-    }
-    if (pts.length < 2) return;
-    const curve = new THREE.CatmullRomCurve3(pts);
-    const rad = ((STRAND_W[st.w] || 8) + 6) * k * 0.62;
-    const color = STRAND_COLORS[st.c] || STRAND_COLORS[0];
-    head.add(mesh(new THREE.TubeGeometry(curve, Math.min(60, pts.length * 3), rad, 5, false), color));
-    head.add(mesh(new THREE.SphereGeometry(rad, 6, 5), color, { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y, z: pts[pts.length - 1].z }));   // 끝을 둥글게
-  });
+/* ---------- ✏️ 내가 그린 친구 (3D로 돌려 가며 칠하기) ----------
+ * face(새 방식): { v: 2, img: 머리 그림(512×256, 구를 펼친 그림), hr: 머리카락 그림(256×256), st: 머리 모양 }
+ *   img · hr 는 그림 주소(data:image/png…) 또는 그림판(canvas). 그림판을 주면 그리기 화면에서 칠하는 대로 바로 보여요.
+ * face(예전 방식): { img: 얼굴 앞모습(256×256), hair: 뒷머리 색 } → 새 방식으로 바꿔서 보여 줌
+ */
+function canvasOf(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function texOf(cv) { const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; }
+function loadInto(src, cv, tex, after) {
+  if (!src) return;
+  if (src instanceof HTMLCanvasElement) { if (src !== cv) { if (after) after(cv.getContext('2d'), src); else cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height); tex.needsUpdate = true; } return; }
+  const im = new Image();
+  im.onload = () => { (after || ((g) => g.drawImage(im, 0, 0, cv.width, cv.height)))(cv.getContext('2d'), im); tex.needsUpdate = true; };
+  im.src = src;
+}
+/** 예전 얼굴 → 새 방식 머리 그림 위에 얹기 */
+function drawOldFace(g, im, W, H) {
+  const R = FRONT_RECT;
+  g.drawImage(im, R.u0 * W, R.v0 * H, (R.u1 - R.u0) * W, (R.v1 - R.v0) * H);
+}
+/** 머리 모양 조각 만들기 (조각마다 머리카락 그림의 네 칸 중 하나를 씀) */
+function hairGeometry(style) {
+  const parts = [];
+  const quad = (geo, q) => { const uv = geo.attributes.uv, x0 = (q % 2) * 0.5, y0 = q < 2 ? 0.5 : 0; for (let i = 0; i < uv.count; i++) uv.setXY(i, x0 + uv.getX(i) * 0.5, y0 + uv.getY(i) * 0.5); return geo; };
+  const sph = (r, ps, pl, ts, tl) => new THREE.SphereGeometry(r, 32, 16, ps, pl, ts, tl);
+  const win = 0.78;   // 얼굴 창 (좌우 ±45°)
+  const capT = style === 'long' ? 2.3 : style === 'pony' ? 1.95 : 2.05;
+  parts.push(quad(sph(0.352, Math.PI / 2 + win, Math.PI * 2 - win * 2, 0, capT), 0));   // 뒤통수 · 옆머리
+  parts.push(quad(sph(0.353, Math.PI / 2 - win, win * 2, 0, style === 'pony' ? 0.5 : 0.64), 1));   // 앞머리
+  const g = (geo, x, y, z, rx, rz, q) => { geo.rotateX(rx || 0); geo.rotateZ(rz || 0); geo.translate(x, y, z); return quad(geo, q); };
+  if (style === 'long') parts.push(g(new THREE.CylinderGeometry(0.335, 0.37, 0.52, 24, 1, true, Math.PI - 1.45, 2.9), 0, -0.44, 0, 0, 0, 2));
+  if (style === 'twin') for (const sx of [-1, 1]) parts.push(g(new THREE.CapsuleGeometry(0.075, 0.32, 6, 10), sx * 0.37, -0.16, -0.06, 0, sx * 0.22, sx < 0 ? 2 : 3));
+  if (style === 'pony') { parts.push(g(new THREE.CapsuleGeometry(0.08, 0.38, 6, 10), 0, -0.05, -0.42, 0.55, 0, 2)); parts.push(g(new THREE.SphereGeometry(0.06, 10, 8), 0, 0.16, -0.36, 0, 0, 3)); }
+  return parts;
+}
+/**
+ * 그린 친구 머리 꾸미기: skull(머리 공)에 머리 그림을 입히고, 머리 모양 조각을 붙여요.
+ * 돌려주는 것: { skull, hair, headCv, hairCv, headTex, hairTex } (그리기 화면이 여기에 칠함)
+ */
+export function dressDrawnHead(head, skull, face) {
+  face = face || {};
+  const legacy = face.v !== 2;
+  const [W, H] = HEAD_TEX, [HW, HH] = HAIR_TEX;
+  const headCv = face.img instanceof HTMLCanvasElement && !legacy ? face.img : canvasOf(W, H);
+  const hairCv = face.hr instanceof HTMLCanvasElement ? face.hr : canvasOf(HW, HH);
+  const headTex = texOf(headCv), hairTex = texOf(hairCv);
+  let style = face.st || (legacy && face.hair >= 0 ? 'bob' : legacy ? 'bald' : 'bald');
+  if (headCv !== face.img) {
+    const g = headCv.getContext('2d'); g.fillStyle = L_SKIN; g.fillRect(0, 0, W, H);
+    if (legacy) loadInto(face.img, headCv, headTex, (g2, im) => drawOldFace(g2, im, W, H));
+    else loadInto(face.img, headCv, headTex);
+  }
+  if (hairCv !== face.hr) {
+    const g = hairCv.getContext('2d'); g.fillStyle = legacy && face.hair >= 0 ? HAIR_COLORS[face.hair] || HAIR_COLORS[0] : HAIR_COLORS[0]; g.fillRect(0, 0, HW, HH);
+    if (!legacy) loadInto(face.hr, hairCv, hairTex);
+  }
+  skull.geometry = new THREE.SphereGeometry(0.33, 40, 28);
+  skull.material = new THREE.MeshLambertMaterial({ map: headTex });
+  let hair = null;
+  if (style !== 'bald') {
+    const pm = new THREE.MeshLambertMaterial({ map: hairTex, side: THREE.DoubleSide });
+    const meshes = hairGeometry(style).map((geo) => { const m2 = new THREE.Mesh(geo, pm); m2.castShadow = true; return m2; });
+    const holder = new THREE.Group(); holder.scale.copy(skull.scale); head.add(holder);
+    meshes.forEach((m2) => holder.add(m2));
+    mergeInto(holder, meshes);
+    hair = holder.children.find((c) => c.isMesh) || null;
+  }
+  return { skull, hair, headCv, hairCv, headTex, hairTex, style };
 }
 
 function spot(color, r, x, y, z) {
