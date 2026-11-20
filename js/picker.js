@@ -23,20 +23,35 @@ function lightScene() {
   return scene;
 }
 /** 얼굴 그림 만들기 (처음 한 번만, 그 뒤엔 저장해 둔 그림 사용) */
-function faceOf(id) {
-  if (faces[id]) return faces[id];
+// 그린 얼굴 그림을 미리 불러 둠 (불러온 뒤에 작은 그림 · 미리보기를 다시 그림)
+const faceImgs = new Map();
+function readyFace(face, onLoad) {
+  if (!face || !face.img) return null;
+  const hit = faceImgs.get(face.img);
+  if (hit && hit.done) return { ...face, img: hit.cv };
+  if (!hit) {
+    const im = new Image(), e = { done: false, cv: document.createElement('canvas') };
+    faceImgs.set(face.img, e);
+    im.onload = () => { e.cv.width = im.width; e.cv.height = im.height; e.cv.getContext('2d').drawImage(im, 0, 0); e.done = true; onLoad && onLoad(); };
+    im.src = face.img;
+  }
+  return null;
+}
+function faceOf(id, face) {
+  const ck = id + (face ? ':' + face.day + ':' + face.hair : '');
+  if (faces[ck]) return faces[ck];
   try {
     const r = getRenderer();
     r.setPixelRatio(1); r.setSize(96, 96, false);
-    const scene = lightScene(), obj = makeAnimal(id, '#7FB3E8');
+    const scene = lightScene(), obj = makeAnimal(id, '#7FB3E8', face ? { face } : {});
     scene.add(obj);
     const u = obj.userData, s = u.scale || 1, hy = (u.headY + 0.02) * s;
     const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
     cam.position.set(0.35 * s, hy + 0.12 * s, 2.0 * s); cam.lookAt(0, hy, 0);
     r.render(scene, cam);
-    faces[id] = r.domElement.toDataURL('image/png');
-  } catch (e) { faces[id] = ''; }
-  return faces[id];
+    faces[ck] = r.domElement.toDataURL('image/png');
+  } catch (e) { faces[ck] = ''; }
+  return faces[ck];
 }
 
 export function pickerHTML(cur, { outfit = false } = {}) {
@@ -55,23 +70,26 @@ export function pickerHTML(cur, { outfit = false } = {}) {
  * root: 화면 · cur: 지금 캐릭터 · onPick(id) · look(): { clothes, glasses, teacher } (선생님 옷 색 · 안경)
  * 돌려주는 것: { refresh() } — 옷 색·안경이 바뀌면 미리보기를 다시 그림
  */
-export function bindPicker(root, { cur, onPick, look, outfit, onOutfit } = {}) {
+export function bindPicker(root, { cur, onPick, look, outfit, onOutfit, face, onDraw } = {}) {
+  let redraw = () => {};
+  const myFace = () => readyFace(face ? face() : null, () => redraw());
   let id = cur, group = animalById(cur).group;
   let fit = parseOutfit(outfit || '');
   const stage = root.querySelector('#pkStage'), grid = root.querySelector('#pkGrid');
   const drawGrid = () => {
     grid.innerHTML = ANIMALS.filter((x) => x.group === group).map((x) => {
-      const src = faceOf(x.id);
+      const src = faceOf(x.id, x.id === 'drawn' ? myFace() : null);
       return `<button type="button" class="pk-item ${x.id === id ? 'on' : ''}" data-a="${x.id}">${src ? `<img src="${src}" alt="">` : `<span>${x.emoji}</span>`}<small>${esc(x.name)}</small></button>`;
-    }).join('');
+    }).join('') + (group === 'draw' && onDraw ? `<button type="button" class="btn primary pk-draw" id="pkDraw">✏️ ${myFace() ? '다시 그리기' : '얼굴 그리기'}</button>` : '');
     grid.querySelectorAll('.pk-item').forEach((b) => (b.onclick = () => select(b.dataset.a)));
+    const dr = grid.querySelector('#pkDraw'); if (dr) dr.onclick = onDraw;
   };
   root.querySelectorAll('.pk-tab').forEach((b) => (b.onclick = () => {
     group = b.dataset.g;
     root.querySelectorAll('.pk-tab').forEach((x) => x.classList.toggle('on', x === b));
     drawGrid();
   }));
-  ANIMALS.forEach((x) => faceOf(x.id));   // 얼굴 그림은 처음 한 번에 모두 (그 뒤엔 저장해 둔 것)
+  ANIMALS.forEach((x) => faceOf(x.id, x.id === 'drawn' ? myFace() : null));   // 얼굴 그림은 처음 한 번에 모두 (그 뒤엔 저장해 둔 것)
   drawGrid();
 
   // 큰 미리보기 (빙글빙글)
@@ -83,7 +101,7 @@ export function bindPicker(root, { cur, onPick, look, outfit, onOutfit } = {}) {
   const build = () => {
     if (obj) scene.remove(obj);
     const lk = look ? look() : {};
-    obj = makeAnimal(id, lk.clothes || '#7FB3E8', { glasses: !!lk.glasses, teacher: !!lk.teacher, outfit: onOutfit ? stringifyOutfit(fit) : '' });
+    obj = makeAnimal(id, lk.clothes || '#7FB3E8', { glasses: !!lk.glasses, teacher: !!lk.teacher, outfit: onOutfit ? stringifyOutfit(fit) : '', face: id === 'drawn' ? myFace() : null });
     obj.position.y = 0.02;
     scene.add(obj);
     const h = (obj.userData.height || 1.4) * (obj.userData.scale || 1);
@@ -98,6 +116,7 @@ export function bindPicker(root, { cur, onPick, look, outfit, onOutfit } = {}) {
     onPick && onPick(id);
   };
   build();
+  redraw = () => { drawGrid(); sizeIt(); if (id === 'drawn') build(); };   // 작은 그림을 다시 그리면 같은 그림판 크기가 바뀌어서 미리보기 크기를 되돌림
   const sizeIt = () => { const w = stage.clientWidth || 280, h = stage.clientHeight || 190; r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); };
   r.domElement.className = 'pk-canvas';
   stage.prepend(r.domElement);

@@ -505,8 +505,8 @@ export function createWorld(container, opts = {}) {
   labelsEl.className = 'labels';
   container.appendChild(labelsEl);
   const actors = [];
-  function addActor(animal, clothes, label, me = false, outfit = '') {
-    const obj = makeAnimal(animal, clothes, outfit ? { outfit } : {});
+  function addActor(animal, clothes, label, me = false, outfit = '', face = null) {
+    const obj = makeAnimal(animal, clothes, { ...(outfit ? { outfit } : {}), ...(face ? { face } : {}) });
     scene.add(obj);
     const el = document.createElement('div');
     el.className = 'name-tag' + (me ? ' me' : '');
@@ -591,15 +591,17 @@ export function createWorld(container, opts = {}) {
     if (seat.cushions) { seat.group.remove(seat.cushions); seat.cushions = null; }
   }
 
-  const player = addActor(opts.animal || 'bear', CLOTHES[0], { name: opts.name || '' }, true, opts.outfit || '');
+  const player = addActor(opts.animal || 'bear', CLOTHES[0], { name: opts.name || '' }, true, opts.outfit || '', opts.face || null);
   let baseOutfit = opts.outfit || '';
+  let baseFace = opts.face || null;   // ✏️ 내가 그린 얼굴 { img, hair, day }
+  const faceKey = (f) => (f ? f.day + ':' + (f.img || '').length + ':' + f.hair : '');
   let apiRef = null;
   // ☔ 비·눈 오는 날 쉼터에 있으면 노란 우비 + 장화 (나 · 친구 모두)
   const rainyPark = (ar) => (weather === 'rain' || weather === 'snow') && ar === 'park';
   const effOutfit = () => (rainyPark(area.name) ? rainOutfit(baseOutfit) : baseOutfit);
   let rainCheckT = 0, lastRainy = false;
   player.animal = opts.animal || 'bear';
-  player.lookKey = 's:' + player.animal + ':' + baseOutfit;
+  player.lookKey = 's:' + player.animal + ':' + baseOutfit + ':' + (player.animal === 'drawn' ? faceKey(baseFace) : '');
   let teacherLook = null;
   let baseAnimal = player.animal, baseName = opts.name || '', baseStatus = '', baseGoal = '';
   const playerSpeed = () => animalSpeed(player.animal) * (area.name === 'park' && pondDepth(player.obj.position.x, player.obj.position.z) > 0.05 ? 0.55 : 1);
@@ -2327,13 +2329,16 @@ export function createWorld(container, opts = {}) {
       let r = remotes.get(x.uid);
       const xOf = typeof x.of === 'string' ? x.of.slice(0, 80) : '';
       const wantOf = rainyPark(x.ar) ? rainOutfit(xOf) : xOf;   // 비 오는 날 쉼터면 우비
-      if (r && (r.info.a !== x.a || r.builtOf !== wantOf)) { removeRemote(x.uid); r = null; }   // 동물이나 옷이 바뀌면 다시 만듦
+      // ✏️ 그린 친구: 얼굴 그림을 받아 오면 다시 만듦 (받는 중엔 기본 얼굴)
+      const xFace = x.a === 'drawn' && typeof x.fc === 'string' && x.fc && opts.getFace ? opts.getFace(x.uid, x.fc) : null;
+      const builtKey = wantOf + '|' + (xFace ? x.fc : '');
+      if (r && (r.info.a !== x.a || r.builtOf !== builtKey)) { removeRemote(x.uid); r = null; }   // 동물 · 옷 · 얼굴이 바뀌면 다시 만듦
       if (!r) {
-        const a = addActor(x.a || 'bear', CLOTHES[hashN(x.uid) % CLOTHES.length], { name: x.n }, false, wantOf);
+        const a = addActor(x.a || 'bear', CLOTHES[hashN(x.uid) % CLOTHES.length], { name: x.n }, false, wantOf, xFace);
         a.remote = true;
         a.obj.traverse((o) => { o.userData.remoteUid = x.uid; o.userData.remoteNick = x.n; });
         a.obj.position.set(Number(x.x) || 0, DECK_Y, Number(x.z) || 6);
-        r = { a, info: x, target: new THREE.Vector3(), ry: 0, seatIdx: -1, builtOf: wantOf };
+        r = { a, info: x, target: new THREE.Vector3(), ry: 0, seatIdx: -1, builtOf: builtKey };
         remotes.set(x.uid, r);
       }
       r.info = x;
@@ -3053,20 +3058,21 @@ export function createWorld(container, opts = {}) {
     },
     zoomBy(f) { setZoom(zoomTarget * f); },
     resetView() { yawTarget = 0; pitchTarget = 0.65; setZoom(11.9); },
-    setPlayer({ animal, name, status, goal, force, outfit }) {
+    setPlayer({ animal, name, status, goal, force, outfit, face }) {
       if (animal) baseAnimal = animal;
+      if (face !== undefined) baseFace = face;
       if (outfit !== undefined) baseOutfit = outfit || '';
       if (name !== undefined) { baseName = name; baseStatus = status; }
       if (goal !== undefined) baseGoal = goal;
       const look = teacherLook;
       const want = look ? look.animal || 'bear' : baseAnimal;
       const outfitNow = effOutfit();
-      const key = look ? `t:${want}:${look.color}:${look.glasses ? 1 : 0}` : `s:${want}:${outfitNow}`;
+      const key = look ? `t:${want}:${look.color}:${look.glasses ? 1 : 0}` : `s:${want}:${outfitNow}:${want === 'drawn' ? faceKey(baseFace) : ''}`;
       if (force || key !== player.lookKey) {
         player.lookKey = key;
         animal = want;
         const old = player.obj;
-        const fresh = look ? makeAnimal(want, look.color || '#B79CE8', { glasses: !!look.glasses, teacher: true }) : makeAnimal(want, CLOTHES[0], outfitNow ? { outfit: outfitNow } : {});
+        const fresh = look ? makeAnimal(want, look.color || '#B79CE8', { glasses: !!look.glasses, teacher: true }) : makeAnimal(want, CLOTHES[0], { ...(outfitNow ? { outfit: outfitNow } : {}), ...(want === 'drawn' && baseFace ? { face: baseFace } : {}) });
         fresh.position.copy(old.position);
         fresh.rotation.copy(old.rotation);
         scene.remove(old);

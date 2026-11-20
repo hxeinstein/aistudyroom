@@ -81,6 +81,7 @@ export const LOOKS = {
   capybara: { fur: '#9C7B5B', muzzle: '#8F6F51', ear: 'tiny', earColor: '#7E6047', tail: 'none', capy: true, bodyW: 1.2, scale: 1.05, speed: 0.8, yuzu: true },
   graycat: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#8E949E', inner: '#F7B3B8', split: '#8E949E', tail: 'long', tailColor: '#8E949E', whiskers: true },
   cheesecat: { fur: '#FBFAF7', muzzle: '#FFFFFF', ear: 'point', earColor: '#E9A04F', inner: '#F7B3B8', split: '#E9A04F', tail: 'long', tailColor: '#E9A04F', whiskers: true },
+  drawn: { fur: '#F6D7B8', muzzle: '#F6D7B8', ear: 'round', earSmall: true, tail: 'none', drawn: true },   // ✏️ 내가 그린 친구
   bun: { fur: '#FFF8EE', muzzle: '#FFFDF8', ear: 'none', tail: 'none', bun: true, limbs: '#F6EBDD', cheekColor: '#FFC2CF' },
   deer: { fur: '#C98F57', muzzle: '#F6E5CF', ear: 'side', antlers: '#8A5A33', tail: 'puff', tailColor: '#FFFFFF', speed: 1.25 },
 };
@@ -159,7 +160,8 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
   const muzzle = mesh(S(mz, 16, 12), mat(L.muzzle), { y: L.bigMuzzle ? -0.12 : L.capy ? -0.05 : -0.09, z: L.bigMuzzle ? 0.24 : L.capy ? 0.3 : 0.25 });
   // 카피바라: 털색과 같은 길고 뭉툭한 콧등 (앞으로 쭉, 위아래는 납작)
   muzzle.scale.set(L.bigMuzzle ? 1.35 : L.capy ? 0.9 : 1.2, L.capy ? 0.8 : 0.8, L.capy ? 1.35 : 0.7);
-  head.add(muzzle);
+  if (!L.drawn) head.add(muzzle);
+  if (L.drawn) addDrawnFace(head, skull, extra.face);
   if (L.capy) {   // 콧등 끝의 까만 코 (위쪽에 콧구멍 둘)
     const tip = mesh(S(0.1, 12, 10), '#5A4636', { y: 0.0, z: 0.58 }); tip.scale.set(1.05, 0.55, 0.35); head.add(tip);
     for (const sx of [-1, 1]) { const n = mesh(S(0.022, 6, 6), '#2A2018', { x: sx * 0.045, y: 0.02, z: 0.615 }); n.scale.set(1, 0.6, 0.6); head.add(n); }
@@ -174,7 +176,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     const t2 = mesh(new THREE.CapsuleGeometry(0.055, 0.14, 4, 8), fur, { y: -0.33, z: 0.42 });
     t2.rotation.x = -0.2;
     head.add(t1, t2);
-  } else if (L.capy) { // (코는 위에서 만듦)
+  } else if (L.capy || L.drawn) { // (카피바라 코는 위에서 · 그린 친구는 얼굴 그림에)
   } else if (L.bigMuzzle) { // 하마 콧구멍
     for (const sx of [-1, 1]) head.add(mesh(S(0.03, 8, 6), L.nostril || '#5E5470', { x: sx * 0.08, y: -0.06, z: 0.39 }));
   } else {
@@ -213,6 +215,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
       head.add(p);
     }
     if (L.capy) { const e = mesh(eyeGeo, '#2A2222', { x: sx * 0.15, y: 0.1, z: 0.27 }); e.scale.set(1.2, 0.45, 1); head.add(e); }   // 졸린 듯 가느다란 눈
+    else if (L.drawn) { /* 눈은 그림으로 */ }
     else if (L.ear !== 'frog') head.add(mesh(eyeGeo, L.patch && !L.patchLong ? '#FFFFFF' : '#2A2222', { x: sx * 0.12, y: 0.04, z: 0.3 }));
     if (L.tears) { // 치타 눈물 무늬
       const tl = mesh(new THREE.BoxGeometry(0.02, 0.12, 0.02), '#3A2A22', { x: sx * 0.1, y: -0.05, z: 0.3 });
@@ -221,14 +224,14 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
     }
     const cheek = mesh(S(L.cheeks ? 0.11 : 0.05, 8, 8), L.cheeks ? mat('#FFF3DD') : mat(L.cheekColor || '#FF9AA8', { transparent: true, opacity: 0.7 }), { x: sx * (L.cheeks ? 0.24 : 0.21), y: -0.08, z: L.cheeks ? 0.17 : 0.24 });
     if (!L.cheeks) cheek.scale.z = 0.3;
-    if (!L.capy) head.add(cheek);
+    if (!L.capy && !L.drawn) head.add(cheek);
     if (L.cheeks) head.add(mesh(S(0.04, 8, 8), mat('#FF9AA8', { transparent: true, opacity: 0.7 }), { x: sx * 0.22, y: -0.06, z: 0.27 }));
     if (L.whiskers) for (const dy of [-0.08, -0.12]) {
       const w = mesh(new THREE.BoxGeometry(0.16, 0.008, 0.008), '#5A4A42', { x: sx * 0.22, y: dy, z: 0.28, cast: false });
       w.rotation.z = sx * (dy + 0.1) * 2;
       head.add(w);
     }
-    head.add(makeEar(L, sx, fur));
+    { const ear = makeEar(L, sx, fur); if (L.earSmall) { ear.scale.multiplyScalar(0.62); ear.position.set(sx * 0.31, 0.04, 0); } head.add(ear); }
     if (L.horns) { // 기린 뿔
       const h = new THREE.Group();
       h.position.set(sx * 0.1, 0.3, -0.02);
@@ -442,6 +445,35 @@ function dressUp(P, o) {
     if (a.id === 'scarf') { const t = mesh(new THREE.TorusGeometry(0.14 * bw, 0.05, 8, 20), m, { y: 0.67 + (P.neck || 0) * 0.2 }); t.rotation.x = Math.PI / 2; g.add(t); g.add(box(0.07, 0.17, 0.03, m, { x: 0.06, y: 0.56, z: 0.17 * Math.max(1, bw) })); }
     if (a.id === 'bag') { onBody(box(0.26, 0.26, 0.1, m, { y: 0.0, z: -0.24 })); onBody(box(0.2, 0.08, 0.04, m, { y: -0.08, z: -0.3 })); for (const sx of [-0.08, 0.08]) onBody(box(0.03, 0.26, 0.03, '#3B3B44', { x: sx, y: 0.03, z: 0.19 })); }
   }
+}
+
+/* ---------- ✏️ 내가 그린 얼굴 ----------
+ * face: { img: 그림 주소(data:image/png…) 또는 그림판(canvas), hair: 뒷머리 색 번호(-1 = 없음) }
+ * 머리 앞쪽에 구 조각을 살짝 덮어 그림을 입혀요 (조각의 UV가 그림 한 장과 딱 맞음) */
+export const HAIR_COLORS = ['#2B2420', '#5A3A24', '#8A5A33', '#D9A441', '#C0392B', '#7E8A97'];
+const FACE = { a: 1.05, t0: 0.42, tl: 2.3 };   // 앞쪽 조각: 좌우 ±60° · 위 24°부터 아래 156°까지
+function addDrawnFace(head, skull, face) {
+  face = face || {};
+  // 뒷머리 (색을 고르면 뒤통수와 정수리를 덮음)
+  if (face.hair >= 0 && HAIR_COLORS[face.hair]) {
+    const back = mesh(new THREE.SphereGeometry(0.336, 24, 14, Math.PI / 2 + FACE.a, Math.PI * 2 - FACE.a * 2, 0, 2.0), HAIR_COLORS[face.hair]);
+    back.scale.copy(skull.scale); head.add(back);
+    const top = mesh(new THREE.SphereGeometry(0.336, 24, 8, 0, Math.PI * 2, 0, 0.5), HAIR_COLORS[face.hair]);
+    top.scale.copy(skull.scale); head.add(top);
+  }
+  if (!face.img) return;
+  const tex = face.img instanceof HTMLCanvasElement ? new THREE.CanvasTexture(face.img) : new THREE.Texture();
+  tex.colorSpace = THREE.SRGBColorSpace;
+  if (!(face.img instanceof HTMLCanvasElement)) {
+    const im = new Image();
+    im.onload = () => { tex.image = im; tex.needsUpdate = true; };
+    im.src = face.img;
+  }
+  const patch = new THREE.Mesh(new THREE.SphereGeometry(0.338, 32, 24, Math.PI / 2 - FACE.a, FACE.a * 2, FACE.t0, FACE.tl),
+    new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.05, depthWrite: false }));
+  patch.scale.copy(skull.scale);
+  patch.renderOrder = 2;
+  head.add(patch);
 }
 
 function spot(color, r, x, y, z) {

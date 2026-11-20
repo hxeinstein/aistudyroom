@@ -3,7 +3,7 @@
 // 앱을 닫으면 내 정보는 자동으로 지워져요 (onDisconnect).
 import {
   initializeApp, getAuth, signInAnonymously,
-  getDatabase, ref, update, remove, onValue, onDisconnect, runTransaction, serverTimestamp, push, onChildAdded, query, limitToLast,
+  getDatabase, ref, update, remove, onValue, onDisconnect, runTransaction, serverTimestamp, push, onChildAdded, query, limitToLast, get, set,
 } from '../vendor/firebase.js';
 import { FIREBASE } from './config.js';
 
@@ -145,3 +145,24 @@ export async function sendCall(toUid, call) {
 
 /** 예전 버전 호환: 바로 한 번 보내기 */
 export function syncNow() { last = null; }
+
+/* ---------- ✏️ 내가 그린 얼굴 (faces/내 uid: { img, h, t }) ---------- */
+export async function putFace(f) {
+  if (!db) return false;
+  try { await set(ref(db, `faces/${uid}`), { img: f.img, h: f.hair, t: serverTimestamp() }); return true; } catch (e) { console.warn('얼굴 저장 실패', e); return false; }
+}
+const faceCache = new Map();   // uid → { v, face, p }
+/** 친구 얼굴 (버전 v가 바뀌었을 때만 다시 받음) · 받는 중이면 null */
+export function getFace(fuid, v, onReady) {
+  const c = faceCache.get(fuid);
+  if (c && c.v === v) return c.face;
+  if (c && c.p === v) return null;
+  if (!db) return null;
+  faceCache.set(fuid, { v: c ? c.v : null, face: c ? c.face : null, p: v });
+  get(ref(db, `faces/${fuid}`)).then((snap) => {
+    const x = snap.val();
+    faceCache.set(fuid, { v, face: x && x.img ? { img: x.img, hair: Number(x.h) } : null, p: null });
+    onReady && onReady(fuid);
+  }).catch(() => { faceCache.delete(fuid); });
+  return null;
+}

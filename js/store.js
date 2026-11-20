@@ -67,6 +67,7 @@ export const ANIMALS = [
   { id: 'deer', name: '사슴', emoji: '🦌', trait: '사슴뿔 · 가볍고 빠른 걸음' , group: 'big' },
   { id: 'capybara', name: '카피바라', emoji: '🍊', trait: '느긋한 표정 · 머리 위에 귤 하나' , group: 'big' },
   { id: 'bun', name: '찐빵이', emoji: '🥟', trait: '말랑한 하얀 찐빵 얼굴 · 머리 위 김이 모락모락' , group: 'cozy' },
+  { id: 'drawn', name: '내가 그린 친구', emoji: '✏️', trait: '내가 그린 얼굴 · 하루에 한 번 다시 그릴 수 있어요', group: 'draw' },
   { id: 'graycat', name: '회색냥', emoji: '🐱', trait: '이마가 둥글게 갈린 은회색 무늬 고양이' , group: 'cat' },
   { id: 'cheesecat', name: '치즈냥', emoji: '🐱', trait: '이마가 둥글게 갈린 치즈색 무늬 고양이' , group: 'cat' },
 ];
@@ -77,6 +78,7 @@ export const ANIMAL_GROUPS = [
   { id: 'cat', name: '고양이과', emoji: '🐱' },
   { id: 'big', name: '큰 친구', emoji: '🦒' },
   { id: 'unique', name: '개성파', emoji: '🐸' },
+  { id: 'draw', name: '그린 친구', emoji: '✏️' },
 ];
 export const animalById = (id) => ANIMALS.find((a) => a.id === id) || ANIMALS[0];
 

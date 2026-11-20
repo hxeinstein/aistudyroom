@@ -540,8 +540,8 @@ body.studying .interact-btn, body.on-trail .interact-btn, body.observer .interac
 .pk-name { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; display: flex; flex-direction: column; gap: 1px; pointer-events: none; }
 .pk-name b { font-size: 16px; color: var(--brown); }
 .pk-name small { font-size: 12px; color: var(--muted); word-break: keep-all; padding: 0 12px; }
-.pk-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
-.pk-tab { border: 2px solid #EADBC2; background: #fff; border-radius: 14px; padding: 4px 2px 5px; font: inherit; font-size: 11.5px; font-weight: 700; color: var(--brown); display: flex; flex-direction: column; align-items: center; gap: 1px; word-break: keep-all; line-height: 1.15; }
+.pk-tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.pk-tab { border: 2px solid #EADBC2; background: #fff; border-radius: 14px; padding: 4px 1px 5px; font: inherit; font-size: 10.5px; font-weight: 700; color: var(--brown); display: flex; flex-direction: column; align-items: center; gap: 1px; word-break: keep-all; line-height: 1.15; }
 .pk-tab span { font-size: 19px; }
 .pk-tab.on { background: var(--green); border-color: var(--green); color: #fff; }
 .pk-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
@@ -618,3 +618,15 @@ body.in-wrestle .actionbar, body.in-wrestle .interact-btn, body.in-wrestle .joy,
 .pk-items .pk-it small { font-size: 11px; font-weight: 700; color: var(--brown); word-break: keep-all; text-align: center; line-height: 1.15; }
 .pk-none { font-size: 22px; line-height: 40px; color: #C9B79A; }
 .pk-hint { grid-column: 1 / -1; }
+
+/* ✏️ 그리기 (draw.js) */
+.pk-draw { grid-column: 1 / -1; margin-top: 4px; }
+.dw-wrap { display: flex; justify-content: center; margin: 6px 0 8px; }
+#dwCanvas { width: min(240px, 66vw); height: min(240px, 66vw); border-radius: 50%; background: #F6D7B8; box-shadow: inset 0 0 0 3px #E8C3A0, 0 4px 12px rgba(0,0,0,.12); touch-action: none; }
+.dw-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 4px 0; }
+.dw-pens button, .dw-hair button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #E0D3BC; font-size: 12px; color: #A08060; }
+.dw-pens button.on, .dw-hair button.on { box-shadow: 0 0 0 3px var(--green); }
+.dw-tools button, .dw-stamps button { border: 2px solid #EADBC2; background: #fff; border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--brown); display: inline-flex; align-items: center; justify-content: center; min-width: 38px; }
+.dw-tools button.on, .dw-stamps button.on { border-color: var(--green); background: var(--mint); }
+.dw-tools i { display: block; border-radius: 50%; background: #5A4636; }
+.dw-label { text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); margin-top: 6px; }

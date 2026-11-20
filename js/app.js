@@ -12,6 +12,7 @@ import * as Ssireum from './ssireum.js';
 import * as Rank from './rank.js';
 import { pickerHTML, bindPicker } from './picker.js';
 import { DEFAULT_OUTFIT } from './outfit.js';
+import { openDrawer, myFace } from './draw.js';
 import { initJoystick } from './joystick.js';
 import { badWord } from './words.js';
 import * as Sch from './school.js';
@@ -32,6 +33,8 @@ function boot(skipOnboarding = false) {
     animal: profile.animal,
     name: profile.name,
     outfit: typeof profile.outfit === 'string' ? profile.outfit : DEFAULT_OUTFIT,
+    face: myFace(),
+    getFace: (uid, v) => Room.getFace(uid, v),   // ✏️ 친구가 그린 얼굴 (받아 오는 중엔 null)
     onSit: async (idx) => {
       $('seatLabel').textContent = `${seatName(idx)} 자리에 앉음`;
       renderBar();
@@ -131,7 +134,8 @@ function boot(skipOnboarding = false) {
         td: Math.floor(S.totalMs() / 60000) * 60000,   // 오늘 공부 시간 (순위용)
         rk: S.showInRank(), gl: S.getGoal(), sk: S.streak(), dd: ddayText(),
         sr: Ssireum.presence() || null,
-        of: typeof st.profile?.outfit === 'string' ? st.profile.outfit : DEFAULT_OUTFIT,   // 👕 옷 (친구 화면에도 보이게)   // 🤼 씨름 (도전 · 경기 중 힘 누른 수 · 게이지)
+        of: typeof st.profile?.outfit === 'string' ? st.profile.outfit : DEFAULT_OUTFIT,
+        fc: st.profile?.animal === 'drawn' && myFace() ? myFace().day + ':' + myFace().img.length : '',   // ✏️ 얼굴 그림 버전   // 👕 옷 (친구 화면에도 보이게)   // 🤼 씨름 (도전 · 경기 중 힘 누른 수 · 게이지)
       };
     },
   });
@@ -314,7 +318,17 @@ function animalPicker(cur) { return pickerHTML(cur, { outfit: true }); }
 let pickedOutfit = null;
 function bindAnimalPicker(root, onPick) {
   pickedOutfit = null;
-  bindPicker(root, { cur: root.querySelector('.pk-item.on')?.dataset.a || st.profile?.animal || 'bear', onPick, outfit: myOutfit(), onOutfit: (o) => { pickedOutfit = o; } });
+  bindPicker(root, { cur: root.querySelector('.pk-item.on')?.dataset.a || st.profile?.animal || 'bear', onPick, outfit: myOutfit(), onOutfit: (o) => { pickedOutfit = o; },
+    face: myFace,
+    onDraw: () => openDrawer({ openModal, closeModal, toast, onCancel: openSettings,
+      onSave: async (f) => {
+        S.setProfile({ ...st.profile, animal: 'drawn' });
+        world.setPlayer({ animal: 'drawn', face: f });
+        const ok = await Room.putFace(f);
+        Room.syncNow();
+        toast(ok || !Room.ready() ? '✏️ 내 얼굴을 저장했어요! 내일 다시 그릴 수 있어요' : '저장은 했는데 친구들에게 보내지 못했어요. 인터넷을 확인해 주세요', 4000);
+        openSettings();
+      } }) });
 }
 const myOutfit = () => (st.profile && typeof st.profile.outfit === 'string' ? st.profile.outfit : DEFAULT_OUTFIT);
 
