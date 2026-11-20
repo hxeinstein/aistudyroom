@@ -506,9 +506,13 @@ export function dressDrawnHead(head, skull, face) {
   const headCv = face.img instanceof HTMLCanvasElement && !legacy ? face.img : canvasOf(W, H);
   const hairCv = face.hr instanceof HTMLCanvasElement ? face.hr : canvasOf(HW, HH);
   const headTex = texOf(headCv), hairTex = texOf(hairCv);
-  let style = face.st || (legacy && face.hair >= 0 ? 'bob' : legacy ? 'bald' : 'bald');
+  let style = face.st || 'bald';   // (머리 모양 틀은 이제 쓰지 않음: 예전 그림도 민머리 위에)
   if (headCv !== face.img) {
     const g = headCv.getContext('2d'); g.fillStyle = L_SKIN; g.fillRect(0, 0, W, H);
+    if (legacy && face.hair >= 0 && HAIR_COLORS[face.hair]) {   // 예전 뒷머리 색 → 머리 그림의 뒤통수 · 정수리에 칠함
+      const R = FRONT_RECT; g.fillStyle = HAIR_COLORS[face.hair];
+      g.fillRect(0, 0, W, H * 0.3); g.fillRect(0, 0, R.u0 * W, H * 0.72); g.fillRect(R.u1 * W, 0, W - R.u1 * W, H * 0.72);
+    }
     if (legacy) loadInto(face.img, headCv, headTex, (g2, im) => drawOldFace(g2, im, W, H));
     else loadInto(face.img, headCv, headTex);
   }

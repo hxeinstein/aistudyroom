@@ -1,13 +1,13 @@
 // ✏️ 내가 그린 친구: 3D 머리를 돌려 가며 직접 칠하기 (하루 한 번 저장)
 // - 한 손가락: 칠하기 · 두 손가락: 돌리기 / 크게·작게 · 버튼으로도 돌리기
-// - 머리 모양 틀(민머리 · 단발 · 긴 머리 · 양갈래 · 포니테일)을 고르면 그 틀 위에도 칠할 수 있어요
-// - 저장: 머리 그림(512×256) + 머리카락 그림(256×256) PNG, 머리 모양 이름
+// - 틀 없이 동그란 머리에 칠한 그대로 보여요 (머리카락도 직접 칠하기)
+// - 저장: 머리 그림(512×256) PNG
 import * as THREE from '../vendor/three.module.min.js';
 import { makeAnimal, animateAnimal, HAIR_COLORS, HAIR_STYLES, FRONT_RECT, HEAD_TEX, HAIR_TEX } from './animals.js';
 
 const SKIN = '#F6D7B8';
 const PENS = ['#2B2420', '#E2574C', '#F28C28', '#F5C451', '#81C784', '#4D8FD1', '#B39DDB', '#FFFFFF', SKIN];
-const WIDTHS = [3, 6, 12];
+const WIDTHS = [3, 7, 14];
 const LS_FACE = 'aistudyroom.face';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -36,16 +36,13 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
   if (!canDrawToday()) { toast('오늘은 이미 그렸어요. 내일 다시 그릴 수 있어요 ✏️'); return; }
   const prev = myFace();
   let pen = 0, width = 1, erase = false;
-  let style = prev && prev.st ? prev.st : 'bob';
+  let style = 'bald';   // 머리 모양 틀은 쓰지 않음 (직접 칠한 그대로)
   const m = openModal(`
     <h2>✏️ 내 얼굴 그리기</h2>
-    <p class="desc"><b>한 손가락</b>으로 칠하고, <b>두 손가락</b>으로 돌려 보세요 (PC는 오른쪽 버튼 끌기). <b>하루에 한 번</b> 저장할 수 있어요.</p>
+    <p class="desc"><b>한 손가락</b>으로 칠하고, <b>두 손가락</b>으로 돌려 보세요 (PC는 오른쪽 버튼 끌기). 머리카락도 뒤통수까지 직접 칠해요. <b>하루에 한 번</b> 저장할 수 있어요.</p>
     <div class="dw3-stage" id="dw3Stage">
       <div class="dw3-turn"><button type="button" data-turn="-1">⟲</button><button type="button" data-view="front">앞</button><button type="button" data-view="side">옆</button><button type="button" data-view="back">뒤</button><button type="button" data-turn="1">⟳</button></div>
     </div>
-    <div class="dw-label">머리 모양</div>
-    <div class="dw-row dw-styles">${HAIR_STYLES.map((x) => `<button type="button" data-st="${x.id}" class="${x.id === style ? 'on' : ''}">${esc(x.name)}</button>`).join('')}</div>
-    <div class="dw-row dw-hair">${HAIR_COLORS.map((c, i) => `<button type="button" data-h="${i}" style="background:${c}" aria-label="머리 색"></button>`).join('')}<small>← 머리 전체 색</small></div>
     <div class="dw-label">펜</div>
     <div class="dw-row dw-pens">${PENS.map((c, i) => `<button type="button" data-p="${i}" class="${i === pen ? 'on' : ''}" style="background:${c}" aria-label="${i === PENS.length - 1 ? '살색' : '색'}"></button>`).join('')}</div>
     <div class="dw-row dw-tools">
@@ -184,8 +181,6 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
   const pick = (sel, attr, fn) => m.querySelectorAll(sel).forEach((b) => (b.onclick = () => { m.querySelectorAll(sel).forEach((x) => x.classList.toggle('on', x === b)); fn(b.dataset[attr]); }));
   pick('.dw-pens button', 'p', (i) => { pen = Number(i); erase = false; m.querySelector('#dwErase').classList.remove('on'); });
   pick('.dw-tools button[data-w]', 'w', (i) => { width = Number(i); });
-  pick('.dw-styles button', 'st', (st) => { snap(); style = st; build(); });
-  m.querySelectorAll('.dw-hair button').forEach((b) => (b.onclick = () => { snap(); curHairBase = HAIR_COLORS[Number(b.dataset.h)]; rg.fillStyle = curHairBase; rg.fillRect(0, 0, HW, HH); touchTex(); }));
   m.querySelector('#dwErase').onclick = (e) => { erase = !erase; e.currentTarget.classList.toggle('on', erase); };
   m.querySelector('#dwUndo').onclick = () => {
     const d = undo.pop(); if (!d) return;
