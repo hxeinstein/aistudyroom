@@ -707,7 +707,7 @@ function openSettings() {
 function openLeave() {
   const m = openModal(`
     <h2>🚪 이 기기에서 나가기</h2>
-    <p class="desc">닉네임·캐릭터·과목·공부 기록·플래너가 <b>이 기기에서 지워지고</b> 처음 화면으로 돌아가요.<br/>
+    <p class="desc">닉네임·캐릭터·내가 그린 친구·과목·공부 기록·플래너·물고기 도감이 <b>이 기기에서 지워지고</b> 처음 화면으로 돌아가요.<br/>
       다음 친구가 새로 시작할 수 있어요. 지운 기록은 되돌릴 수 없으니, 오늘 플래너를 먼저 사진으로 저장해 두세요.</p>
     <button class="btn soft block" id="lvSave" type="button">📸 오늘 플래너 먼저 저장하기</button>
     <div class="foot">
@@ -718,9 +718,10 @@ function openLeave() {
   m.querySelector('#lvSave').onclick = () => doSave(S.dayKey());
   m.querySelector('#lvGo').onclick = async () => {
     m.querySelector('#lvGo').disabled = true;
-    try { await Room.releaseSeat(); } catch (e) {}
+    try { await Room.leaveDevice(); } catch (e) {}
     if (Office.isTeacher()) Office.logout(true);
-    ['aistudyroom.v1', 'aistudyroom.chatCodes', 'aistudyroom.device', 'aistudyroom.teacher', 'aistudyroom.school'].forEach((k) => {
+    ['aistudyroom.v1', 'aistudyroom.chatCodes', 'aistudyroom.device', 'aistudyroom.teacher', 'aistudyroom.school',
+      'aistudyroom.face', 'aistudyroom.fish', 'aistudyroom.wish', 'aistudyroom.goal', 'aistudyroom.sug', 'aistudyroom.sugseen'].forEach((k) => {
       try { localStorage.removeItem(k); } catch (e) {}
     });
     location.replace(location.pathname);

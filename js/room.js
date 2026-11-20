@@ -126,6 +126,18 @@ export async function releaseSeat() {
   try { await remove(ref(db, `rooms/${ROOM}/seats/${idx}`)); } catch (e) {}
 }
 
+/** 🚪 이 기기에서 나가기: 내 그림·내 모습 지우고, 실시간 계정도 버려서 다음 친구는 새 계정으로 */
+export async function leaveDevice() {
+  await releaseSeat();
+  if (!db || !uid) return;
+  try { await remove(ref(db, `faces/${uid}`)); } catch (e) {}
+  try { await remove(ref(db, `rooms/${ROOM}/players/${uid}`)); } catch (e) {}
+  const auth = getAuth();
+  try { if (auth.currentUser) await auth.currentUser.delete(); } catch (e) {}
+  try { await auth.signOut(); } catch (e) {}
+  uid = null;
+}
+
 /** 응원 보내기 */
 export async function sendCheer(toUid, emoji, fromNick) {
   if (!db) return;
