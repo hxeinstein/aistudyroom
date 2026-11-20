@@ -4,6 +4,7 @@ import { wrapLines } from './wrap.js';
 import * as THREE from '../vendor/three.module.min.js';
 import { makeAnimal, animateAnimal, animalSpeed } from './animals.js';
 import { bakeShallow, bakeDeep, mergeInto } from './bake.js';
+import { rainOutfit } from './outfit.js';
 export { makeAnimal };
 
 const FONT = '"Gowun Dodum", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "WenQuanYi Zen Hei", sans-serif';
@@ -592,6 +593,11 @@ export function createWorld(container, opts = {}) {
 
   const player = addActor(opts.animal || 'bear', CLOTHES[0], { name: opts.name || '' }, true, opts.outfit || '');
   let baseOutfit = opts.outfit || '';
+  let apiRef = null;
+  // ☔ 비·눈 오는 날 쉼터에 있으면 노란 우비 + 장화 (나 · 친구 모두)
+  const rainyPark = (ar) => (weather === 'rain' || weather === 'snow') && ar === 'park';
+  const effOutfit = () => (rainyPark(area.name) ? rainOutfit(baseOutfit) : baseOutfit);
+  let rainCheckT = 0, lastRainy = false;
   player.animal = opts.animal || 'bear';
   player.lookKey = 's:' + player.animal + ':' + baseOutfit;
   let teacherLook = null;
@@ -2319,13 +2325,15 @@ export function createWorld(container, opts = {}) {
     for (const x of list || []) {
       seen.add(x.uid);
       let r = remotes.get(x.uid);
-      if (r && (r.info.a !== x.a || (r.info.of || '') !== (x.of || ''))) { removeRemote(x.uid); r = null; }   // 동물이나 옷을 바꾸면 다시 만듦
+      const xOf = typeof x.of === 'string' ? x.of.slice(0, 80) : '';
+      const wantOf = rainyPark(x.ar) ? rainOutfit(xOf) : xOf;   // 비 오는 날 쉼터면 우비
+      if (r && (r.info.a !== x.a || r.builtOf !== wantOf)) { removeRemote(x.uid); r = null; }   // 동물이나 옷이 바뀌면 다시 만듦
       if (!r) {
-        const a = addActor(x.a || 'bear', CLOTHES[hashN(x.uid) % CLOTHES.length], { name: x.n }, false, typeof x.of === 'string' ? x.of.slice(0, 80) : '');
+        const a = addActor(x.a || 'bear', CLOTHES[hashN(x.uid) % CLOTHES.length], { name: x.n }, false, wantOf);
         a.remote = true;
         a.obj.traverse((o) => { o.userData.remoteUid = x.uid; o.userData.remoteNick = x.n; });
         a.obj.position.set(Number(x.x) || 0, DECK_Y, Number(x.z) || 6);
-        r = { a, info: x, target: new THREE.Vector3(), ry: 0, seatIdx: -1 };
+        r = { a, info: x, target: new THREE.Vector3(), ry: 0, seatIdx: -1, builtOf: wantOf };
         remotes.set(x.uid, r);
       }
       r.info = x;
@@ -2798,6 +2806,16 @@ export function createWorld(container, opts = {}) {
 
     stepFollow(dt);
     stepWeather(dt);
+    rainCheckT -= dt;
+    if (rainCheckT <= 0) {   // 쉼터에 들어가거나 나올 때 · 비가 오거나 그칠 때 우비 갈아입기
+      rainCheckT = 0.5;
+      const rp = rainyPark(area.name);
+      if (rp !== lastRainy) {
+        lastRainy = rp;
+        if (apiRef && !teacherLook) { apiRef.setPlayer({}); if (rp) opts.onToast && opts.onToast(weather === 'snow' ? '☃️ 눈이 와서 노란 우비로 갈아입었어요' : '☔ 비가 와서 노란 우비로 갈아입었어요', 3500); }
+        if (rp && opts.onSfx) opts.onSfx('step');
+      }
+    }
     // 키보드 이동
     let kx = 0, kz = 0;
     if (keys.has('w') || keys.has('arrowup')) kz -= 1;
@@ -3014,7 +3032,7 @@ export function createWorld(container, opts = {}) {
   [decoMain, decoTrail, decoPark].forEach(bakeDeep);
   requestAnimationFrame(tick);
 
-  return {
+  const api = {
     seats,
     walkToSeat,
     nearestFreeSeat,
@@ -3042,12 +3060,13 @@ export function createWorld(container, opts = {}) {
       if (goal !== undefined) baseGoal = goal;
       const look = teacherLook;
       const want = look ? look.animal || 'bear' : baseAnimal;
-      const key = look ? `t:${want}:${look.color}:${look.glasses ? 1 : 0}` : `s:${want}:${baseOutfit}`;
+      const outfitNow = effOutfit();
+      const key = look ? `t:${want}:${look.color}:${look.glasses ? 1 : 0}` : `s:${want}:${outfitNow}`;
       if (force || key !== player.lookKey) {
         player.lookKey = key;
         animal = want;
         const old = player.obj;
-        const fresh = look ? makeAnimal(want, look.color || '#B79CE8', { glasses: !!look.glasses, teacher: true }) : makeAnimal(want, CLOTHES[0], baseOutfit ? { outfit: baseOutfit } : {});
+        const fresh = look ? makeAnimal(want, look.color || '#B79CE8', { glasses: !!look.glasses, teacher: true }) : makeAnimal(want, CLOTHES[0], outfitNow ? { outfit: outfitNow } : {});
         fresh.position.copy(old.position);
         fresh.rotation.copy(old.rotation);
         scene.remove(old);
@@ -3063,6 +3082,7 @@ export function createWorld(container, opts = {}) {
         }
         if (player.officeDesk) sitAtDesk(player.officeDesk);
         player.obj.visible = !observer;
+        if (player.held) setHeldFor(player, player.held);   // 들고 있던 간식은 새 모습에도
       }
       setLabel(player, { name: look ? `${look.name} 선생님` : baseName, status: baseStatus, goal: look ? '' : baseGoal });
     },
@@ -3155,6 +3175,8 @@ export function createWorld(container, opts = {}) {
     get nearBot() { return nearBot; },
     get seated() { return player.seat ? player.seat.idx : -1; },
   };
+  apiRef = api;
+  return api;
 }
 
 export function seatName(i) {

@@ -3,7 +3,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { makeAnimal, animateAnimal } from './animals.js';
 import { ANIMALS, ANIMAL_GROUPS, animalById } from './store.js';
-import { COLORS, SLOTS, ITEMS, parseOutfit, stringifyOutfit } from './outfit.js';
+import { COLORS, SLOTS, ITEMS, parseOutfit, stringifyOutfit, itemIcon } from './outfit.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let renderer = null;            // 미리보기 · 얼굴 그림에 같이 쓰는 그림판 하나 (화면마다 새로 만들지 않음)
@@ -123,7 +123,7 @@ export function bindPicker(root, { cur, onPick, look, outfit, onOutfit } = {}) {
       root.querySelector('#pkSlots').innerHTML = SLOTS.map((x) => `<button type="button" data-s="${x.id}" class="${x.id === slot ? 'on' : ''}"><span>${x.emoji}</span>${x.name}${chosen(x.id).length ? '<i></i>' : ''}</button>`).join('');
       root.querySelectorAll('#pkSlots button').forEach((b) => (b.onclick = () => { slot = b.dataset.s; drawFit(); }));
       const sel = chosen(slot);
-      root.querySelector('#pkItems').innerHTML = `<button type="button" data-i="" class="${sel.length ? '' : 'on'}">없음</button>` + ITEMS[slot].map((it) => `<button type="button" data-i="${it.id}" class="${sel.some((x) => x.id === it.id) ? 'on' : ''}">${it.name}</button>`).join('')
+      root.querySelector('#pkItems').innerHTML = `<button type="button" data-i="" class="pk-it ${sel.length ? '' : 'on'}"><span class="pk-none">✕</span><small>없음</small></button>` + ITEMS[slot].filter((it) => !it.hidden).map((it) => { const now = sel.find((x) => x.id === it.id); return `<button type="button" data-i="${it.id}" class="pk-it ${now ? 'on' : ''}">${itemIcon(slot, it.id, now ? now.c : it.c)}<small>${it.name}</small></button>`; }).join('')
         + (slot === 'a' ? '<small class="pk-hint">두 개까지 (모자끼리 · 안경끼리는 하나만)</small>' : slot === 'd' ? '<small class="pk-hint">한 벌을 입으면 상의 · 하의는 벗어요</small>' : '');
       root.querySelectorAll('#pkItems button').forEach((b) => (b.onclick = () => {
         const iid = b.dataset.i;
