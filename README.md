@@ -115,6 +115,10 @@ PDF 장 번호와 인쇄된 쪽 번호의 차이를 맞추고, 목차를 "시작
 - 상의 · 하의 · 한 벌 · 신발 · 악세서리(2개까지)를 그림으로 고르고 12가지 색 중 하나로. 모든 동물에 맞게 입혀지고 친구 화면에도 보여요 (`js/outfit.js`, 실시간 '내 정보'의 `of` 칸).
 - 상의를 안 고르면 흰색 기본 티. ☔ 비 · 눈 오는 날 쉼터에 가면 모두 노란 우비 + 장화로 갈아입어요 (모자만 벗고 다른 악세서리는 그대로).
 
+## ✏️ 내가 그린 친구 (⚙️ 설정 → 내 캐릭터 → ✏️ 그린 친구)
+- 동그란 얼굴 틀에 펜 · 지우개 · 스티커로 그리고 뒷머리 색을 골라요. 하루에 한 번 저장 (`js/draw.js`). 그림은 Firebase `faces/내 번호`에 올라가 친구 화면에도 보여요 (규칙에 `faces` 필요).
+- 친구 캐릭터를 눌러 🚨 그림 신고 → 시트 `신고` 탭(I칸 = 그림 번호) + 관리자 메일. 3명이 신고하면 자동으로 숨기고, 관리자는 [관리자 메뉴 → 신고]에서 🙈 그림 숨기기. 숨긴 그림은 기본 얼굴로 보이고, 다음 날 새로 그리면 다시 보여요.
+
 ## 🌿 쉼터 (산책로 · 놀이터)
 - 공부방 입구 계단의 **🌿 쉼터 →** 표지판(또는 아래 [🌿 쉼터], 공부 중이면 [🌿 쉼터])으로 가요. **쉼터에 가면 공부 타이머가 자동으로 ☕ 휴식**이 되고, 돌아오면 내 자리로 걸어가요.
 - 산책로·연못·가로등, 벤치 4개(앉으면 하늘을 올려다보는 시점: 낮엔 계절 나뭇잎, 밤엔 별·반딧불·별똥별), 🧘 스트레칭 벤치(30초 안내).
@@ -154,9 +158,9 @@ PDF 장 번호와 인쇄된 쪽 번호의 차이를 맞추고, 목차를 "시작
 5. 초대코드가 더 필요하면 시트 메뉴 **🐾 독서실 → 교사 초대코드 만들기**. 권한을 빼려면 `교사` 탭의 '사용' 체크 해제.
 
 ## Firebase 보안 규칙
-Realtime Database → 규칙에 그대로 넣어요. 학생은 자기 정보만 쓸 수 있고, 남이 앉은 자리는 빼앗을 수 없어요.
+Realtime Database → 규칙에 그대로 넣어요. 학생은 자기 정보만 쓸 수 있고, 남이 앉은 자리는 빼앗을 수 없어요. `faces`는 ✏️ 내가 그린 얼굴(자기 것만 쓰기, PNG 100KB 미만).
 ```json
-{"rules":{"rooms":{"$room":{"players":{".read":"auth != null","$uid":{".write":"auth != null && auth.uid === $uid",".validate":"!newData.exists() || (newData.child('n').isString() && newData.child('n').val().length <= 12)"}},"seats":{".read":"auth != null","$seat":{".write":"auth != null && ((!data.exists() && newData.val() === auth.uid) || (data.exists() && data.val() === auth.uid && !newData.exists()) || (data.exists() && !root.child('rooms').child($room).child('players').child(data.val()).exists() && newData.val() === auth.uid))"}},"calls":{"$uid":{".read":"auth != null && auth.uid === $uid",".write":"auth != null","$id":{".validate":"!newData.exists() || (newData.child('conv').isString() && newData.child('key').isString())"}}},"fx":{".read":"auth != null","$id":{".write":"auth != null",".validate":"!newData.exists() || (newData.child('e').isString() && newData.child('e').val().length <= 4 && newData.child('to').isString())"}}}}}}
+{"rules":{"rooms":{"$room":{"players":{".read":"auth != null","$uid":{".write":"auth != null && auth.uid === $uid",".validate":"!newData.exists() || (newData.child('n').isString() && newData.child('n').val().length <= 12)"}},"seats":{".read":"auth != null","$seat":{".write":"auth != null && ((!data.exists() && newData.val() === auth.uid) || (data.exists() && data.val() === auth.uid && !newData.exists()) || (data.exists() && !root.child('rooms').child($room).child('players').child(data.val()).exists() && newData.val() === auth.uid))"}},"calls":{"$uid":{".read":"auth != null && auth.uid === $uid",".write":"auth != null","$id":{".validate":"!newData.exists() || (newData.child('conv').isString() && newData.child('key').isString())"}}},"fx":{".read":"auth != null","$id":{".write":"auth != null",".validate":"!newData.exists() || (newData.child('e').isString() && newData.child('e').val().length <= 4 && newData.child('to').isString())"}}}},"faces":{"$uid":{".read":"auth != null",".write":"auth != null && auth.uid === $uid",".validate":"!newData.exists() || (newData.child('img').isString() && newData.child('img').val().beginsWith('data:image/png;base64,') && newData.child('img').val().length < 100000)"}}}}
 ```
 
 ## 실행

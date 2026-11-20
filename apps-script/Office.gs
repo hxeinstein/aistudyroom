@@ -670,6 +670,8 @@ function boardHandle_(body) {
     if (a === 'board.list') return boardList_(body);
     if (a === 'board.post') return boardPost_(body);
     if (a === 'board.report') return boardReport_(body);
+    if (a === 'board.faceReport') return faceReport_(body);
+    if (a === 'board.faceHidden') return faceHidden_(body);
     if (a === 'board.delete') return boardDelete_(body);
     if (a === 'suggest.post') return suggestPost_(body);
     if (a === 'suggest.list') return suggestList_(body);
@@ -915,6 +917,62 @@ function reportSheet_() {
   return sh;
 }
 
+/* ---------- ✏️ 그린 얼굴 신고 · 숨기기 ----------
+ * 학생이 친구의 그린 얼굴을 신고하면 '신고' 탭에 남기고(I칸 = 그림 주인 번호) 관리자에게 메일을 보내요.
+ * 서로 다른 학생 3명이 신고하면 바로 숨겨요. 관리자는 [관리자 메뉴 → 신고]에서 숨기기 / 넘어가기.
+ * 숨긴 그림 목록은 스크립트 속성 FACE_HIDDEN_학교 에 (그 학생은 기본 얼굴로 보여요)
+ */
+const FACE_AUTO_HIDE = 3;
+const faceHiddenKey_ = (sc) => 'FACE_HIDDEN_' + sc;
+function faceHiddenList_(sc) { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(faceHiddenKey_(sc)) || '[]'); } catch (e) { return []; } }
+function hideFace_(sc, uid) {
+  const list = faceHiddenList_(sc).filter((x) => x !== uid);
+  list.push(uid);
+  PropertiesService.getScriptProperties().setProperty(faceHiddenKey_(sc), JSON.stringify(list.slice(-300)));
+  CacheService.getScriptCache().remove('facehid_' + sc);  // 같은 그림의 다른 신고 줄도 '그림 숨김'으로 (관리자 목록에 남지 않게)
+  const sh = reportSheet_(), n = sh.getLastRow();
+  if (n >= 2 && sh.getLastColumn() >= 9) {
+    const v = sh.getRange(2, 6, n - 1, 4).getValues();
+    v.forEach((r, i) => { if (String(r[3]) === uid && r[0] === '새 신고') sh.getRange(i + 2, 6).setValue('그림 숨김'); });
+  }
+}
+function faceHidden_(b) {
+  const cache = CacheService.getScriptCache(), k = 'facehid_' + b.school;
+  const hit = cache.get(k);
+  if (hit) return { hidden: JSON.parse(hit) };
+  const list = faceHiddenList_(b.school);
+  cache.put(k, JSON.stringify(list), 60);
+  return { hidden: list };
+}
+function faceReport_(b) {
+  // 숨기는 단위는 '그 학생의 그 그림'(번호|그림 버전): 다음 날 새로 그리면 다시 보여요
+  const uid = (String(b.uid || '').slice(0, 40) + '|' + String(b.fc || '').slice(0, 30)), nick = String(b.nick || '').slice(0, 12);
+  if (!b.uid || !b.device) return { error: '잘못된 요청이에요.' };
+  const dh = devHash_(b.device), cache = CacheService.getScriptCache();
+  if (!countOk_('frep_' + dh, 5, 3600)) return { error: '신고를 너무 많이 했어요. 잠시 뒤에 다시 해 주세요.' };
+  const ck = 'facecnt_' + uid;
+  const who = JSON.parse(cache.get(ck) || '[]');
+  if (who.indexOf(dh) >= 0) return { ok: true, already: true };
+  who.push(dh);
+  cache.put(ck, JSON.stringify(who), 21600);
+  const sh = reportSheet_();
+  if (sh.getLastColumn() < 9) sh.getRange(1, 9).setValue('그림 주인 번호');
+  const auto = who.length >= FACE_AUTO_HIDE;
+  sh.appendRow([new Date(), '학생 신고', nick, '그린 얼굴이 불편해요 (신고 ' + who.length + '명)', '', auto ? '그림 숨김(자동)' : '새 신고', '', b.school, uid]);
+  if (auto) hideFace_(b.school, uid);
+  if (!cache.get('frep_mail')) {
+    teachers_().filter((t) => isAdmin_(t) && t.email).forEach((t) => {
+      try {
+        MailApp.sendEmail(t.email, '🚨 숲속 독서실: 학생이 친구의 그린 얼굴을 신고했어요',
+          '학생이 친구(' + nick + ')가 그린 얼굴을 신고했어요.' + (auto ? '\n신고가 ' + FACE_AUTO_HIDE + '명이 되어 그림을 자동으로 숨겼어요.' : '') +
+          '\n\n독서실에서 관리자로 로그인한 뒤 [📥 받은 대화 → 🛠️ 관리자 메뉴 → 신고]에서 숨길지 정해 주세요.\n' + STUDYROOM_URL);
+      } catch (e) { console.error(e); }
+    });
+    cache.put('frep_mail', '1', 600);
+  }
+  return { ok: true, hidden: auto };
+}
+
 /** 선생님이 대화 중인 학생을 관리자에게 알리기 (학생 메시지 최근 5개만 남김) */
 function officeReport_(b) {
   const teacher = teacherByToken_(b.token);
@@ -957,6 +1015,15 @@ function officeAdmin_(b) {
         const r = sh.getRange(row, 1, 1, 7).getValues()[0];
         if (r[6] && !isBlocked_(String(r[6]))) ss.getSheetByName('차단').appendRow([String(r[6]), String(r[2]), me.name + ' (신고: ' + r[1] + ')', new Date()]);
         sh.getRange(row, 6).setValue('차단함');
+        return { ok: true };
+      }
+      case 'hideFace': {
+        const sh = reportSheet_();
+        if (!(row >= 2) || row > sh.getLastRow()) return { error: '잘못된 요청이에요.' };
+        const uid = String(sh.getRange(row, 9).getValue() || '');
+        if (!uid) return { error: '그림 신고가 아니에요.' };
+        hideFace_(b.school, uid);
+        sh.getRange(row, 6).setValue('그림 숨김');
         return { ok: true };
       }
       case 'dismissReport': {
@@ -1019,7 +1086,7 @@ function adminOverview_(sc) {
   for (let i = rv.length - 1; i >= 1 && reports.length < 40; i--) {
     const r = rv[i];
     if (!r[2] || scOf_(r[7]) !== sc) continue;
-    reports.push({ row: i + 1, t: new Date(r[0]).getTime(), teacher: String(r[1]), nick: String(r[2]), reason: String(r[3]), msgs: String(r[4]), status: String(r[5] || '새 신고') });
+    reports.push({ row: i + 1, t: new Date(r[0]).getTime(), teacher: String(r[1]), nick: String(r[2]), reason: String(r[3]), msgs: String(r[4]), status: String(r[5] || '새 신고'), face: !!r[8] });
   }
   const blocks = [];
   const bs = ss.getSheetByName('차단');

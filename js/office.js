@@ -326,16 +326,17 @@ export async function openAdminMenu() {
     if (adminTab === 'reports') {
       box.innerHTML = data.reports.length ? data.reports.map((x) => `
         <div class="adm-card ${x.status === '새 신고' ? 'new' : ''}">
-          <div class="adm-top"><b>${esc(x.nick)}</b> 학생 <span class="hint">· ${esc(x.teacher)} 선생님이 알림 · ${fmt(x.t)}</span><span class="adm-st">${esc(x.status)}</span></div>
+          <div class="adm-top"><b>${esc(x.nick)}</b> 학생 <span class="hint">· ${x.face ? '✏️ 그린 얼굴 · 학생이 신고' : esc(x.teacher) + ' 선생님이 알림'} · ${fmt(x.t)}</span><span class="adm-st">${esc(x.status)}</span></div>
           <div class="adm-reason">이유: ${esc(x.reason)}</div>
           ${x.msgs ? `<div class="adm-msgs">${esc(x.msgs)}</div>` : ''}
-          ${x.status === '새 신고' ? `<div class="adm-act"><button class="btn soft" data-dismiss="${x.row}" type="button">넘어가기</button><button class="btn primary" data-block="${x.row}" type="button">🚫 차단하기</button></div>` : ''}
+          ${x.status === '새 신고' ? `<div class="adm-act"><button class="btn soft" data-dismiss="${x.row}" type="button">넘어가기</button>${x.face ? `<button class="btn primary" data-hideface="${x.row}" type="button">🙈 그림 숨기기</button>` : `<button class="btn primary" data-block="${x.row}" type="button">🚫 차단하기</button>`}</div>` : ''}
         </div>`).join('') : '<p class="hint">들어온 신고가 없어요 🌿</p>';
       box.querySelectorAll('[data-block]').forEach((b) => (b.onclick = async () => {
         if (!confirm('이 학생 기기를 차단할까요? 그 기기에서는 교무실 대화를 열 수 없어요.')) return;
         if (await call({ op: 'blockReport', row: Number(b.dataset.block) }, '차단했어요')) load();
       }));
       box.querySelectorAll('[data-dismiss]').forEach((b) => (b.onclick = async () => { if (await call({ op: 'dismissReport', row: Number(b.dataset.dismiss) })) load(); }));
+      box.querySelectorAll('[data-hideface]').forEach((b) => (b.onclick = async () => { if (await call({ op: 'hideFace', row: Number(b.dataset.hideface) }, '그림을 숨겼어요. 모두에게 기본 얼굴로 보여요')) load(); }));
     } else if (adminTab === 'blocks') {
       box.innerHTML = '<p class="hint">차단된 기기는 교무실 대화를 열 수 없어요. 풀면 다시 열 수 있어요.</p>' + (data.blocks.length ? data.blocks.map((x) => `
         <div class="adm-card"><div class="adm-top"><b>${esc(x.nick || '(닉네임 없음)')}</b><span class="hint">· ${esc(x.by)} · ${fmt(x.t)}</span>

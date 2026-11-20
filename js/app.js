@@ -34,7 +34,7 @@ function boot(skipOnboarding = false) {
     name: profile.name,
     outfit: typeof profile.outfit === 'string' ? profile.outfit : DEFAULT_OUTFIT,
     face: myFace(),
-    getFace: (uid, v) => Room.getFace(uid, v),   // ✏️ 친구가 그린 얼굴 (받아 오는 중엔 null)
+    getFace: (uid, v) => (hiddenFaces.has(uid + '|' + v) ? null : Room.getFace(uid, v)),   // ✏️ 친구가 그린 얼굴 (받는 중 · 숨김이면 기본 얼굴)
     onSit: async (idx) => {
       $('seatLabel').textContent = `${seatName(idx)} 자리에 앉음`;
       renderBar();
@@ -517,7 +517,23 @@ function sendStat() {
   Object.entries(S.subjectTotals(day)).forEach(([id, v]) => { const n = S.subjectById(id).name; subjects[n] = (subjects[n] || 0) + v; });
   post({ action: 'stat.day', device: deviceId(), day, ms, subjects, nick: st.profile?.name || '', animal: st.profile?.animal || '', rk: S.showInRank() }).catch(() => { lastStat = ''; });
 }
+/* ✏️ 숨긴 그린 얼굴 목록 (3분마다) · 내 그림이 숨겨지면 한 번 알려 줌 */
+const hiddenFaces = new Set();
+async function refreshHiddenFaces() {
+  if (!CONFIG.CHATBOT_URL) return;
+  let r; try { r = await post({ action: 'board.faceHidden' }); } catch (e) { return; }
+  if (!r || !Array.isArray(r.hidden)) return;
+  hiddenFaces.clear(); r.hidden.forEach((u) => hiddenFaces.add(u));
+  const me = Room.myUid();
+  const myV = myFace() ? myFace().day + ':' + myFace().img.length : '';
+  if (me && hiddenFaces.has(me + '|' + myV) && st.profile?.animal === 'drawn' && !sessionStorage.getItem('faceHidTold')) {
+    try { sessionStorage.setItem('faceHidTold', '1'); } catch (e) {}
+    toast('🙈 내가 그린 얼굴이 신고되어 친구들에게는 기본 얼굴로 보여요. 내일 새로 그려 주세요', 7000);
+  }
+}
 function startStats() {
+  setTimeout(refreshHiddenFaces, 6000);
+  setInterval(refreshHiddenFaces, 3 * 60 * 1000);
   setTimeout(sendStat, 20000);
   setInterval(sendStat, 10 * 60 * 1000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') sendStat(); });
@@ -910,8 +926,16 @@ function openCheer(uid, info) {
     <h2 class="center">${esc(info.n)}</h2>
     <p class="desc center">${info.st && !info.ps ? `📚 ${esc(info.sj || '공부')} 열공 중` : info.st ? '☕ 쉬는 중' : '독서실에 함께 있어요'}<br/>응원을 보내 볼까요? (채팅은 할 수 없어요)</p>
     <div class="cheers">${CHEERS.map((e) => `<button type="button" class="cheer-btn" data-e="${e}">${e}</button>`).join('')}</div>
-    <div class="foot"><button class="btn ghost" id="chClose" type="button">닫기</button></div>`);
+    <div class="foot"><button class="btn ghost" id="chClose" type="button">닫기</button></div>
+    ${info.a === 'drawn' && CONFIG.CHATBOT_URL ? '<button class="btn ghost block" id="chFaceRep" type="button" style="margin-top:6px">🚨 이 친구가 그린 얼굴 신고하기</button>' : ''}`);
   m.querySelector('#chClose').onclick = closeModal;
+  if (m.querySelector('#chFaceRep')) m.querySelector('#chFaceRep').onclick = async () => {
+    if (!confirm('친구가 그린 얼굴이 불편한가요? 신고하면 선생님께 알려지고, 여러 명이 신고하면 그림이 숨겨져요.')) return;
+    const r = await post({ action: 'board.faceReport', uid, fc: info.fc || '', nick: info.n, device: deviceId() }).catch(() => ({ error: '연결하지 못했어요' }));
+    closeModal();
+    toast(r.error || (r.already ? '이미 신고했어요' : '신고했어요. 고마워요'));
+    if (r.hidden) refreshHiddenFaces();
+  };
   m.querySelectorAll('.cheer-btn').forEach((b) => (b.onclick = () => {
     Room.sendCheer(uid, b.dataset.e, st.profile?.name);
     closeModal();
