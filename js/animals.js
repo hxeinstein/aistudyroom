@@ -232,7 +232,7 @@ export function makeAnimal(type, clothes = '#7FB3E8', extra = {}) {
       w.rotation.z = sx * (dy + 0.1) * 2;
       head.add(w);
     }
-    if (!(drawnRefs && drawnRefs.style !== 'bald')) { const ear = makeEar(L, sx, fur); if (L.earSmall) { ear.scale.multiplyScalar(0.62); ear.position.set(sx * 0.31, 0.04, 0); } head.add(ear); }   // 그린 친구는 머리카락이 귀를 덮으면 귀를 안 보임
+    if (!(drawnRefs && drawnRefs.style !== 'bald' && drawnRefs.style !== 'free')) { const ear = makeEar(L, sx, fur); if (L.earSmall) { ear.scale.multiplyScalar(0.62); ear.position.set(sx * 0.31, 0.04, 0); } head.add(ear); }   // 그린 친구는 머리카락이 귀를 덮으면 귀를 안 보임
     if (L.horns) { // 기린 뿔
       const h = new THREE.Group();
       h.position.set(sx * 0.1, 0.3, -0.02);
@@ -460,6 +460,9 @@ const L_SKIN = '#F6D7B8';
 // 머리 그림(구 전체 펼친 그림)에서 얼굴 앞쪽 자리 (스티커 · 예전 그림을 여기에 얹음)
 export const FRONT_RECT = { u0: 0.25 - 1.05 / (2 * Math.PI), u1: 0.25 + 1.05 / (2 * Math.PI), v0: 0.42 / Math.PI, v1: 2.72 / Math.PI };
 export const HEAD_TEX = [512, 256], HAIR_TEX = [256, 256];
+const FREE_H = 0.78, FREE_GAP = 0.95;   // 머리카락 공간: 길이 · 얼굴 앞 빈 곳(좌우 각도)
+/** 머리카락 공간 그림의 가로 · 세로 비율 (붓이 머리 그림과 같은 크기로 보이게) */
+export const HAIR_FREE_SCALE = { x: 256 / ((Math.PI * 2 - FREE_GAP * 2) * 0.36) / (512 / (Math.PI * 2 * 0.33)), y: 256 / FREE_H / (512 / (Math.PI * 2 * 0.33)) };
 
 /* ---------- ✏️ 내가 그린 친구 (3D로 돌려 가며 칠하기) ----------
  * face(새 방식): { v: 2, img: 머리 그림(512×256, 구를 펼친 그림), hr: 머리카락 그림(256×256), st: 머리 모양 }
@@ -483,6 +486,11 @@ function drawOldFace(g, im, W, H) {
 /** 머리 모양 조각 만들기 (조각마다 머리카락 그림의 네 칸 중 하나를 씀) */
 function hairGeometry(style) {
   const parts = [];
+  if (style === 'free') {   // 머리 둘레(얼굴 앞만 빼고)에서 어깨 아래까지 늘어지는 투명한 막
+    const geo = new THREE.CylinderGeometry(0.333, 0.39, FREE_H, 40, 8, true, FREE_GAP, Math.PI * 2 - FREE_GAP * 2);
+    geo.translate(0, -FREE_H / 2, 0);
+    return [geo];
+  }
   const quad = (geo, q) => { const uv = geo.attributes.uv, x0 = (q % 2) * 0.5, y0 = q < 2 ? 0.5 : 0; for (let i = 0; i < uv.count; i++) uv.setXY(i, x0 + uv.getX(i) * 0.5, y0 + uv.getY(i) * 0.5); return geo; };
   const sph = (r, ps, pl, ts, tl) => new THREE.SphereGeometry(r, 32, 16, ps, pl, ts, tl);
   const win = 0.78;   // 얼굴 창 (좌우 ±45°)
@@ -516,7 +524,9 @@ export function dressDrawnHead(head, skull, face) {
     if (legacy) loadInto(face.img, headCv, headTex, (g2, im) => drawOldFace(g2, im, W, H));
     else loadInto(face.img, headCv, headTex);
   }
-  if (hairCv !== face.hr) {
+  const free = style === 'free';   // 투명한 머리카락 공간: 칠한 곳만 보임
+  if (hairCv !== face.hr && free) loadInto(face.hr, hairCv, hairTex);
+  else if (hairCv !== face.hr) {
     const g = hairCv.getContext('2d'); g.fillStyle = legacy && face.hair >= 0 ? HAIR_COLORS[face.hair] || HAIR_COLORS[0] : HAIR_COLORS[0]; g.fillRect(0, 0, HW, HH);
     if (!legacy) loadInto(face.hr, hairCv, hairTex);
   }
@@ -524,7 +534,7 @@ export function dressDrawnHead(head, skull, face) {
   skull.material = new THREE.MeshLambertMaterial({ map: headTex });
   let hair = null;
   if (style !== 'bald') {
-    const pm = new THREE.MeshLambertMaterial({ map: hairTex, side: THREE.DoubleSide });
+    const pm = new THREE.MeshLambertMaterial({ map: hairTex, side: THREE.DoubleSide, ...(free ? { transparent: true, alphaTest: 0.5 } : {}) });
     const meshes = hairGeometry(style).map((geo) => { const m2 = new THREE.Mesh(geo, pm); m2.castShadow = true; return m2; });
     const holder = new THREE.Group(); holder.scale.copy(skull.scale); head.add(holder);
     meshes.forEach((m2) => holder.add(m2));

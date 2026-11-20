@@ -1,9 +1,10 @@
 // ✏️ 내가 그린 친구: 3D 머리를 돌려 가며 직접 칠하기 (하루 한 번 저장)
 // - 한 손가락: 칠하기 · 두 손가락: 돌리기 / 크게·작게 · 버튼으로도 돌리기
 // - 틀 없이 동그란 머리에 칠한 그대로 보여요 (머리카락도 직접 칠하기)
-// - 저장: 머리 그림(512×256) PNG
+// - 머리 둘레에 투명한 머리카락 공간(어깨 아래까지): 칠한 곳만 보여요 → 긴 머리도 칠한 대로
+// - 저장: 머리 그림(512×256) + 머리카락 공간 그림(256×256) PNG (색을 정리해 작게)
 import * as THREE from '../vendor/three.module.min.js';
-import { makeAnimal, animateAnimal, HAIR_COLORS, HAIR_STYLES, FRONT_RECT, HEAD_TEX, HAIR_TEX } from './animals.js';
+import { makeAnimal, FRONT_RECT, HEAD_TEX, HAIR_TEX, HAIR_FREE_SCALE } from './animals.js';
 
 const SKIN = '#F6D7B8';
 const PENS = ['#2B2420', '#E2574C', '#F28C28', '#F5C451', '#81C784', '#4D8FD1', '#B39DDB', '#FFFFFF', SKIN];
@@ -36,10 +37,10 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
   if (!canDrawToday()) { toast('오늘은 이미 그렸어요. 내일 다시 그릴 수 있어요 ✏️'); return; }
   const prev = myFace();
   let pen = 0, width = 1, erase = false;
-  let style = 'bald';   // 머리 모양 틀은 쓰지 않음 (직접 칠한 그대로)
+  const style = 'free';   // 머리 모양 틀 없이 직접 칠한 그대로
   const m = openModal(`
     <h2>✏️ 내 얼굴 그리기</h2>
-    <p class="desc"><b>한 손가락</b>으로 칠하고, <b>두 손가락</b>으로 돌려 보세요 (PC는 오른쪽 버튼 끌기). 머리카락도 뒤통수까지 직접 칠해요. <b>하루에 한 번</b> 저장할 수 있어요.</p>
+    <p class="desc"><b>한 손가락</b>으로 칠하고, <b>두 손가락</b>으로 돌려 보세요 (PC는 오른쪽 버튼 끌기). 머리카락은 뒤통수까지, 긴 머리는 머리 둘레의 <b>연한 칸</b>에 어깨 아래까지 칠해요. <b>하루에 한 번</b> 저장할 수 있어요.</p>
     <div class="dw3-stage" id="dw3Stage">
       <div class="dw3-turn"><button type="button" data-turn="-1">⟲</button><button type="button" data-view="front">앞</button><button type="button" data-view="side">옆</button><button type="button" data-view="back">뒤</button><button type="button" data-turn="1">⟳</button></div>
     </div>
@@ -59,9 +60,7 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
   const headCv = Object.assign(document.createElement('canvas'), { width: W, height: H });
   const hairCv = Object.assign(document.createElement('canvas'), { width: HW, height: HH });
   const hg = headCv.getContext('2d'), rg = hairCv.getContext('2d');
-  let curHairBase = HAIR_COLORS[prev && prev.hair >= 0 ? prev.hair : 0] || HAIR_COLORS[0];
   hg.fillStyle = SKIN; hg.fillRect(0, 0, W, H);
-  rg.fillStyle = curHairBase; rg.fillRect(0, 0, HW, HH);
   let refs = null;
   const touchTex = () => { if (refs) { refs.headTex.needsUpdate = true; refs.hairTex.needsUpdate = true; } };
   // 예전 그림 불러오기 (예전 방식 얼굴은 얼굴 앞자리에 얹음)
@@ -74,7 +73,7 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
     };
     im.src = prev.img;
   }
-  if (prev && prev.v === 2 && prev.hr) { const im = new Image(); im.onload = () => { rg.drawImage(im, 0, 0, HW, HH); touchTex(); }; im.src = prev.hr; }
+  if (prev && prev.v === 2 && prev.hr && prev.st === 'free') { const im = new Image(); im.onload = () => { rg.drawImage(im, 0, 0, HW, HH); touchTex(); }; im.src = prev.hr; }
 
   // 3D 장면 (그리기 화면 전용 그림판, 닫으면 정리)
   const stage = m.querySelector('#dw3Stage');
@@ -87,11 +86,15 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
   scene.add(new THREE.HemisphereLight('#FFFFFF', '#E8D9C0', 1.7));
   const dl = new THREE.DirectionalLight('#FFFFFF', 1.1); dl.position.set(1, 2, 3); scene.add(dl);
   const cam = new THREE.PerspectiveCamera(32, 1, 0.05, 20);
-  let obj = null, yaw = 0, pitch = 0.08, dist = 1.75;
+  let obj = null, yaw = 0, pitch = 0.08, dist = 2.05;
   const build = () => {
     if (obj) scene.remove(obj);
     obj = makeAnimal('drawn', '#7FB3E8', { outfit: outfit || '', face: { v: 2, img: headCv, hr: hairCv, st: style } });
     refs = obj.userData.drawn;
+    if (refs.hair) {   // 그리기 화면에서만: 칠할 수 있는 머리카락 공간을 연하게
+      const guide = new THREE.Mesh(refs.hair.geometry, new THREE.MeshBasicMaterial({ color: '#C9B48F', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
+      guide.renderOrder = -1; refs.hair.parent.add(guide);
+    }
     scene.add(obj);
   };
   build();
@@ -103,7 +106,7 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
     const dt = Math.min(clock.getDelta(), 0.05);
     obj.rotation.y += (yaw - obj.rotation.y) * Math.min(1, dt * 10);
     const hy = 0.95 * (obj.userData.scale || 1);
-    cam.position.set(0, hy + Math.sin(pitch) * dist, Math.cos(pitch) * dist); cam.lookAt(0, hy - 0.05, 0);
+    cam.position.set(0, hy - 0.15 + Math.sin(pitch) * dist, Math.cos(pitch) * dist); cam.lookAt(0, hy - 0.2, 0);
     renderer.render(scene, cam);
     requestAnimationFrame(loop);
   };
@@ -116,14 +119,16 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
     ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, cam);
     obj.updateMatrixWorld(true);
-    const h = ray.intersectObjects([refs.skull, refs.hair].filter(Boolean), false)[0];
-    if (!h || !h.uv) return null;
+    // 몸 · 귀가 앞에 있으면 그 뒤는 안 칠해요
+    const h = ray.intersectObject(obj, true).find((x) => x.object.visible && x.object.material && !(x.object.material.opacity < 0.5));
+    if (!h || !h.uv || (h.object !== refs.skull && h.object !== refs.hair)) return null;
     return { onHair: h.object === refs.hair, u: h.uv.x, v: h.uv.y };
   };
   const dab = (pt, prevPt) => {
     const cw = pt.onHair ? HW : W, ch = pt.onHair ? HH : H, g = pt.onHair ? rg : hg;
-    const rad = WIDTHS[width] * (pt.onHair ? 0.6 : 1) * (erase ? 1.6 : 1);
-    g.fillStyle = erase ? (pt.onHair ? curHairBase : SKIN) : PENS[pen];
+    const rad = WIDTHS[width] * (erase ? 1.6 : 1);
+    g.fillStyle = erase && !pt.onHair ? SKIN : PENS[pen];
+    g.globalCompositeOperation = erase && pt.onHair ? 'destination-out' : 'source-over';   // 머리카락 공간은 지우면 다시 투명
     const near = prevPt && prevPt.onHair === pt.onHair && Math.abs(prevPt.u - pt.u) < 0.25 && Math.abs(prevPt.v - pt.v) < 0.25;
     const steps = near ? Math.max(1, Math.ceil(Math.hypot((pt.u - prevPt.u) * cw, (pt.v - prevPt.v) * ch) / Math.max(1, rad * 0.5))) : 1;
     for (let k = 1; k <= steps; k++) {
@@ -131,16 +136,17 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
       const u = near ? prevPt.u + (pt.u - prevPt.u) * t : pt.u, v = near ? prevPt.v + (pt.v - prevPt.v) * t : pt.v;
       const px = u * cw, py = (1 - v) * ch;
       // 머리 공은 구를 펼친 그림이라 위 · 아래로 갈수록 가로로 넓게 칠해야 동그랗게 보여요
-      const stretch = pt.onHair ? 1 : 1 / Math.max(0.25, Math.sin((1 - v) * Math.PI));
-      const rx = rad * stretch;
-      g.beginPath(); g.ellipse(px, py, rx, rad, 0, 0, Math.PI * 2); g.fill();
+      const stretch = pt.onHair ? HAIR_FREE_SCALE.x : 1 / Math.max(0.25, Math.sin((1 - v) * Math.PI));
+      const rx = rad * stretch, ry = rad * (pt.onHair ? HAIR_FREE_SCALE.y : 1);
+      g.beginPath(); g.ellipse(px, py, rx, ry, 0, 0, Math.PI * 2); g.fill();
       if (!pt.onHair && px - rx < 0) { g.beginPath(); g.ellipse(px + cw, py, rx, rad, 0, 0, Math.PI * 2); g.fill(); }   // 이음매 너머도
       if (!pt.onHair && px + rx > cw) { g.beginPath(); g.ellipse(px - cw, py, rx, rad, 0, 0, Math.PI * 2); g.fill(); }
     }
+    g.globalCompositeOperation = 'source-over';
     touchTex();
   };
   const undo = [];
-  const snap = () => { undo.push([hg.getImageData(0, 0, W, H), rg.getImageData(0, 0, HW, HH), style, curHairBase]); if (undo.length > 15) undo.shift(); };
+  const snap = () => { undo.push([hg.getImageData(0, 0, W, H), rg.getImageData(0, 0, HW, HH)]); if (undo.length > 15) undo.shift(); };
   const cv = renderer.domElement;
   const ptrs = new Map();
   let painting = null, turn = null;
@@ -184,11 +190,10 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
   m.querySelector('#dwErase').onclick = (e) => { erase = !erase; e.currentTarget.classList.toggle('on', erase); };
   m.querySelector('#dwUndo').onclick = () => {
     const d = undo.pop(); if (!d) return;
-    hg.putImageData(d[0], 0, 0); rg.putImageData(d[1], 0, 0); curHairBase = d[3];
-    if (d[2] !== style) { style = d[2]; m.querySelectorAll('.dw-styles button').forEach((x) => x.classList.toggle('on', x.dataset.st === style)); build(); }
+    hg.putImageData(d[0], 0, 0); rg.putImageData(d[1], 0, 0);
     touchTex();
   };
-  m.querySelector('#dwClear').onclick = () => { snap(); hg.fillStyle = SKIN; hg.fillRect(0, 0, W, H); rg.fillStyle = curHairBase; rg.fillRect(0, 0, HW, HH); touchTex(); };
+  m.querySelector('#dwClear').onclick = () => { snap(); hg.fillStyle = SKIN; hg.fillRect(0, 0, W, H); rg.clearRect(0, 0, HW, HH); touchTex(); };
   m.querySelectorAll('.dw-stamps button').forEach((b) => (b.onclick = () => {
     snap();
     const sc = Object.assign(document.createElement('canvas'), { width: 256, height: 256 }), sg = sc.getContext('2d');
@@ -200,11 +205,42 @@ export function openDrawer({ openModal, closeModal, toast, onSave, onCancel, out
   }));
   m.querySelector('#dwCancel').onclick = () => { closeModal(); onCancel && onCancel(); };
   m.querySelector('#dwSave').onclick = () => {
-    const img = headCv.toDataURL('image/png'), hr = style === 'bald' ? '' : hairCv.toDataURL('image/png');
-    if (img.length > 95000 || hr.length > 60000) { toast('그림이 너무 복잡해요. 조금만 덜 칠해 주세요'); return; }
+    const img = packPng(headCv, 95000, false), hr = isBlank(hairCv) ? '' : packPng(hairCv, 60000, true);
+    if (!img || hr === null) { toast('그림을 저장하지 못했어요. 다시 해 주세요'); return; }
     const f = { v: 2, img, hr, st: style, day: today() };
     saveFace(f);
     closeModal();
     onSave && onSave(f);
   };
+}
+
+/** 칠한 게 하나도 없는지 (머리카락 공간) */
+function isBlank(cv) {
+  const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+  for (let i = 3; i < d.length; i += 4) if (d[i] > 127) return false;
+  return true;
+}
+/** 저장용 PNG: 붓 가장자리의 흐릿한 색을 많이 쓴 색으로 맞춰 작게 → 그래도 크면 크기를 줄여서 */
+function packPng(src, limit, alpha) {
+  for (const k of [1, 0.75, 0.5, 0.35]) {
+    const w = Math.round(src.width * k), h = Math.round(src.height * k);
+    const c = Object.assign(document.createElement('canvas'), { width: w, height: h }), g = c.getContext('2d');
+    g.drawImage(src, 0, 0, w, h);
+    const id = g.getImageData(0, 0, w, h), d = id.data;
+    const count = new Map();   // 많이 쓴 색 (4단계로 묶어서 셈)
+    for (let i = 0; i < d.length; i += 4) { if (alpha && d[i + 3] < 128) continue; const key = ((d[i] >> 3) << 10) | ((d[i + 1] >> 3) << 5) | (d[i + 2] >> 3); count.set(key, (count.get(key) || 0) + 1); }
+    const pal = [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24).map(([key]) => [((key >> 10) & 31) * 8 + 4, ((key >> 5) & 31) * 8 + 4, (key & 31) * 8 + 4]);
+    const memo = new Map();
+    for (let i = 0; i < d.length; i += 4) {
+      if (alpha && d[i + 3] < 128) { d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 0; continue; }
+      const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+      let best = memo.get(key);
+      if (!best) { let bd = 1e9; for (const p of pal) { const e = (p[0] - d[i]) ** 2 + (p[1] - d[i + 1]) ** 2 + (p[2] - d[i + 2]) ** 2; if (e < bd) { bd = e; best = p; } } memo.set(key, best); }
+      d[i] = best[0]; d[i + 1] = best[1]; d[i + 2] = best[2]; d[i + 3] = 255;
+    }
+    g.putImageData(id, 0, 0);
+    const url = c.toDataURL('image/png');
+    if (url.length <= limit) return url;
+  }
+  return null;
 }
