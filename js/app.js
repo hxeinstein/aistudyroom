@@ -86,6 +86,7 @@ function boot(skipOnboarding = false) {
   }
 
   if (!st.profile && !skipOnboarding) openOnboarding();
+  setTimeout(claimNick, 800);
   renderBar();
   refreshHud();
   setInterval(refreshHud, 1000);
@@ -310,8 +311,30 @@ function animalPicker(cur) { return pickerHTML(cur); }
 function bindAnimalPicker(root, onPick) { bindPicker(root, { cur: root.querySelector('.pk-item.on')?.dataset.a || st.profile?.animal || 'bear', onPick }); }
 
 // 처음 들어오면 닉네임·캐릭터를 무작위로 (닉네임은 바꿀 수 없고, 캐릭터는 설정에서 바꿔요)
-const NAME_A = ['졸린', '반짝', '열공', '느긋한', '새벽', '부지런', '조용한', '말랑', '씩씩한', '꼼꼼', '포근한', '용감한', '차분한', '든든한', '상큼한', '집중'];
-const NAME_B = ['연필', '지우개', '도토리', '구름', '형광펜', '다람쥐', '책갈피', '노트', '솔방울', '단풍잎', '별똥별', '나뭇잎', '샤프', '포스트잇', '모과', '버섯'];
+// (Office.gs의 NICK_A · NICK_B와 같게: 학교 안에서 겹치면 서버가 안 쓴 닉네임으로 바꿔 줘요)
+const NAME_A = ['졸린', '반짝', '열공', '느긋한', '새벽', '부지런', '조용한', '말랑', '씩씩한', '꼼꼼', '포근한', '용감한', '차분한', '든든한', '상큼한', '집중',
+  '다정한', '똑똑한', '활짝', '뽀송', '몽글', '산뜻한', '단단한', '기특한', '성실한', '반듯한', '명랑한', '영리한', '꾸준한', '신나는', '행복한', '따뜻한',
+  '싱그런', '초롱초롱', '의젓한', '야무진', '슬기로운', '빛나는', '힘찬', '고요한'];
+const NAME_B = ['연필', '지우개', '도토리', '구름', '형광펜', '다람쥐', '책갈피', '노트', '솔방울', '단풍잎', '별똥별', '나뭇잎', '샤프', '포스트잇', '모과', '버섯',
+  '공책', '각도기', '컴퍼스', '필통', '볼펜', '크레파스', '물감', '클립', '계산기', '달팽이', '고슴도치', '부엉이', '참새', '무지개', '은하수', '해바라기',
+  '민들레', '클로버', '조약돌', '밤송이', '반딧불', '솜사탕', '눈사람', '돌고래'];
+/** 🏷️ 학교 안에서 겹치지 않는 닉네임 받기 (서버가 정해 줌 · 이미 받은 기기는 그대로) */
+let nickChecked = false;
+async function claimNick() {
+  if (nickChecked || !CONFIG.CHATBOT_URL || Office.isTeacher() || !st.profile) return;
+  const want = st.profile.name;
+  let r;
+  try { r = await post({ action: 'stat.nick', device: deviceId(), want }); } catch (e) { return; }   // 연결이 안 되면 다음 접속 때 다시
+  if (!r || !r.nick) return;
+  nickChecked = true;
+  if (r.nick === want) return;
+  S.setProfile({ ...st.profile, name: r.nick });
+  world.setPlayer({ name: r.nick });
+  Room.syncNow();
+  const ob = document.getElementById('obName');
+  if (ob) ob.textContent = r.nick;   // 처음 화면이 열려 있으면 바로 바꿔 보여 줌
+  else toast(`🏷️ 우리 학교에 같은 닉네임이 있어서 '${r.nick}'(으)로 바뀌었어요`, 6000);
+}
 const pick = (a) => a[(Math.random() * a.length) | 0];
 function randomName() { return `${pick(NAME_A)} ${pick(NAME_B)}`; }
 
@@ -327,7 +350,7 @@ function openOnboarding() {
     <p class="desc center">자리에 앉아 공부를 시작하면<br/>오늘의 스터디플래너가 자동으로 채워져요.</p>
     <div class="ob-me">
       <div class="ob-emoji">${a.emoji}</div>
-      <div><small>오늘부터 나는</small><strong>${esc(name)}</strong><span>${a.name} · ${a.trait}</span></div>
+      <div><small>오늘부터 나는</small><strong id="obName">${esc(name)}</strong><span>${a.name} · ${a.trait}</span></div>
     </div>
     <div class="foot"><button class="btn primary" id="obGo">입장하기 🚪</button></div>
     <p class="hint center">닉네임은 자동으로 정해지고 바꿀 수 없어요. 캐릭터는 ⚙️ 설정에서 바꿀 수 있어요.<br/>기록은 이 기기에만 저장돼요.</p>`, { dismiss: false });

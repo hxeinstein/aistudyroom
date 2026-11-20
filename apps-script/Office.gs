@@ -680,6 +680,7 @@ function boardHandle_(body) {
     if (a === 'book.import') return bookImport_(body);
     if (a === 'stat.day') return statDay_(body);
     if (a === 'stat.rank') return statRank_(body);
+    if (a === 'stat.nick') return statNick_(body);
     if (a === 'notice.get') return noticeGet_(body);
     if (a === 'school.check') { const s = schoolInfo_(String(body.code || '').trim().toUpperCase()); return s && s.on ? { ok: true, code: s.code, name: s.name, def: s.code === defaultSchool_(), weather: s.lat && s.lon ? { lat: s.lat, lon: s.lon } : null } : { error: '학교 코드가 맞지 않아요. 선생님께 다시 물어봐 줘.' }; }
   } catch (e) {
@@ -854,7 +855,7 @@ function suggestPublic_(b) {
  * body = { token, tab, start(첫 묶음이면 true → 탭을 새로 만들거나 비움), rows: [[쪽, 대단원, 소단원, 내용], ...],
  *          register?: { name, room, bot } (마지막 묶음에서 '과목' 탭에 교과 등록) }
  */
-const RESERVED_TABS = ['과목', '교사', '차단', '신고', '게시판', '건의함', '프롬프트', '기록', '공부통계', '질문통계'];
+const RESERVED_TABS = ['과목', '교사', '차단', '신고', '게시판', '건의함', '프롬프트', '기록', '공부통계', '질문통계', '닉네임'];
 function bookImport_(b) {
   const t = teacherByToken_(b.token);
   if (!t) return { error: '다시 로그인해 주세요.', relogin: true };
@@ -1082,6 +1083,50 @@ function statDay_(b) {
     cache.put(ck, String(row), 21600);
   } finally { lock.releaseLock(); }
   return { ok: true };
+}
+
+/**
+ * 🏷️ 닉네임: 같은 학교 안에서 겹치지 않게 서버가 정해 줘요 ('닉네임' 탭: 학교 | 닉네임 | 기기(암호화) | 처음 | 최근)
+ * - 이 기기가 이미 받은 닉네임이 있으면 그대로
+ * - 처음이면 지금 닉네임(want)을 쓰되, 같은 학교의 다른 기기가 이미 쓰고 있으면 아직 아무도 안 쓴 닉네임을 새로 골라 줘요
+ * 관리자는 '닉네임' 탭에서 줄을 지우거나 고칠 수 있어요 (그 학생은 다음 접속 때 다시 받음)
+ */
+const NICK_A = ['졸린', '반짝', '열공', '느긋한', '새벽', '부지런', '조용한', '말랑', '씩씩한', '꼼꼼', '포근한', '용감한', '차분한', '든든한', '상큼한', '집중',
+  '다정한', '똑똑한', '활짝', '뽀송', '몽글', '산뜻한', '단단한', '기특한', '성실한', '반듯한', '명랑한', '영리한', '꾸준한', '신나는', '행복한', '따뜻한',
+  '싱그런', '초롱초롱', '의젓한', '야무진', '슬기로운', '빛나는', '힘찬', '고요한'];
+const NICK_B = ['연필', '지우개', '도토리', '구름', '형광펜', '다람쥐', '책갈피', '노트', '솔방울', '단풍잎', '별똥별', '나뭇잎', '샤프', '포스트잇', '모과', '버섯',
+  '공책', '각도기', '컴퍼스', '필통', '볼펜', '크레파스', '물감', '클립', '계산기', '달팽이', '고슴도치', '부엉이', '참새', '무지개', '은하수', '해바라기',
+  '민들레', '클로버', '조약돌', '밤송이', '반딧불', '솜사탕', '눈사람', '돌고래'];
+const nickSheet_ = () => sheet_('닉네임', ['학교', '닉네임', '기기(암호화)', '처음', '최근']);
+function statNick_(b) {
+  if (!b.device) return { error: '기기 정보가 없어요.' };
+  const dh = devHash_(b.device), sc = b.school;
+  let want = String(b.want || '').trim().slice(0, 12);
+  if (!want || hasBadWord_(want)) want = '';
+  const lock = LockService.getScriptLock();
+  lock.waitLock(8000);
+  try {
+    const sh = nickSheet_();
+    const vals = sh.getDataRange().getValues();
+    const used = {};
+    for (let i = 1; i < vals.length; i++) {
+      const r = vals[i];
+      if (scOf_(r[0]) !== sc || !r[1]) continue;
+      if (String(r[2]) === dh) {   // 이미 받은 닉네임
+        sh.getRange(i + 1, 5).setValue(new Date());
+        return { nick: String(r[1]), changed: String(r[1]) !== want };
+      }
+      used[String(r[1])] = 1;
+    }
+    let nick = want && !used[want] ? want : '';
+    if (!nick) {
+      const free = [];
+      NICK_A.forEach((a) => NICK_B.forEach((x) => { const n = a + ' ' + x; if (!used[n]) free.push(n); }));
+      nick = free.length ? free[Math.floor(Math.random() * free.length)] : (NICK_A[0] + ' ' + NICK_B[0] + ' ' + (Object.keys(used).length + 1));
+    }
+    sh.appendRow([sc, nick, dh, new Date(), new Date()]);
+    return { nick, changed: nick !== want };
+  } finally { lock.releaseLock(); }
 }
 
 /**
