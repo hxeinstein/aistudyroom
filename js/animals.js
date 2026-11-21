@@ -484,6 +484,42 @@ function drawOldFace(g, im, W, H) {
   g.drawImage(im, R.u0 * W, R.v0 * H, (R.u1 - R.u0) * W, (R.v1 - R.v0) * H);
 }
 /** 머리 모양 조각 만들기 (조각마다 머리카락 그림의 네 칸 중 하나를 씀) */
+/** 🌬️ 늘어진 머리카락 살랑살랑: 머리에 붙은 윗부분은 그대로, 끝으로 갈수록 크게 (그래픽 카드에서 휘게 해서 가벼움) */
+function swayHair(pm) {
+  const U = { uBend: { value: new THREE.Vector3() }, uAmp: { value: 0.012 }, uT: { value: 0 } };
+  pm.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = 'uniform vec3 uBend; uniform float uAmp; uniform float uT;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      float hf = clamp(-position.y / ${FREE_H.toFixed(2)}, 0.0, 1.0); hf = hf * hf;
+      float ha = atan(position.x, position.z);
+      transformed += hf * (uBend + vec3(sin(uT * 2.3 + ha * 2.0 + position.y * 5.0), 0.0, cos(uT * 1.9 + ha * 1.5 + position.y * 4.0) * 0.7) * uAmp);`);
+  };
+  pm.customProgramCacheKey = () => 'hairSway';
+  return { U, bend: new THREE.Vector3(), last: null };
+}
+const _hp = new THREE.Vector3(), _hq = new THREE.Quaternion(), _hv = new THREE.Vector3();
+/** 움직인 만큼 머리카락이 반대로 날려요 (걷기 < 뺑뺑이 · 짚라인 · 기차 · 트램펄린) */
+function updateSway(a, sw, mode, t, dt) {
+  const hair = a.userData.drawn.hair;
+  if (!hair || dt <= 0) return;
+  _hp.setFromMatrixPosition(hair.matrixWorld);
+  let speed = 0;
+  if (sw.last) {
+    _hv.subVectors(_hp, sw.last).divideScalar(dt);
+    speed = _hv.length();
+    if (speed > 25) { _hv.set(0, 0, 0); speed = 0; }   // 순간 이동은 무시
+    hair.getWorldQuaternion(_hq); _hv.applyQuaternion(_hq.invert());   // 머리카락 기준 방향으로
+    const k = 0.035, max = 0.24;
+    _hv.multiplyScalar(-k); _hv.y *= 0.8;
+    if (_hv.length() > max) _hv.setLength(max);
+  } else { _hv.set(0, 0, 0); sw.last = new THREE.Vector3(); }
+  sw.last.copy(_hp);
+  sw.bend.lerp(_hv, Math.min(1, dt * 6));
+  const amp = 0.012 + Math.min(0.05, speed * 0.008) + (mode === 'walk' ? 0.008 : 0);
+  sw.U.uAmp.value += (amp - sw.U.uAmp.value) * Math.min(1, dt * 4);
+  sw.U.uBend.value.copy(sw.bend);
+  sw.U.uT.value += dt * (1 + Math.min(2, speed * 0.25));
+}
 function hairGeometry(style) {
   const parts = [];
   if (style === 'free') {   // 머리 둘레(얼굴 앞만 빼고)에서 어깨 아래까지 늘어지는 투명한 막
@@ -532,16 +568,17 @@ export function dressDrawnHead(head, skull, face) {
   }
   skull.geometry = new THREE.SphereGeometry(0.33, 40, 28);
   skull.material = new THREE.MeshLambertMaterial({ map: headTex });
-  let hair = null;
+  let hair = null, sway = null;
   if (style !== 'bald') {
     const pm = new THREE.MeshLambertMaterial({ map: hairTex, side: THREE.DoubleSide, ...(free ? { transparent: true, alphaTest: 0.5 } : {}) });
+    if (free) sway = swayHair(pm);
     const meshes = hairGeometry(style).map((geo) => { const m2 = new THREE.Mesh(geo, pm); m2.castShadow = true; return m2; });
     const holder = new THREE.Group(); holder.scale.copy(skull.scale); head.add(holder);
     meshes.forEach((m2) => holder.add(m2));
     mergeInto(holder, meshes);
     hair = holder.children.find((c) => c.isMesh) || null;
   }
-  return { skull, hair, headCv, hairCv, headTex, hairTex, style };
+  return { skull, hair, headCv, hairCv, headTex, hairTex, style, sway };
 }
 
 function spot(color, r, x, y, z) {
@@ -614,6 +651,7 @@ export function animateAnimal(a, mode, t, dt) {
   u.phase += dt * (mode === 'walk' ? 11 : 2) * slow;
   const p = u.phase;
   const hy = u.headY, by = u.bodyY;
+  if (u.drawn && u.drawn.sway) updateSway(a, u.drawn.sway, mode, t, dt);
   if (u.mascot) {
     u.body.position.y = 0.46 + Math.sin(p) * 0.01;
     u.head.position.y = 0.98 + Math.sin(p) * 0.015;
